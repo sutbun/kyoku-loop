@@ -18,9 +18,9 @@ import {
 } from "./demo";
 import "./style.css";
 import { RealApp } from "./real-app";
+import { RealTile as Tile } from "./real-board";
 
-import { IS_DAILY, VERSION as DAILY_VERSION } from "./version";
-const VERSION = IS_DAILY ? DAILY_VERSION : "DEV-11.01-1";
+import { VERSION } from "./version";
 const KEY = "kyokuloop-fictional-prototype-v2";
 function load(): State {
   try {
@@ -31,24 +31,6 @@ function load(): State {
     /* fall back to a fresh fixture */
   }
   return initialState();
-}
-function Tile({ value, small = false }: { value: string; small?: boolean }) {
-  return (
-    <span
-      className={`tile ${small ? "small" : ""} suit-${value[1]} ${value[0] === "0" ? "red" : ""}`}
-      aria-label={tileLabel(value)}
-    >
-      {value.endsWith("z") ? (
-        <b>{tileLabel(value)}</b>
-      ) : (
-        <>
-          <b>{value[0] === "0" ? "5" : value[0]}</b>
-          <small>{tileLabel(value).slice(-1)}</small>
-        </>
-      )}
-      {value[0] === "0" && <i />}
-    </span>
-  );
 }
 function Table({
   frame,

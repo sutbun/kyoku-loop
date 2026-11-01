@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { tileLabel } from "./demo";
 import type { Scene } from "./real-types";
+import { TileArt } from "./tile-art";
 export const uiTile = (value: string) => {
   const honor = ["E", "S", "W", "N", "P", "F", "C"].indexOf(value);
   return honor >= 0
@@ -25,16 +26,9 @@ export function RealTile({
     <span
       className={`tile ${small ? "small" : ""} suit-${tile[1]} ${tile[0] === "0" ? "red" : ""}`}
       aria-label={tileLabel(tile)}
+      role="img"
     >
-      {tile.endsWith("z") ? (
-        <b>{tileLabel(tile)}</b>
-      ) : (
-        <>
-          <b>{tile[0] === "0" ? "5" : tile[0]}</b>
-          <small>{tileLabel(tile).slice(-1)}</small>
-        </>
-      )}
-      {tile[0] === "0" && <i />}
+      <TileArt tile={tile} />
     </span>
   );
 }
@@ -184,10 +178,9 @@ export function RealTable({
       <div className="hand-head">
         <span>あなた · {wind(scene.own_wind)}家</span>
         <span>
-          {scene.melds[own].length
-            ? `${scene.melds[own].length}副露`
-            : "副露なし"}{" "}
-          · {scene.reach_declared[own] ? "リーチ" : "リーチなし"}
+          {scene.melds[own].length > 0 && `${scene.melds[own].length}副露`}
+          {scene.melds[own].length > 0 && scene.reach_declared[own] && " · "}
+          {scene.reach_declared[own] && "リーチ"}
         </span>
       </div>
       <div

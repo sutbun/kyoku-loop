@@ -241,11 +241,17 @@ function PhoneApp() {
       </header>
       <main>
         <div className="content">
-          <div className="phone-status" role="status">
-            <span>{online ? "通信あり" : "オフライン"}</span>
-            <span>{syncing ? "同期中…" : `回答 未送信 ${pending}件`}</span>
-            {!!urlPending && <span>URL 未同期 {urlPending}件</span>}
-          </div>
+          {(!online || syncing || pending > 0 || urlPending > 0) && (
+            <div className="phone-status" role="status">
+              {!online && <span>オフライン</span>}
+              {syncing ? (
+                <span>同期中…</span>
+              ) : (
+                pending > 0 && <span>回答 未送信 {pending}件</span>
+              )}
+              {!!urlPending && <span>URL 未同期 {urlPending}件</span>}
+            </div>
+          )}
           {syncError && (
             <div className="error" role="alert">
               {syncError}
@@ -268,9 +274,6 @@ function PhoneApp() {
           )}
           {screen === "home" ? (
             <>
-              <div className="page-heading">
-                <h1>今日の一打を、確かめる。</h1>
-              </div>
               <PracticeCard
                 workspace={workspace}
                 disabled={busy || !loaded}
@@ -298,92 +301,98 @@ function PhoneApp() {
                   disabled={busy}
                 />
               </section>
-              <section className="panel phone-download">
-                <h2>持ち歩く問題</h2>
+              <section className="panel phone-download" aria-label="保存と同期">
                 <p data-testid="offline-status">
                   {ready
                     ? `オフライン利用可能 · ${workspace.items.length}問`
                     : "オフライン保存の確認が必要です"}
                 </p>
-                <button
-                  className="button primary"
-                  disabled={busy || !loaded}
-                  onClick={download}
-                >
-                  {busy
-                    ? "保存を確認中…"
-                    : pending ||
-                        (workspace.session && !workspace.session.complete)
-                      ? "アプリ本体の保存を確認"
-                      : "問題を端末に保存"}
-                </button>
-                {saved && (
-                  <small>取得：{new Date(saved).toLocaleString("ja-JP")}</small>
-                )}
-                <small>{capacity}</small>
-                {!matchMedia("(display-mode: standalone)").matches && (
-                  <p>
-                    Safariの共有から「ホーム画面に追加」し、追加したアイコンで開いて保存してください。
-                  </p>
-                )}
+                <div className="phone-storage-actions">
+                  <button
+                    className="button primary"
+                    disabled={busy || !loaded}
+                    onClick={download}
+                  >
+                    {busy
+                      ? "保存を確認中…"
+                      : pending ||
+                          (workspace.session && !workspace.session.complete)
+                        ? "アプリ本体の保存を確認"
+                        : "問題を端末に保存"}
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={
+                      busy ||
+                      syncing ||
+                      !loaded ||
+                      (!workspace.items.length && !analysisQueue.length) ||
+                      !online
+                    }
+                    onClick={() => void syncRecords()}
+                  >
+                    {syncing ? "同期中…" : "今すぐ同期"}
+                  </button>
+                </div>
+                {!matchMedia("(display-mode: standalone)").matches &&
+                  !ready && (
+                    <p className="install-hint">
+                      Safariの共有 →「ホーム画面に追加」
+                    </p>
+                  )}
               </section>
-              <section className="panel">
-                <h2>端末の記録</h2>
-                <p>
-                  {lastSync
-                    ? `最終同期：${new Date(lastSync).toLocaleString("ja-JP")}`
-                    : "復習記録の同期はまだ完了していません。"}
-                </p>
-                <button
-                  className="button primary"
-                  disabled={
-                    busy ||
-                    syncing ||
-                    !loaded ||
-                    (!workspace.items.length && !analysisQueue.length) ||
-                    !online
-                  }
-                  onClick={() => void syncRecords()}
-                >
-                  {syncing ? "同期中…" : "今すぐ同期"}
-                </button>
-                <p>
-                  {persistent
-                    ? "保存の保護を要求済みです。"
-                    : "自動消去からの保護は確認できていません。"}
-                  端末の容量不足やサイトデータの消去で失われることがあるため、記録をファイルにも保存できます。
-                </p>
-                <button
-                  className="button secondary"
-                  disabled={busy || !loaded}
-                  onClick={exportRecords}
-                >
-                  記録をファイルに保存
-                </button>
-                <label className="file-drop">
-                  記録ファイルから復旧
-                  <input
-                    type="file"
-                    accept=".json,application/json"
-                    disabled={busy || syncing || !loaded}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = "";
-                      if (!file) return;
-                      void run(async () => {
-                        if (file.size > 20 * 1024 * 1024)
-                          throw new Error(
-                            "20MB以下の記録ファイルを選択してください。",
-                          );
-                        const backup = JSON.parse(await file.text());
-                        await api({ action: "restore_phone", backup });
-                        await refresh();
-                        if (navigator.onLine) void syncRecords();
-                      });
-                    }}
-                  />
-                </label>
-              </section>
+              <details className="panel phone-tools">
+                <summary>端末の管理</summary>
+                <div className="phone-tools-content">
+                  <small>
+                    {lastSync
+                      ? `最終同期：${new Date(lastSync).toLocaleString("ja-JP")}`
+                      : "同期はまだ完了していません"}
+                  </small>
+                  {saved && (
+                    <small>
+                      取得：{new Date(saved).toLocaleString("ja-JP")}
+                    </small>
+                  )}
+                  <small>{capacity}</small>
+                  <small>
+                    {persistent
+                      ? "保存の保護を要求済み"
+                      : "自動消去からの保護は未確認"}{" "}
+                    · 容量不足やサイトデータ消去に備え、記録を保存できます。
+                  </small>
+                  <button
+                    className="button secondary"
+                    disabled={busy || !loaded}
+                    onClick={exportRecords}
+                  >
+                    記録をファイルに保存
+                  </button>
+                  <label className="file-drop">
+                    記録ファイルから復旧
+                    <input
+                      type="file"
+                      accept=".json,application/json"
+                      disabled={busy || syncing || !loaded}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        void run(async () => {
+                          if (file.size > 20 * 1024 * 1024)
+                            throw new Error(
+                              "20MB以下の記録ファイルを選択してください。",
+                            );
+                          const backup = JSON.parse(await file.text());
+                          await api({ action: "restore_phone", backup });
+                          await refresh();
+                          if (navigator.onLine) void syncRecords();
+                        });
+                      }}
+                    />
+                  </label>
+                </div>
+              </details>
             </>
           ) : (
             <StudyPanel

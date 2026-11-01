@@ -134,6 +134,7 @@ finally:s.close()
       backend({ action: "item_history", item: raw.item }).data.events,
     ).toHaveLength(1);
     expect((await read(page)).events[0]).toEqual(raw);
+    await page.getByText("端末の管理", { exact: true }).click();
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "記録をファイルに保存" }).click();
     const backup = join(folder, "phone-records.json");
@@ -179,7 +180,9 @@ finally:s.close()
     await context.setOffline(true);
     page = await context.newPage();
     await page.goto("http://127.0.0.1:1460/phone/");
-    await expect(page.getByText("回答 未送信 0件", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("回答 未送信 0件", { exact: true }),
+    ).toHaveCount(0);
     await page.getByRole("button", { name: "復習を再開する" }).click();
     await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
     expect((await read(page)).events[0]).toEqual(raw);
@@ -191,12 +194,15 @@ finally:s.close()
     await routes(context);
     page = await context.newPage();
     await page.goto("http://127.0.0.1:1460/phone/");
+    await page.getByText("端末の管理", { exact: true }).click();
     await expect(
       page.getByRole("button", { name: "記録をファイルに保存" }),
     ).toBeEnabled();
     await context.setOffline(true);
     await page.getByLabel("記録ファイルから復旧").setInputFiles(backup);
-    await expect(page.getByText("回答 未送信 1件", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("回答 未送信 1件", { exact: true }),
+    ).toBeVisible();
     const recovered = await read(page);
     expect(recovered.events[0]).toEqual(raw);
     expect(recovered.device).not.toBe(raw.device);
