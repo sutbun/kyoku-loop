@@ -53,6 +53,7 @@ export async function phoneTransaction<T>(
         const reduced = phoneReduce(before, request);
         if (
           request.action === "apply_sync" ||
+          request.action === "analysis_ack" ||
           request.action === "restore_phone"
         )
           valid(reduced.state);

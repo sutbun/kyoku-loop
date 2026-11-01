@@ -107,6 +107,8 @@ export type ItemHistory = {
   legacy_history: string[];
 };
 export type Workspace = {
+  analysis_queue?: import("./analysis-queue").AnalysisEntry[];
+  analysis_setup?: boolean;
   reports: Report[];
   items: LibraryItem[];
   today?: string;

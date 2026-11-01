@@ -3,8 +3,10 @@ import { api, errors } from "./api";
 import { RealTable, RealTile, roundLabel, eventLabels } from "./real-board";
 import { StudyPanel, PracticeCard } from "./study-ui";
 import type { Detail, Scene, Stage, Workspace } from "./real-types";
+import { SourceInput, AnalysisList, AnalysisGuide } from "./analysis-ui";
+import type { AnalysisEntry } from "./analysis-queue";
 
-export const VERSION = "DEV-11.01-5";
+export const VERSION = "DEV-11.01-6";
 export function RealApp() {
   const [workspace, setWorkspace] = useState<Workspace>({
     reports: [],
@@ -25,6 +27,8 @@ export function RealApp() {
   const [model, setModel] = useState("");
   const [filter, setFilter] = useState("今日");
   const [learning, setLearning] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalysisEntry | null>(null);
+  const [guide, setGuide] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const focus = useRef<HTMLElement | null>(null);
   const refresh = async () =>
@@ -53,6 +57,30 @@ export function RealApp() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen, index, workspace.session?.index]);
+  useEffect(() => {
+    if (screen !== "home" || busy || adding) return;
+    let cancelled = false,
+      loading = false;
+    const update = async () => {
+      if (document.hidden || loading) return;
+      loading = true;
+      try {
+        const data = await api<Workspace>({ action: "state" });
+        if (!cancelled) setWorkspace(data);
+      } catch {
+        /* A background refresh keeps the last saved view; explicit actions report connection failures. */
+      } finally {
+        loading = false;
+      }
+    };
+    const timer = setInterval(() => void update(), 10000);
+    window.addEventListener("focus", update);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener("focus", update);
+    };
+  }, [screen, busy, adding]);
   useEffect(() => {
     if (adding) {
       focus.current = document.activeElement as HTMLElement;
@@ -86,7 +114,7 @@ export function RealApp() {
   const inspect = async (data: object) => {
     const result = await api<Stage>({ action: "inspect", ...data });
     setStage(result);
-    setSource("");
+    setSource(analysis?.url ?? "");
     setSeat("");
     setModel(result.models.length === 1 ? String(result.models[0].index) : "");
   };
@@ -141,6 +169,7 @@ export function RealApp() {
     setAll(value);
   };
   const add = () => {
+    setAnalysis(null);
     setStage(null);
     setUrl("");
     setSource("");
@@ -260,6 +289,61 @@ export function RealApp() {
                   })
                 }
               />
+              <section className="panel">
+                <div className="section-title">
+                  <h2>解析待ち</h2>
+                  <button
+                    className="text-button"
+                    onClick={() => setGuide((v) => !v)}
+                  >
+                    解析の手順
+                  </button>
+                </div>
+                <SourceInput
+                  disabled={busy}
+                  onSave={async (url) => {
+                    await api({ action: "analysis_add", url });
+                    await refresh();
+                  }}
+                />
+                <AnalysisList
+                  entries={workspace.analysis_queue ?? []}
+                  disabled={busy}
+                  onOpen={(entry) => {
+                    window.open(entry.url, "_blank", "noopener,noreferrer");
+                    if (!workspace.analysis_setup) setGuide(true);
+                  }}
+                  onResult={(entry) => {
+                    setAnalysis(entry);
+                    setStage(null);
+                    setUrl("");
+                    setSource(entry.url);
+                    setError("");
+                    setAdding(true);
+                  }}
+                  onRequested={(entry) =>
+                    void run(async () => {
+                      await api({
+                        action: "analysis_requested",
+                        id: entry.id,
+                        requested: !entry.requested,
+                      });
+                      await refresh();
+                    })
+                  }
+                />
+              </section>
+              {guide && (
+                <AnalysisGuide
+                  onClose={() =>
+                    void run(async () => {
+                      await api({ action: "analysis_setup", seen: true });
+                      await refresh();
+                      setGuide(false);
+                    })
+                  }
+                />
+              )}
               <section className="panel">
                 <div className="section-title">
                   <h2>取り込んだ牌譜</h2>
@@ -533,7 +617,7 @@ export function RealApp() {
           }}
         >
           <div className="section-title">
-            <h2>牌譜を追加</h2>
+            <h2>{analysis ? "解析待ちへ結果を登録" : "牌譜を追加"}</h2>
             <button
               className="text-button"
               aria-label="閉じる"
@@ -610,10 +694,12 @@ export function RealApp() {
                 </select>
               </label>
               <label>
-                元の雀魂共有URL（任意）
+                {analysis
+                  ? "元の雀魂共有URL（選択済み）"
+                  : "元の雀魂共有URL（任意）"}
                 <input
                   value={source}
-                  disabled={busy}
+                  disabled={busy || !!analysis}
                   autoComplete="off"
                   onChange={(e) => setSource(e.target.value)}
                 />
@@ -632,6 +718,7 @@ export function RealApp() {
                       seat: Number(seat),
                       model: Number(model),
                       source_url: source.trim(),
+                      ...(analysis ? { analysis_id: analysis.id } : {}),
                     });
                     await refresh();
                     await open(result.id);

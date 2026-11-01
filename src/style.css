@@ -1845,3 +1845,43 @@ dialog::backdrop {
     transition: transform 0.12s;
   }
 }
+.source-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin-block: 16px;
+}
+.source-input label {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.source-input input {
+  width: 100%;
+}
+.source-input [role="status"],
+.source-input [role="alert"] {
+  flex-basis: 100%;
+}
+.analysis-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid var(--line, #ddd);
+  padding: 16px 0;
+}
+.analysis-row > div:first-child {
+  flex: 1 1 180px;
+}
+.analysis-row small {
+  display: block;
+}
+.analysis-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.analysis-guide li {
+  margin-block: 12px;
+}

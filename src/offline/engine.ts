@@ -6,6 +6,11 @@ import type {
   StudySession,
   Workspace,
 } from "../real-types";
+import {
+  sourceURL,
+  validateAnalysisQueue,
+  type AnalysisEntry,
+} from "../analysis-queue";
 
 export type ItemState = {
   status: string;
@@ -59,6 +64,7 @@ export type PhoneState = {
   sequence: number;
   receipts?: Record<string, Receipt>;
   last_sync?: string;
+  analysis_queue?: AnalysisEntry[];
 };
 type Request = Record<string, any>;
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -255,6 +261,7 @@ export function validatePhoneBackup(
       !int(s.sequence, 0)
     )
       fail("invalid_phone_backup");
+    if (s.analysis_queue !== undefined) validateAnalysisQueue(s.analysis_queue);
     if (!s.pack) {
       if (s.events.length || s.session) fail("invalid_phone_backup");
       return;
@@ -560,6 +567,52 @@ export function phoneReduce(
       data = { synced: true };
       break;
     }
+    case "analysis_add": {
+      if (typeof r.url !== "string") fail("invalid_source_url");
+      const url = sourceURL(r.url),
+        id = url.split("paipu=")[1];
+      state.analysis_queue ??= [];
+      const existing = state.analysis_queue.find((e) => e.id === id);
+      if (!existing) {
+        if (state.analysis_queue.length >= 1000) fail("queue_full");
+        state.analysis_queue.push({ id, url, created: at });
+      }
+      data = { duplicate: !!existing };
+      break;
+    }
+    case "analysis_ack": {
+      validateAnalysisQueue(r.entries);
+      validateAnalysisQueue(r.snapshot);
+      if (
+        r.entries.length !== r.snapshot.length ||
+        typeof r.received_at !== "string" ||
+        !Number.isFinite(Date.parse(r.received_at))
+      )
+        fail("invalid_receipt");
+      for (const sent of r.snapshot as AnalysisEntry[]) {
+        const receipt = (r.entries as AnalysisEntry[]).find(
+          (e) => e.id === sent.id,
+        );
+        const own = state.analysis_queue?.find((e) => e.id === sent.id);
+        if (
+          !receipt ||
+          !own ||
+          receipt.url !== sent.url ||
+          own.url !== sent.url ||
+          typeof receipt.requested !== "boolean" ||
+          !Array.isArray(receipt.reports)
+        )
+          fail("invalid_receipt");
+        Object.assign(own!, {
+          received: r.received_at,
+          requested: receipt!.requested,
+          reports: clone(receipt!.reports),
+          ready: receipt!.ready,
+        });
+      }
+      data = { synced: true };
+      break;
+    }
     case "restore_phone": {
       validatePhoneBackup(r.backup);
       if (
@@ -567,14 +620,30 @@ export function phoneReduce(
         (state.session && state.session.index < state.session.queue.length)
       )
         fail("phone_restore_exists");
-      if (!r.backup.pack) fail("invalid_phone_backup");
-      if (state.pack && state.pack.source !== r.backup.pack!.source)
+      if (!r.backup.pack && !r.backup.analysis_queue?.length)
+        fail("invalid_phone_backup");
+      if (
+        state.pack &&
+        r.backup.pack &&
+        state.pack.source !== r.backup.pack.source
+      )
         fail("different_source");
-      state.pack = clone(r.backup.pack);
+      if (r.backup.pack) state.pack = clone(r.backup.pack);
       state.events = clone(r.backup.events);
       state.session = clone(r.backup.session);
       state.receipts = {};
       delete state.last_sync;
+      // Add missing URLs; never replace a newer local receipt/status.
+      state.analysis_queue ??= [];
+      for (const entry of (r.backup.analysis_queue ?? []) as AnalysisEntry[]) {
+        if (!state.analysis_queue.some((e) => e.id === entry.id))
+          state.analysis_queue.push({
+            id: entry.id,
+            url: entry.url,
+            created: entry.created,
+          });
+      }
+      validateAnalysisQueue(state.analysis_queue);
       data = { restored: true };
       break;
     }

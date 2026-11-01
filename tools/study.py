@@ -458,6 +458,15 @@ class StudyMixin:
             if s['revealed'] and s['selected'] is None: raise StudyFailure('invalid_backup')
         session_ids={s['id'] for s in rows['study_sessions']}
         if any(r['value'] not in session_ids for r in rows['study_settings'] if r['key']=='active_session'): raise StudyFailure('invalid_backup')
+        try:from .analysis_queue import stored_entry, PREFIX
+        except ImportError:from analysis_queue import stored_entry, PREFIX
+        reports={r['id']:r for r in rows['reports']}
+        for row in rows['study_settings']:
+            if row['key'].startswith(PREFIX):
+                entry=stored_entry(json.loads(row['value']))
+                if row['key']!=PREFIX+entry['id'] or any(r not in reports or reports[r]['source_game_url']!=entry['url'] for r in entry['reports']):
+                    raise StudyFailure('invalid_backup')
+            if row['key']=='analysis_setup' and row['value'] not in ('0','1'): raise StudyFailure('invalid_backup')
 
     def backup_inspect(self,name):
         try:from .sync import same_original
@@ -481,6 +490,7 @@ class StudyMixin:
             for r in rows[table]:
                 current=self.db.execute(f'SELECT * FROM {table} WHERE {key}=?',(r[key],)).fetchone()
                 if current and table=='reports' and any(current[k]!=r[k] for k in ('source','game','seat','model')): conflicts+=1
+                if current and table=='reports' and current['source_game_url'] and r['source_game_url'] and current['source_game_url']!=r['source_game_url']: conflicts+=1
                 if current and table=='sources' and current['hash']!=r['hash']: conflicts+=1
         return {'name':name,'hash':fingerprint,'reports':len(rows['reports']),'items':len(rows['study_items']),
                 'events':len(rows['review_events']),'conflicts':conflicts,'adopt':adopt}
@@ -503,6 +513,24 @@ class StudyMixin:
                     self.db.execute(f'INSERT OR IGNORE INTO {table} ('+','.join(columns)+') VALUES('+','.join('?' for _ in columns)+')',tuple(row.values()))
             for item in rows['study_items']:
                 if item['id'] in plan['adopt']: self._put_item(item['id'],self._snapshot_state(item))
+            # Restore missing URL inbox entries and links without dropping newer
+            # local reports or the user's explicit analysis-request declaration.
+            try:from .analysis_queue import stored_entry, PREFIX
+            except ImportError:from analysis_queue import stored_entry, PREFIX
+            for report in rows['reports']:
+                if report['source_game_url']:
+                    self.db.execute('UPDATE reports SET source_game_url=COALESCE(source_game_url,?) WHERE id=?',(report['source_game_url'],report['id']))
+            for row in rows['study_settings']:
+                if row['key'].startswith(PREFIX):
+                    incoming=stored_entry(json.loads(row['value']))
+                    current=self.db.execute('SELECT value FROM study_settings WHERE key=?',(row['key'],)).fetchone()
+                    if current:
+                        entry=stored_entry(json.loads(current[0]))
+                        entry['reports']=list(dict.fromkeys(entry['reports']+incoming['reports']))
+                        self._put_analysis(entry)
+                    else:self._put_analysis(incoming)
+                elif row['key']=='analysis_setup':
+                    self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)',(row['key'],row['value']))
             # Resume the backed-up in-flight session only if this installation
             # has no active session. A newer local progress is retained.
             active=next((r['value'] for r in rows['study_settings'] if r['key']=='active_session'),None)

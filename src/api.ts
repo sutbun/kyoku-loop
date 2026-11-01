@@ -1,4 +1,9 @@
 export const errors: Record<string, string> = {
+  invalid_queue:
+    "解析待ちの記録を確認できません。保存済みのURLを保持しています。",
+  queue_not_found: "解析待ちが見つかりません。一覧を更新してください。",
+  queue_full:
+    "端末の解析待ちの保存上限に達しました。保存済みのURLを保持しています。",
   phone_restore_exists:
     "この端末には記録や途中の復習があるため上書きできません。Windowsのバックアップ画面から、ファイルの回答記録を追加できます。",
   invalid_sync:

@@ -179,7 +179,7 @@ finally:s.close()
     await context.setOffline(true);
     page = await context.newPage();
     await page.goto("http://127.0.0.1:1460/phone/");
-    await expect(page.getByText("未送信 0件", { exact: true })).toBeVisible();
+    await expect(page.getByText("回答 未送信 0件", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "復習を再開する" }).click();
     await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
     expect((await read(page)).events[0]).toEqual(raw);
@@ -196,7 +196,7 @@ finally:s.close()
     ).toBeEnabled();
     await context.setOffline(true);
     await page.getByLabel("記録ファイルから復旧").setInputFiles(backup);
-    await expect(page.getByText("未送信 1件", { exact: true })).toBeVisible();
+    await expect(page.getByText("回答 未送信 1件", { exact: true })).toBeVisible();
     const recovered = await read(page);
     expect(recovered.events[0]).toEqual(raw);
     expect(recovered.device).not.toBe(raw.device);

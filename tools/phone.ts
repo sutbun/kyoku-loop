@@ -185,6 +185,14 @@ export function phoneSite(): Plugin {
           return;
         }
         if (
+          body?.action === "analysis_sync" &&
+          Object.keys(body).length === 2 &&
+          Array.isArray(body.entries)
+        ) {
+          callPhone(res, { action: "analysis_sync", entries: body.entries });
+          return;
+        }
+        if (
           body?.action === "sync" &&
           Object.keys(body).length === 2 &&
           body.payload &&

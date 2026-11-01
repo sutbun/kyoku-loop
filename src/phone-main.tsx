@@ -5,13 +5,15 @@ import { PracticeCard, StudyPanel } from "./study-ui";
 import type { StudySession, Workspace } from "./real-types";
 import { readPhone } from "./offline/store";
 import { saveShell, verifyShell } from "./offline/shell";
-import type { PhonePack } from "./offline/engine";
 import { pendingEvents } from "./offline/engine";
-import { synchronizePhone } from "./offline/sync";
+import { synchronizePhone, downloadPhonePack } from "./offline/sync";
+import { synchronizeAnalysis } from "./offline/analysis-sync";
+import { SourceInput, AnalysisList } from "./analysis-ui";
+import type { AnalysisEntry } from "./analysis-queue";
 import "./style.css";
 import "./phone.css";
 
-const VERSION = "DEV-11.01-5";
+const VERSION = "DEV-11.01-6";
 function PhoneApp() {
   const [workspace, setWorkspace] = useState<Workspace>({
     reports: [],
@@ -19,12 +21,14 @@ function PhoneApp() {
   });
   const [screen, setScreen] = useState<"home" | "study">("home");
   const [active, setActive] = useState(false);
-  const [filter, setFilter] = useState("すべて");
+  const [filter, setFilter] = useState("今日");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [pending, setPending] = useState(0);
+  const [analysisQueue, setAnalysisQueue] = useState<AnalysisEntry[]>([]);
+  const urlPending = analysisQueue.filter((e) => !e.received).length;
   const [capacity, setCapacity] = useState("");
   const [persistent, setPersistent] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
@@ -39,6 +43,7 @@ function PhoneApp() {
   const refresh = async () => {
     setWorkspace(await api<Workspace>({ action: "state" }));
     const state = await readPhone();
+    setAnalysisQueue(state?.analysis_queue ?? []);
     setPending(state ? pendingEvents(state).length : 0);
     setLastSync(state?.last_sync ?? "");
     setSaved(state?.pack?.exported_at ?? "");
@@ -84,7 +89,36 @@ function PhoneApp() {
     setSyncing(true);
     setSyncError("");
     try {
-      await synchronizePhone();
+      const results = await Promise.allSettled([
+        synchronizePhone(),
+        synchronizeAnalysis(),
+      ]);
+      if (mounted.current) await refresh();
+      const failed = results.filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected",
+      );
+      if (failed.length === 1) throw failed[0].reason;
+      if (failed.length)
+        throw new Error(
+          failed
+            .map((r) =>
+              r.reason instanceof DOMException &&
+              r.reason.name === "QuotaExceededError"
+                ? "空き容量不足で受信確認を保存できません。未送信の記録を保持しています。"
+                : r.reason instanceof Error
+                  ? (errors[r.reason.message] ?? r.reason.message)
+                  : "同期できませんでした。記録は端末に残っています。",
+            )
+            .join(" "),
+        );
+      const savedState = await readPhone();
+      if (
+        !savedState?.pack &&
+        savedState?.analysis_queue?.some((e) => e.ready)
+      ) {
+        await saveShell();
+        await api({ action: "install_pack", pack: await downloadPhonePack() });
+      }
       delay.current = 1000;
       if (mounted.current) await refresh();
     } catch (e) {
@@ -109,16 +143,20 @@ function PhoneApp() {
     if (loaded && online) {
       void readPhone()
         .then((s) => {
-          if (s?.pack && (s.events.length || s.last_sync)) void syncRecords();
+          if (
+            s?.analysis_queue?.length ||
+            (s?.pack && (s.events.length || s.last_sync))
+          )
+            void syncRecords();
         })
         .catch(() => {});
     }
   }, [loaded, online]);
   useEffect(() => {
-    if (!loaded || !online || !pending) return;
+    if (!loaded || !online || (!pending && !urlPending)) return;
     const timer = setTimeout(() => void syncRecords(), 500);
     return () => clearTimeout(timer);
-  }, [loaded, online, pending]);
+  }, [loaded, online, pending, urlPending]);
   useEffect(() => {
     mounted.current = true;
     if (navigator.serviceWorker?.controller)
@@ -161,22 +199,7 @@ function PhoneApp() {
         (!old || !pendingEvents(old).length) &&
         !(old?.session && old.session.index < old.session.queue.length)
       ) {
-        const response = await fetch("/phone/api", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: '{"action":"download"}',
-          cache: "no-store",
-        });
-        if (!response.ok)
-          throw new Error(
-            "Windowsに接続できません。TailscaleとWindows版の起動を確認してください。",
-          );
-        const value = await response.json();
-        if (!value.ok)
-          throw new Error(
-            errors[value.error] ?? "問題を取得できませんでした。",
-          );
-        const pack = value.data as PhonePack;
+        const pack = await downloadPhonePack();
         await api({ action: "install_pack", pack });
         const readback = await readPhone();
         if (
@@ -220,7 +243,8 @@ function PhoneApp() {
         <div className="content">
           <div className="phone-status" role="status">
             <span>{online ? "通信あり" : "オフライン"}</span>
-            <span>{syncing ? "同期中…" : `未送信 ${pending}件`}</span>
+            <span>{syncing ? "同期中…" : `回答 未送信 ${pending}件`}</span>
+            {!!urlPending && <span>URL 未同期 {urlPending}件</span>}
           </div>
           {syncError && (
             <div className="error" role="alert">
@@ -252,6 +276,28 @@ function PhoneApp() {
                 disabled={busy || !loaded}
                 onBegin={begin}
               />
+              <section className="panel">
+                <h2>牌譜を追加</h2>
+                <SourceInput
+                  disabled={busy || !loaded}
+                  onSave={async (url) => {
+                    await api({ action: "analysis_add", url });
+                    await refresh();
+                    // Keep the saved URL even if offline shell repair fails.
+                    void saveShell().catch(() => {
+                      setError(
+                        "URLは保存済みです。アプリ本体の保存を確認できないため、通信復帰後に保存を確認してください。",
+                      );
+                    });
+                    if (navigator.onLine) void syncRecords();
+                  }}
+                />
+                <AnalysisList
+                  entries={analysisQueue}
+                  portable
+                  disabled={busy}
+                />
+              </section>
               <section className="panel phone-download">
                 <h2>持ち歩く問題</h2>
                 <p data-testid="offline-status">
@@ -286,7 +332,7 @@ function PhoneApp() {
                 <p>
                   {lastSync
                     ? `最終同期：${new Date(lastSync).toLocaleString("ja-JP")}`
-                    : "Windowsへの同期はまだ完了していません。"}
+                    : "復習記録の同期はまだ完了していません。"}
                 </p>
                 <button
                   className="button primary"
@@ -294,7 +340,7 @@ function PhoneApp() {
                     busy ||
                     syncing ||
                     !loaded ||
-                    !workspace.items.length ||
+                    (!workspace.items.length && !analysisQueue.length) ||
                     !online
                   }
                   onClick={() => void syncRecords()}

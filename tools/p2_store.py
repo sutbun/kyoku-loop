@@ -21,9 +21,11 @@ from pathlib import Path
 try:
     from .p0_verify import inspect_report, tile_index
     from .study import StudyMixin, StudyFailure, public_scene
+    from .analysis_queue import AnalysisQueueMixin, source_url
 except ImportError:
     from p0_verify import inspect_report, tile_index
     from study import StudyMixin, StudyFailure, public_scene
+    from analysis_queue import AnalysisQueueMixin, source_url
 
 ROOT = Path('D:/dev-data/kyoku-loop/private')
 LIMIT = 20 * 1024 * 1024
@@ -134,7 +136,7 @@ def rank_decisions(scenes):
     return sorted(selected, key=lambda s:(-s['gap'],s['round_index'],s.get('event_index',0)))
 
 
-class Store(StudyMixin):
+class Store(StudyMixin, AnalysisQueueMixin):
     def __init__(self, path=None, clock=None):
         self.clock=clock
         self.path = Path(path or ROOT / 'app/kyokuloop.sqlite3').resolve()
@@ -167,7 +169,7 @@ class Store(StudyMixin):
         return {'token':token,'players':[str(n)[:100] for n in names],
                 'models':[{'index':int(k),'name':v} for k,v in report['naga_types'].items()], 'rounds':len(report['pred'])}
 
-    def commit(self, token, seat, model, source_game_url):
+    def commit(self, token, seat, model, source_game_url, analysis_id=None):
         if type(seat) is not int or seat not in range(4) or type(model) is not int:
             raise ImportFailure('selection_required')
         row = self.db.execute('SELECT * FROM staging WHERE token=? AND created>?',(token,time.time()-1800)).fetchone()
@@ -176,9 +178,11 @@ class Store(StudyMixin):
         report = decode(row['payload'])
         if str(model) not in report['naga_types'] or model not in (0,1):
             raise ImportFailure('unsupported_model')
-        if source_game_url:
-            if not isinstance(source_game_url,str) or not re.fullmatch(r'https://game\.mahjongsoul\.com/\?paipu=[A-Za-z0-9_-]+',source_game_url):
-                raise ImportFailure('invalid_source_url')
+        if source_game_url: source_game_url = source_url(source_game_url)
+        if analysis_id is not None:
+            entry = self.analysis_entry(analysis_id)
+            if source_game_url and source_game_url != entry['url']: raise ImportFailure('source_conflict')
+            source_game_url = entry['url']
         source = digest(report)
         # Gameplay identity excludes evaluations, model and display names. Raw
         # editor round data includes all draws, discards and round outcomes.
@@ -228,6 +232,12 @@ class Store(StudyMixin):
                    'source_link_kind':'manual' if source_game_url else 'unlinked'}
         tomorrow = (self.moment().astimezone(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
         with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            # Recheck after obtaining the write lock; two import windows must
+            # not relink an existing report to different original games.
+            linked = self.db.execute('SELECT source_game_url FROM reports WHERE id=?',(report_id,)).fetchone()
+            if linked and source_game_url and linked[0] not in (None,source_game_url):
+                raise ImportFailure('source_conflict')
             self.db.execute('INSERT OR IGNORE INTO sources VALUES(?,?,?,?)',(source,row['payload'],row['url'],content['created']))
             self.db.execute('''INSERT INTO reports VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
                 content=excluded.content,source_game_url=COALESCE(reports.source_game_url,excluded.source_game_url)''',
@@ -243,6 +253,10 @@ class Store(StudyMixin):
                     continue
                 self.db.execute('INSERT OR IGNORE INTO study_items(id,report,scene,automatic,manual,status,history,due) VALUES(?,?,?,?,?,?,?,?)',(s['id'],report_id,json.dumps(s,ensure_ascii=False),1,0,'未学習','[]',tomorrow))
                 auto_count += 1
+            if analysis_id is not None:
+                entry = self.analysis_entry(analysis_id)
+                if report_id not in entry['reports']: entry['reports'].append(report_id)
+                self._put_analysis(entry)
         return {'id':report_id,'duplicate':bool(existing)}
 
     def state(self):
@@ -258,7 +272,8 @@ class Store(StudyMixin):
             item['scene']=public_scene(json.loads(item['scene']))
             item['review_count']=self.db.execute("SELECT count(*) FROM review_events WHERE item=? AND kind='answer'",(item['id'],)).fetchone()[0]
             items.append(item)
-        return {'reports':reports,'items':items,'today':self.today(),'due_count':len(self._queue('scheduled')),
+        setup=self.db.execute("SELECT value FROM study_settings WHERE key='analysis_setup'").fetchone()
+        return {'reports':reports,'items':items,'analysis_queue':self.analysis_entries(),'analysis_setup':bool(setup and setup[0]=='1'),'today':self.today(),'due_count':len(self._queue('scheduled')),
                 'practice_count':len(self._queue('practice')),'session':self.study_current()}
 
     def detail(self, ident):
@@ -302,7 +317,11 @@ def main():
                 payload,url=base64.b64decode(request.get('data',''),validate=True),None
             result=store.stage(payload,url)
         elif action=='commit':
-            result=store.commit(request.get('token'),request.get('seat'),request.get('model'),request.get('source_url') or None)
+            result=store.commit(request.get('token'),request.get('seat'),request.get('model'),request.get('source_url') or None,request.get('analysis_id'))
+        elif action=='analysis_add': result=store.analysis_add(request.get('url'))
+        elif action=='analysis_sync': result=store.analysis_receive(request.get('entries'))
+        elif action=='analysis_requested': result=store.analysis_requested(request.get('id'),request.get('requested'))
+        elif action=='analysis_setup': result=store.analysis_setup(request.get('seen'))
         elif action=='detail':
             result=store.detail(request.get('id'))
         elif action=='save':

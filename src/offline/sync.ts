@@ -1,6 +1,31 @@
 import { readPhone, phoneTransaction } from "./store";
 import { syncPayload, validateSyncReply } from "./protocol";
 import { errors } from "../api";
+import type { PhonePack } from "./engine";
+
+export async function downloadPhonePack(): Promise<PhonePack> {
+  const controller = new AbortController(),
+    timer = setTimeout(() => controller.abort(), 25000);
+  try {
+    const response = await fetch("/phone/api", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: '{"action":"download"}',
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok)
+      throw new Error(
+        "Windowsに接続できません。TailscaleとWindows版の起動を確認してください。",
+      );
+    const value = await response.json();
+    if (!value.ok)
+      throw new Error(errors[value.error] ?? "問題を取得できませんでした。");
+    return value.data as PhonePack;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export async function synchronizePhone(): Promise<void> {
   const state = await readPhone();

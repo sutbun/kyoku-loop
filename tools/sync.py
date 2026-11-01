@@ -216,9 +216,17 @@ def receive(store,request):
 
 def inspect_phone_backup(store,value):
     try:
-        if not isinstance(value,dict) or value.get('schema')!=1 or not isinstance(value.get('pack'),dict):raise ValueError()
-        payload={'protocol':1,'source':value['pack']['source'],'device':value['device'],'events':value['events']}
+        try:from .analysis_queue import validate_entry
+        except ImportError:from analysis_queue import validate_entry
+        if not isinstance(value,dict) or value.get('schema')!=1:raise ValueError()
+        queue=value.get('analysis_queue',[])
+        if not isinstance(queue,list) or len(queue)>1000:raise ValueError()
+        entries=[validate_entry(e) for e in queue]
+        if len({e['id'] for e in entries})!=len(entries):raise ValueError()
         source=store.db.execute("SELECT value FROM study_settings WHERE key='device'").fetchone()[0]
+        pack=value.get('pack')
+        if not isinstance(pack,dict) and (not entries or value.get('events')!=[]):raise ValueError()
+        payload={'protocol':1,'source':pack['source'] if pack else source,'device':value['device'],'events':value['events']}
         if payload['source']!=source:raise StudyFailure('different_source')
         if not isinstance(payload['events'],list) or len(payload['events'])>5000 or len(canonical(value).encode())>20*1024*1024:raise ValueError()
         if not isinstance(payload['device'],str) or not 1<=len(payload['device'])<=100:raise ValueError()
@@ -230,7 +238,7 @@ def inspect_phone_backup(store,value):
             if current:
                 if canonical(original(dict(current)))!=canonical(raw):raise StudyFailure('event_conflict')
                 duplicates+=1
-        return {'hash':fingerprint(value),'events':len(ids),'duplicates':duplicates,'new':len(ids)-duplicates},payload
+        return {'hash':fingerprint(value),'events':len(ids),'duplicates':duplicates,'new':len(ids)-duplicates,'urls':len(entries)},payload
     except StudyFailure:raise
     except (ValueError,TypeError,KeyError):raise StudyFailure('invalid_phone_backup') from None
 
@@ -239,4 +247,5 @@ def restore_phone_backup(store,value,expected):
     plan,payload=inspect_phone_backup(store,value)
     if plan['hash']!=expected:raise StudyFailure('backup_changed')
     result=receive(store,payload)
+    if value.get('analysis_queue'):store.analysis_receive(value['analysis_queue'])
     return {'restored':True,'events':len(result['receipts'])}

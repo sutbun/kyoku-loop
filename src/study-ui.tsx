@@ -167,6 +167,7 @@ function BackupDialog({
     hash: string;
     events: number;
     duplicates: number;
+    urls?: number;
     new: number;
     backup: unknown;
   } | null>(null);
@@ -306,6 +307,7 @@ function BackupDialog({
           <h3>端末の回答記録を追加</h3>
           <p>
             追加 {phonePlan.new}件 · 登録済み {phonePlan.duplicates}件
+            {!!phonePlan.urls && <> · 解析待ちURL {phonePlan.urls}件</>}
           </p>
           <button
             className="button primary"
