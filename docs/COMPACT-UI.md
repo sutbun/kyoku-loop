@@ -13,7 +13,7 @@
 ## 牌素材
 [FluffyStuff/riichi-mahjong-tiles](https://github.com/FluffyStuff/riichi-mahjong-tiles)のRegular SVGを固定revisionから同梱する。34通常牌+3赤五。CC0表記とライセンス原文、固定revision、加工内容は[third_partyの記録](../third_party/riichi-mahjong-tiles/README.md)。一九・萬筒索・風/三元・赤五を個別図柄にし、外部CDN/フォントに依存しない。
 
-編集用メタデータと未使用定義をSVGO 4.0.0で除き、37種合計304,689 bytes（元765,988 bytes）。Viteのハッシュ付き配信/既存shellキャッシュへ含め、SVGのContent-Typeを明示。読み上げ名は画像と独立して維持。小さい画像はdata URL、残りは同一Originのキャッシュ済みSVGで表示する。DB/パック/同期/学習期限とIDに変更はない。
+編集用メタデータと未使用定義をSVGO 4.0.0で除き、37種合計304,689 bytes（元765,988 bytes）。Viteのアプリbundleにdata URLで埋め込み、既存shellキャッシュへ含める。読み上げ名は画像と独立して維持。全図柄を埋め込み、初回保存時に牌ごとの取得通信を増やさない。DB/パック/同期/学習期限とIDに変更はない。
 
 ## 検証境界
 生成データとEdgeの375×667/390×844/430×932およびdesktopで、手牌操作・回答・比較・自己評価・横溢れ・下部ナビとの位置を検査する。標準の390/430幅で、通常問題の回答と答え合わせ後の評価まで先頭画面に収まることを検査する。小さい375×667では読みやすさを守るため一部スクロールを許す。副露や長い河も非表示にしない。

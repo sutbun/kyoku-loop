@@ -1,6 +1,6 @@
 const files = import.meta.glob<string>("./assets/tiles/*.svg", {
   eager: true,
-  query: "?url",
+  query: "?inline",
   import: "default",
 });
 
