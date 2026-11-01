@@ -43,6 +43,7 @@ test("real import confirms player, opens top scene, persists registration and av
               token: "generated",
               players: ["架空A", "架空B", "架空C", "架空D"],
               models: [{ index: 0, name: "架空モデル" }],
+              preferred_model: 0,
               rounds: 1,
             }
           : r.action === "commit"
@@ -100,6 +101,156 @@ test("real import confirms player, opens top scene, persists registration and av
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+});
+
+const preferenceModels = [
+  { index: 0, name: "ニシキ" },
+  { index: 1, name: "ヒバカリ" },
+];
+
+test("preference selects the remembered type but player and commit remain explicit", async ({
+  page,
+}) => {
+  const commits: { seat: number; model: number }[] = [];
+  await page.route("**/api/local", async (route) => {
+    const input = route.request().postDataJSON();
+    if (input.action === "commit") commits.push(input);
+    const data =
+      input.action === "state"
+        ? { reports: [], items: [] }
+        : input.action === "inspect"
+          ? {
+              token: "generated",
+              players: ["架空A", "架空B", "架空C", "架空D"],
+              models: preferenceModels,
+              preferred_model: 1,
+              rounds: 1,
+            }
+          : input.action === "commit"
+            ? { id: generated.detail.id, duplicate: false }
+            : generated.detail;
+    await route.fulfill({ json: { ok: true, data } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "牌譜を追加", exact: false }).click();
+  await page
+    .getByLabel("JSON / JSON.gz ファイル")
+    .setInputFiles({
+      name: "generated.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(generated.raw)),
+    });
+  await expect(page.getByLabel("基準NAGAタイプ")).toHaveValue("1");
+  await expect(page.getByLabel("あなたのプレイヤー")).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "このプレイヤーで登録" }),
+  ).toBeDisabled();
+  expect(commits).toHaveLength(0);
+  await page.getByLabel("あなたのプレイヤー").selectOption("0");
+  await page.getByLabel("基準NAGAタイプ").selectOption("0");
+  await page.getByRole("button", { name: "このプレイヤーで登録" }).click();
+  await expect(page.getByRole("status")).toContainText("牌譜を保存しました");
+  expect(commits.map(({ seat, model }) => ({ seat, model }))).toEqual([
+    { seat: 0, model: 0 },
+  ]);
+});
+
+test("preference missing or ambiguous never picks a different or nonexistent type", async ({
+  page,
+}) => {
+  let commits = 0;
+  for (const candidate of [
+    { models: preferenceModels.slice(0, 1), preferred_model: null },
+    {
+      models: preferenceModels.map((m) => ({ ...m, name: "ニシキ" })),
+      preferred_model: null,
+    },
+    { models: preferenceModels, preferred_model: 99 },
+  ]) {
+    await page.unroute("**/api/local");
+    await page.route("**/api/local", async (route) => {
+      const input = route.request().postDataJSON();
+      if (input.action === "commit") commits++;
+      await route.fulfill({
+        json: {
+          ok: true,
+          data:
+            input.action === "state"
+              ? { reports: [], items: [] }
+              : {
+                  token: "generated",
+                  players: ["架空A", "架空B", "架空C", "架空D"],
+                  ...candidate,
+                  rounds: 1,
+                },
+        },
+      });
+    });
+    await page.goto("/");
+    await page
+      .getByRole("button", { name: "牌譜を追加", exact: false })
+      .click();
+    await page
+      .getByLabel("JSON / JSON.gz ファイル")
+      .setInputFiles({
+        name: "generated.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(generated.raw)),
+      });
+    await page.getByLabel("あなたのプレイヤー").selectOption("0");
+    await expect(page.getByLabel("基準NAGAタイプ")).toHaveValue("");
+    await expect(
+      page.getByRole("button", { name: "このプレイヤーで登録" }),
+    ).toBeDisabled();
+    await page.getByLabel("基準NAGAタイプ").selectOption("0");
+    await expect(
+      page.getByRole("button", { name: "このプレイヤーで登録" }),
+    ).toBeEnabled();
+    await page.getByRole("button", { name: "閉じる", exact: true }).click();
+  }
+  expect(commits).toBe(0);
+});
+
+test("preference changes in a cancelled dialog do not submit or replace the next default", async ({
+  page,
+}) => {
+  let commits = 0;
+  await page.route("**/api/local", async (route) => {
+    const input = route.request().postDataJSON();
+    if (input.action === "commit") commits++;
+    await route.fulfill({
+      json: {
+        ok: true,
+        data:
+          input.action === "state"
+            ? { reports: [], items: [] }
+            : {
+                token: "generated",
+                players: ["架空A", "架空B", "架空C", "架空D"],
+                models: preferenceModels,
+                preferred_model: 1,
+                rounds: 1,
+              },
+      },
+    });
+  });
+  await page.goto("/");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page
+      .getByRole("button", { name: "牌譜を追加", exact: false })
+      .click();
+    await page
+      .getByLabel("JSON / JSON.gz ファイル")
+      .setInputFiles({
+        name: "generated.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(generated.raw)),
+      });
+    await expect(page.getByLabel("基準NAGAタイプ")).toHaveValue("1");
+    await page.getByLabel("基準NAGAタイプ").selectOption("0");
+    await page.getByRole("button", { name: "閉じる", exact: true }).click();
+  }
+  expect(commits).toBe(0);
 });
 
 test("access restriction and local save failure remain visible without false success", async ({

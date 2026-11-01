@@ -22,10 +22,12 @@ try:
     from .p0_verify import inspect_report, tile_index
     from .study import StudyMixin, StudyFailure, public_scene
     from .analysis_queue import AnalysisQueueMixin, source_url
+    from .naga_preferences import preferred_model, remember_type
 except ImportError:
     from p0_verify import inspect_report, tile_index
     from study import StudyMixin, StudyFailure, public_scene
     from analysis_queue import AnalysisQueueMixin, source_url
+    from naga_preferences import preferred_model, remember_type
 
 ROOT = Path('D:/dev-data/kyoku-loop/private')
 LIMIT = 20 * 1024 * 1024
@@ -167,7 +169,8 @@ class Store(StudyMixin, AnalysisQueueMixin):
             self.db.execute('DELETE FROM staging WHERE created < ?', (time.time()-1800,))
             self.db.execute('INSERT INTO staging VALUES(?,?,?,?)',(token,payload,url,time.time()))
         return {'token':token,'players':[str(n)[:100] for n in names],
-                'models':[{'index':int(k),'name':v} for k,v in report['naga_types'].items()], 'rounds':len(report['pred'])}
+                'models':[{'index':int(k),'name':v} for k,v in report['naga_types'].items()],
+                'preferred_model':preferred_model(self.db,report['naga_types']), 'rounds':len(report['pred'])}
 
     def commit(self, token, seat, model, source_game_url, analysis_id=None):
         if type(seat) is not int or seat not in range(4) or type(model) is not int:
@@ -257,6 +260,7 @@ class Store(StudyMixin, AnalysisQueueMixin):
                 entry = self.analysis_entry(analysis_id)
                 if report_id not in entry['reports']: entry['reports'].append(report_id)
                 self._put_analysis(entry)
+            remember_type(self.db,report['naga_types'][str(model)])
         return {'id':report_id,'duplicate':bool(existing)}
 
     def state(self):
