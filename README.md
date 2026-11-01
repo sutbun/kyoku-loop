@@ -57,6 +57,8 @@ npm test
 
 - [製品仕様 v1.0](KyokuLoop_MVP_Spec_v1.0_DRAFT.md)
 - [フェーズ計画 v1.0](KyokuLoop_Codex_Implementation_Plan_v1.0.md)
+- [雀魂からNAGAへ渡す手動手順と確認範囲](docs/EXTERNAL-ANALYSIS-GUIDE.md)
+- [MVP仕様との現在の照合](docs/MVP-ACCEPTANCE.md)
 - [P0 調査・ブロッカー・代替案](NAGA-SPIKE-RESULT.md)
 - [P1 画面状態・再現手順・ゲート](docs/P1-UX-RESULT.md)
 - [P2 実装境界・検証結果](docs/P2-WINDOWS-RESULT.md)
