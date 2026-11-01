@@ -117,14 +117,21 @@ function Compare({ scene, answer }: { scene: Scene; answer?: string | null }) {
         <RealTile value={scene.actual!} />
       </div>
       <div>
-        <span>NAGA推奨 · {scene.model_name}</span>
+        <span>
+          {scene.engine ?? "NAGA"}推奨 · {scene.model_name}
+        </span>
         <RealTile value={scene.suggested!} />
       </div>
       <details className="comparison-weight">
         <summary>
           候補重み差 <b>{scene.gap?.toFixed(2)}pt</b>
         </summary>
-        <small>分布合計を100に換算 · 勝率や損失ではありません</small>
+        <small>
+          {scene.engine === "Mortal"
+            ? "モデルの選択傾向"
+            : "分布合計を100に換算"}{" "}
+          · 勝率や損失ではありません
+        </small>
       </details>
     </div>
   );
@@ -868,7 +875,7 @@ export function StudyPanel({
                   <p>
                     回答：{tileLabel(uiTile(event.answer))} ·{" "}
                     {event.credited ? "定期復習" : "自主練習・保留"} ·
-                    NAGA同牌種：
+                    {history.scene.engine ?? "NAGA"}同牌種：
                     {event.answer.replace(/r$/, "") ===
                     history.scene.suggested!.replace(/r$/, "")
                       ? "一致"

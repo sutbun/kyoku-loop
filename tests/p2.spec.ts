@@ -89,7 +89,7 @@ test("real import confirms player, opens top scene, persists registration and av
   await expect(page.getByTestId("real-library-row")).toHaveCount(1);
   await page.getByRole("button", { name: "ホーム", exact: true }).click();
   await page.getByRole("button", { name: "牌譜を追加", exact: false }).click();
-  await page.getByLabel("NAGAレポートURL / report_id").fill("generated-input");
+  await page.getByLabel("NAGA / Mortal レポートURL").fill("generated-input");
   await page.getByRole("button", { name: "レポートを読み込む" }).click();
   await page.getByLabel("あなたのプレイヤー").selectOption("0");
   await page.getByRole("button", { name: "このプレイヤーで登録" }).click();
@@ -267,7 +267,7 @@ test("access restriction and local save failure remain visible without false suc
   });
   await page.goto("/");
   await page.getByRole("button", { name: "牌譜を追加", exact: false }).click();
-  await page.getByLabel("NAGAレポートURL / report_id").fill("generated-input");
+  await page.getByLabel("NAGA / Mortal レポートURL").fill("generated-input");
   await page.getByRole("button", { name: "レポートを読み込む" }).click();
   await expect(page.getByRole("alert")).toContainText(
     "アクセスが拒否されました",

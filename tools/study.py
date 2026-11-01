@@ -18,7 +18,7 @@ except ImportError:
 
 JST = timezone(timedelta(hours=9))
 STATE = ('status', 'due', 'streak', 'cycle', 'last_credit_day', 'revision')
-PUBLIC = ('id','round_index','event_index','seat','bakaze','kyoku','honba','own_wind',
+PUBLIC = ('id','engine','round_index','event_index','seat','bakaze','kyoku','honba','own_wind',
           'own_hand','drawn','rivers','melds','dora_markers','scores','kyotaku',
           'reach_declared','reach_accepted','source_discard_index')
 TABLES = ('sources','reports','study_items','review_events','study_sessions','study_settings')
@@ -406,6 +406,25 @@ class StudyMixin:
         assessments={}
         for row in rows['reports']:
             report=sources[row['source']]
+            if report.get('engine') == 'Mortal':
+                try:
+                    from .mortal_report import project
+                except ImportError:
+                    from mortal_report import project
+                if row['seat'] != report['player_id'] or row['model'] != 0: raise StudyFailure('invalid_backup')
+                game=digest([s['log'] for s in report['split_logs']])
+                if row['game']!=game or row['id']!=digest([row['source'],row['seat'],0]): raise StudyFailure('invalid_backup')
+                _,scenes,timeline=project(report)
+                content=json.loads(row['content'])
+                if content.get('engine')!='Mortal' or content['timeline']!=timeline: raise StudyFailure('invalid_backup')
+                verified={}
+                for scene in scenes:
+                    scene['id']=digest([game,row['seat'],scene['round_index'],scene['source_discard_index'],'discard','Mortal'])
+                    verified[scene['id']]=scene
+                if content['decisions']!=list(verified.values()): raise StudyFailure('invalid_backup')
+                if any(i not in verified for i in content['important']): raise StudyFailure('invalid_backup')
+                assessments[row['id']]=verified
+                continue
             raw=[json.loads(r) if isinstance(r,str) else r for r in report['custom_haihu']]
             if row['game']!=digest(raw) or row['id']!=digest([row['source'],row['seat'],row['model']]): raise StudyFailure('invalid_backup')
             content=json.loads(row['content'])

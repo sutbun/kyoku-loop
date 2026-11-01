@@ -69,6 +69,18 @@ def inspect_report(report: dict, seat: int = 0, model: int = 0, timeline: list |
         raise ValueError("unsupported_data_version")
     if not isinstance(report.get("naga_types"), dict) or str(model) not in report["naga_types"]:
         raise ValueError("model_missing")
+    return inspect_event_rounds(rounds, raw_chunks, seat, model, report["naga_types"], timeline)
+
+
+def inspect_event_rounds(rounds, raw_chunks, seat, model=0, model_names=None, timeline=None):
+    """Validate event streams against editor logs without assuming an AI engine.
+
+    Assessment-free streams produce only public snapshots. Engine adapters bind
+    their own evaluations separately; no foreign output is treated as NAGA data.
+    """
+    if seat not in range(4) or not isinstance(rounds, list) or len(rounds) != len(raw_chunks):
+        raise ValueError("round_shape")
+    model_names = model_names or {}
     totals, issues, excluded, scenes = Counter(), Counter(), Counter(), []
     round_results = []
     for ri, entries in enumerate(rounds):
@@ -293,7 +305,7 @@ def inspect_report(report: dict, seat: int = 0, model: int = 0, timeline: list |
                     "dora_markers": visible_dora, "scores": scores, "kyotaku": kyotaku,
                     "reach_declared": declared_reach, "reach_accepted": accepted_reach,
                     "actual": msg["real_dahai"], "suggested": suggestions[model],
-                    "model_index": model, "model_name": report["naga_types"][str(model)],
+                    "model_index": model, "model_name": model_names[str(model)],
                     "raw_weights": rows[model], "weight_total": sum(rows[model]),
                     "source_discard_index": discards[seat],
                 })
