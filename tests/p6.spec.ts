@@ -216,6 +216,7 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
     );
     await expect(win.getByLabel("元の雀魂共有URL（選択済み）")).toBeDisabled();
     await win.getByLabel("あなたのプレイヤー").selectOption("0");
+    await win.getByLabel("基準NAGAタイプ").selectOption("0");
     await win.getByRole("button", { name: "このプレイヤーで登録" }).click();
     await expect(
       win.getByRole("heading", { name: "見直したい一打" }),

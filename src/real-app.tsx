@@ -117,7 +117,12 @@ export function RealApp() {
     setStage(result);
     setSource(analysis?.url ?? "");
     setSeat("");
-    setModel(result.models.length === 1 ? String(result.models[0].index) : "");
+    setModel(
+      result.preferred_model != null &&
+        result.models.some((m) => m.index === result.preferred_model)
+        ? String(result.preferred_model)
+        : "",
+    );
   };
   const upload = (file: File | undefined) => {
     if (!file) return;

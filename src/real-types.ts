@@ -120,5 +120,6 @@ export type Stage = {
   token: string;
   players: string[];
   models: { index: number; name: string }[];
+  preferred_model?: number | null;
   rounds: number;
 };

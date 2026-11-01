@@ -11,6 +11,11 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    from .naga_preferences import KEY as NAGA_PREFERENCE, valid_name
+except ImportError:
+    from naga_preferences import KEY as NAGA_PREFERENCE, valid_name
+
 JST = timezone(timedelta(hours=9))
 STATE = ('status', 'due', 'streak', 'cycle', 'last_credit_day', 'revision')
 PUBLIC = ('id','round_index','event_index','seat','bakaze','kyoku','honba','own_wind',
@@ -475,6 +480,7 @@ class StudyMixin:
                 if row['key']!=PREFIX+entry['id'] or any(r not in reports or reports[r]['source_game_url']!=entry['url'] for r in entry['reports']):
                     raise StudyFailure('invalid_backup')
             if row['key']=='analysis_setup' and row['value'] not in ('0','1'): raise StudyFailure('invalid_backup')
+            if row['key']==NAGA_PREFERENCE and not valid_name(row['value']): raise StudyFailure('invalid_backup')
 
     def backup_inspect(self,name):
         try:from .sync import same_original
@@ -537,7 +543,7 @@ class StudyMixin:
                         entry['reports']=list(dict.fromkeys(entry['reports']+incoming['reports']))
                         self._put_analysis(entry)
                     else:self._put_analysis(incoming)
-                elif row['key']=='analysis_setup':
+                elif row['key'] in ('analysis_setup',NAGA_PREFERENCE):
                     self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)',(row['key'],row['value']))
             # Resume the backed-up in-flight session only if this installation
             # has no active session. A newer local progress is retained.
