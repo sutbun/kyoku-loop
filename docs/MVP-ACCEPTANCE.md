@@ -20,6 +20,7 @@
 
 - 実iPhoneの新入口は、DEV-11.01-6への本人の成功回答で保存→オフライン再起動→Windows受信まで合格。Windowsで実受信と再送非増殖も確認済み。詳細は[解析待ちの結果](ANALYSIS-INBOX-RESULT.md)を参照。
 - Braveの1局選択→公式入力/NP確認までの手動転送は本人確認済み。全局/一部局除外、権限ダイアログの内容、今回の有料解析生成は未検証。拡張の導入/操作や有料解析を自動実行しない。既存レポートURL/本人取得JSONの直接入口は継続する。
+- 東1〜東4・連荘/供託・南入・4席の自風・復元後のID/履歴保持は、[局進行の生成検証](ROUND-FORMAT-VERIFICATION.md)で追加確認した。これは実NAGA東風形式や原雀魂との独立一致の証明ではない。
 - 東風の実サンプル、未対応NAGA版/モデル、原本の全複雑局面、長期間の学習効果へ確認範囲を拡大しない。実証範囲は[P2](P2-WINDOWS-RESULT.md)、[P3](P3-STUDY-RESULT.md)、[P4](P4-OFFLINE-RESULT.md)、[P5](P5-SYNC-RESULT.md)を参照。
 - 2026-11-02に[統合前レビューと実データ一連確認](INTEGRATION-REVIEW.md)を実施し、[PR #1](https://github.com/sutbun/kyoku-loop/pull/1)をmainへ統合。その後[PR #2](https://github.com/sutbun/kyoku-loop/pull/2)で普段使い版11.02-1をE:/Apps/KyokuLoopへ独立配備した。正常起動/終了・二重起動防止・別物理ディスクへのバックアップコピー・隔離復元・正本不変を確認。[普段使い手順](DAILY-USE.md)を参照。Node/Pythonを使うローカルアプリである。
 
