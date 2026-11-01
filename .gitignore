@@ -1,0 +1,13 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.env*
+!.env.example
+.local/
+private/
+*.log
+*.json.gz
+*.har
+auth*.json
+storage-state*.json
