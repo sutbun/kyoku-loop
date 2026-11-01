@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { analysisStatus, type AnalysisEntry } from "./analysis-queue";
+import {
+  analysisStatus,
+  sourceURL,
+  type AnalysisEntry,
+} from "./analysis-queue";
 
 export function SourceInput({
   disabled,
@@ -40,7 +44,12 @@ export function SourceInput({
           type="url"
           value={url}
           onChange={(e) => {
-            setURL(e.target.value);
+            const value = e.target.value;
+            try {
+              setURL(sourceURL(value));
+            } catch {
+              setURL(value);
+            }
             setNotice("");
           }}
           disabled={disabled || saving}

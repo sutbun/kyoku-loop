@@ -13,9 +13,16 @@ URL = r'https://game\.mahjongsoul\.com/\?paipu=([A-Za-z0-9_-]{10,200})'
 
 
 def source_url(value):
-    if not isinstance(value, str) or not re.fullmatch(URL, value.strip()):
+    if not isinstance(value, str):
         raise StudyFailure('invalid_source_url')
-    return value.strip()
+    url = value.strip()
+    if re.match(r'^雀魂牌譜[:：]', url):
+        url = re.sub(r'^雀魂牌譜[:：]', '', url, count=1).strip()
+        if url.startswith('https\\://'):
+            url = url.replace('https\\://', 'https://', 1)
+    if not re.fullmatch(URL, url):
+        raise StudyFailure('invalid_source_url')
+    return url
 
 
 def validate_entry(value):

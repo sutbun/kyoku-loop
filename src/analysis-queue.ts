@@ -8,7 +8,12 @@ export type AnalysisEntry = {
   ready?: boolean;
 };
 export const sourceURL = (value: string): string => {
-  const url = value.trim();
+  let url = value.trim();
+  if (/^雀魂牌譜[:：]/.test(url))
+    url = url
+      .replace(/^雀魂牌譜[:：]/, "")
+      .trim()
+      .replace(/^https\\:\/\//, "https://");
   if (
     !/^https:\/\/game\.mahjongsoul\.com\/\?paipu=[A-Za-z0-9_-]{10,200}$/.test(
       url,
