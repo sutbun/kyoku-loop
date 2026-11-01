@@ -7,3 +7,5 @@
 ユーザー追加説明（2026-11-01）: 完全な個人利用・非公開。競合製品と推定した一律停止は撤回し、通常の公開経路と本人が利用できるデータでP0を進める。提供元の個別許諾取得の事実としては扱わない。実データ5判断照合ゲートが通るまでP2を実装しない。P1は架空データのみ。有料解析・認証回避・外部拡張の自動操作は行わない。明示的なアクセス/利用制限が判明すれば対象処理を止めて報告する。
 GitHub Actionsを追加しない。開発ポート1460、127.0.0.1、strictPort。開発版はDEV-MM.DD-Nを表示する。
 検証: npm run check / npm run build / npm test（P0のPython検証とEdgeでの画面テスト）。P1の操作成功と人間によるUX合格を区別する。
+
+普段使い版は当repoの scripts/Deploy-KyokuLoop.ps1 に確認済みGitHub mainのSHAを渡して E:/Apps/KyokuLoop へ独立配備する。共通5アプリ用のAfterMergeドライバーへ勝手に登録しない。手順は docs/DAILY-USE.md。データは従来のD:/dev-data/kyoku-loop/private/appを継続使用し、起動中はUIと実行中API/子プロセスを確認して専用APIから正常終了する。強制終了・自動起動サービス追加は行わない。

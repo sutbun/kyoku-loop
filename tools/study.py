@@ -319,11 +319,19 @@ class StudyMixin:
 
     def backup_create(self):
         target=self._snapshot()
-        return {'name':target.name}
+        try: from .backup_mirror import mirror_backup
+        except ImportError: from backup_mirror import mirror_backup
+        return {'name':target.name,'mirror':mirror_backup(self.path,target)}
 
     def backup_list(self):
         folder=self._backup_dir()
-        return {'folder':str(folder),'files':[{'name':p.name,'bytes':p.stat().st_size,
+        try:
+            try: from .backup_mirror import mirror_folder
+            except ImportError: from backup_mirror import mirror_folder
+            mirror=mirror_folder(self.path)
+            extra={'mirror_folder':str(mirror) if mirror else ''}
+        except Exception: extra={'mirror_folder':'','mirror_error':True}
+        return {'folder':str(folder),**extra,'files':[{'name':p.name,'bytes':p.stat().st_size,
             'created':datetime.fromtimestamp(p.stat().st_mtime,timezone.utc).isoformat()} for p in sorted(folder.glob('backup-*.sqlite3'),reverse=True)]}
 
     def _backup_path(self,name):

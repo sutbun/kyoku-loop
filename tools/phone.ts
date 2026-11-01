@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
+import { trackChild } from "./runtime.ts";
 
 type Access = { origin: string; login: string };
 export function phoneAllowed(
@@ -69,10 +70,11 @@ export function phoneHosts(): string[] {
 }
 function callPhone(res: ServerResponse, payload: object) {
   const child = spawn(
-    "python",
+    process.env.KYOKULOOP_PYTHON || "python",
     [fileURLToPath(new URL("./p2_store.py", import.meta.url))],
     { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
   );
+  trackChild(child);
   const chunks: Buffer[] = [];
   let bytes = 0;
   let done = false;

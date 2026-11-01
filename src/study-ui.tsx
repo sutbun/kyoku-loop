@@ -129,6 +129,8 @@ function Compare({ scene, answer }: { scene: Scene; answer?: string | null }) {
 }
 type BackupList = {
   folder: string;
+  mirror_folder?: string;
+  mirror_error?: boolean;
   files: { name: string; bytes: number; created: string }[];
 };
 type BackupPlan = {
@@ -200,15 +202,35 @@ function BackupDialog({
         disabled={busy}
         onClick={() =>
           void run(async () => {
-            await api({ action: "backup_create" });
+            const saved = await api<{ mirror?: { state: string } }>({
+              action: "backup_create",
+            });
             await load();
-            setNotice("バックアップを保存しました。");
+            setNotice(
+              saved.mirror?.state === "saved"
+                ? "バックアップを保存しました。追加コピーも確認済みです。"
+                : "バックアップを保存しました。",
+            );
+            if (saved.mirror?.state === "failed")
+              setError(
+                "元の保存先には保存済みですが、追加コピーは完了していません。コピー先の空き容量と接続を確認して再試行してください。",
+              );
           })
         }
       >
         バックアップを作成
       </button>
       <small className="backup-path">保存先：{list.folder}</small>
+      {list.mirror_folder && (
+        <small className="backup-path">
+          追加コピー先：{list.mirror_folder}
+        </small>
+      )}
+      {list.mirror_error && (
+        <p role="alert">
+          追加コピー先の設定を読み取れません。元の保存先は保持しています。
+        </p>
+      )}
       <label className="file-drop">
         バックアップファイルを選択
         <input

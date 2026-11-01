@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
+import { trackChild } from "./runtime.ts";
 
 // Vite and preview share one loopback port. No separate exposed API service.
 function handle(req: IncomingMessage, res: ServerResponse, next: () => void) {
@@ -36,13 +37,14 @@ function handle(req: IncomingMessage, res: ServerResponse, next: () => void) {
   req.on("end", () => {
     if (length > 29 * 1024 * 1024) return deny(413, "size_limit");
     const child = spawn(
-      "python",
+      process.env.KYOKULOOP_PYTHON || "python",
       [fileURLToPath(new URL("./p2_store.py", import.meta.url))],
       {
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       },
     );
+    trackChild(child);
     const output: Buffer[] = [];
     let outputSize = 0;
     let done = false;
