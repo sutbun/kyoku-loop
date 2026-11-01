@@ -11,3 +11,5 @@ private/
 *.har
 auth*.json
 storage-state*.json
+__pycache__/
+*.pyc

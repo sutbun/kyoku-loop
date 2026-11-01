@@ -4,7 +4,7 @@
 
 現在は **P1 UX試作 DEV-11.01-1**。架空データだけで、ホーム、牌譜・分析、学習の3画面、重要局面巡回、手動保存、標準5問の自主練習、回答比較、自己評価、4状態ライブラリを操作できる。
 
-**P0は未通過**。公式公開サンプルの取得・構造確認まで進み、本人の実レポート/原牌譜の5判断照合は未完了。自動取得や実データインポートは実装していない。P2以降は開始していない。
+**P0は未通過**。ユーザー指定9レポートを取得し、変換牌譜との内部一致を確認。元の雀魂原本との5判断照合は未完了。自動取得や実データインポートは実装していない。P2以降は開始していない。
 
 ## 起動
 
@@ -23,7 +23,7 @@ npm run build
 npm test
 ```
 
-テストは既存Edgeで、Windows幅とiPhone 13相当の幅を使用。Safari/iPhone実機の検証とは異なる。GitHub Actionsは使用しない。
+P0用の架空データ検証にはPython 3.10以降も使う。`npm test` はP0のPythonテストと画面のテストを実行する。画面テストは既存Edgeで、Windows幅とiPhone 13相当の幅を使用。Safari/iPhone実機の検証とは異なる。GitHub Actionsは使用しない。
 
 ## 現在の範囲
 
@@ -42,3 +42,14 @@ npm test
 - 共通ルール: [sutbun/ai-dev](https://github.com/sutbun/ai-dev)
 
 実牌譜・個人URL・Cookie・認証情報・実学習履歴はGit登録禁止。私的検証データはrepo外の `D:/dev-data/kyoku-loop/private/` に置く。旧ツール由来データは使用しない。ログやスクリーンショットにも実データを混入させない。
+
+## P0のローカル照合
+
+製品インポーターではなく、指定したファイルを読み取る技術検証ツール。ネットワークアクセスを行わず、結果はGit外の指定private領域に限って保存する。
+
+```powershell
+python tools/p0_verify.py D:\dev-data\kyoku-loop\private\p0-20261101\R7.json --seat 0 --model 0 --output D:\dev-data\kyoku-loop\private\p0-20261101\R7-verification
+npm run test:p0
+```
+
+元の雀魂との同一性・本人席はこの内部照合だけでは証明できない。評価の正規化や自動問題登録、P2以降の実装は含めない。
