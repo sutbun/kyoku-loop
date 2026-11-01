@@ -147,6 +147,9 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
     await page.getByRole("button", { name: "保存", exact: true }).click();
     await expect(page.getByTestId("analysis-row")).toContainText(
       "この端末に保存済み・未同期",
+      // The real Python route fixture can block the test controller beyond
+      // its default five seconds; still require the committed row to appear.
+      { timeout: 30000 },
     );
     await expect
       .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), {
