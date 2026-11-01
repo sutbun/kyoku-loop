@@ -5,9 +5,72 @@ import { EventEmitter } from "node:events";
 import type { ServerResponse } from "node:http";
 import { createRuntimeControl } from "../tools/runtime";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  rmSync,
+} from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { createHash } from "node:crypto";
+
+test("Windows PowerShell 5 installs and atomically updates a release pointer with a retained backup", () => {
+  const root = resolve("D:/dev-data/kyoku-loop/private");
+  const folder = mkdtempSync(join(root, "daily-pointer-test-"));
+  const executable = join(
+    process.env.SystemRoot!,
+    "System32/WindowsPowerShell/v1.0/powershell.exe",
+  );
+  const script = resolve("scripts/Switch-KyokuLoopRelease.ps1");
+  const staged = join(folder, "staged.json"),
+    pointer = join(folder, "current.json"),
+    backup = join(folder, "previous.json");
+  const invoke = () =>
+    execFileSync(
+      executable,
+      [
+        "-NoProfile",
+        "-File",
+        script,
+        "-StagedPath",
+        staged,
+        "-PointerPath",
+        pointer,
+        "-BackupPath",
+        backup,
+      ],
+      { encoding: "utf8", windowsHide: true },
+    );
+  try {
+    writeFileSync(staged, JSON.stringify({ release: "first" }));
+    invoke();
+    expect(JSON.parse(readFileSync(pointer, "utf8"))).toEqual({
+      release: "first",
+    });
+    expect(existsSync(staged)).toBe(false);
+    writeFileSync(staged, JSON.stringify({ release: "second" }));
+    invoke();
+    expect(JSON.parse(readFileSync(pointer, "utf8"))).toEqual({
+      release: "second",
+    });
+    expect(JSON.parse(readFileSync(backup, "utf8"))).toEqual({
+      release: "first",
+    });
+    expect(existsSync(staged)).toBe(false);
+    expect(() => invoke()).toThrow();
+    expect(JSON.parse(readFileSync(pointer, "utf8"))).toEqual({
+      release: "second",
+    });
+    expect(JSON.parse(readFileSync(backup, "utf8"))).toEqual({
+      release: "first",
+    });
+  } finally {
+    if (dirname(folder) !== root) throw Error("Unexpected cleanup path");
+    rmSync(folder, { recursive: true });
+  }
+});
 
 test("Windows launcher reports status and rejects a modified release without stopping the running app", async () => {
   const executable = join(
