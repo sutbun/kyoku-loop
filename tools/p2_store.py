@@ -23,11 +23,13 @@ try:
     from .study import StudyMixin, StudyFailure, public_scene
     from .analysis_queue import AnalysisQueueMixin, source_url
     from .naga_preferences import preferred_model, remember_type
+    from . import mortal_report
 except ImportError:
     from p0_verify import inspect_report, tile_index
     from study import StudyMixin, StudyFailure, public_scene
     from analysis_queue import AnalysisQueueMixin, source_url
     from naga_preferences import preferred_model, remember_type
+    import mortal_report
 
 ROOT = Path('D:/dev-data/kyoku-loop/private')
 LIMIT = 20 * 1024 * 1024
@@ -74,7 +76,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def fetch_report(value):
-    url = canonical_report_url(value)
+    try:
+        mortal_host = isinstance(value, str) and urllib.parse.urlsplit(value.strip()).hostname == 'mjai.ekyu.moe'
+    except ValueError:
+        raise ImportFailure('invalid_url') from None
+    if mortal_host:
+        try: url = mortal_report.canonical_url(value)
+        except ValueError: raise ImportFailure('invalid_url') from None
+    else:
+        url = canonical_report_url(value)
     try:
         # No CookieProcessor, proxy credentials, authentication or redirects.
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
@@ -99,6 +109,9 @@ def decode(payload):
         report = json.loads(payload.decode('utf-8-sig'))
         if not isinstance(report, dict):
             raise ImportFailure('invalid_json')
+        if report.get('engine') == 'Mortal':
+            try: return mortal_report.validate(report)
+            except ValueError as exc: raise ImportFailure(str(exc)) from None
         if report.get('data_version') != [1,0] or not isinstance(report.get('custom_haihu'),list):
             raise ImportFailure('unsupported_format')
         rounds = report.get('pred')
@@ -162,12 +175,17 @@ class Store(StudyMixin, AnalysisQueueMixin):
     def stage(self, payload, url):
         report = decode(payload)
         token = secrets.token_urlsafe(32)
-        names = report.get('player_info',{}).get('name',[])
+        mortal = report.get('engine') == 'Mortal'
+        names = report['split_logs'][0]['name'] if mortal else report.get('player_info',{}).get('name',[])
         if not isinstance(names,list) or len(names) != 4:
             names = [f'席{i+1}' for i in range(4)]
         with self.db:
             self.db.execute('DELETE FROM staging WHERE created < ?', (time.time()-1800,))
             self.db.execute('INSERT INTO staging VALUES(?,?,?,?)',(token,payload,url,time.time()))
+        if mortal:
+            return {'token':token,'players':[str(n)[:100] for n in names], 'engine':'Mortal',
+                    'target_seat':report['player_id'], 'preferred_model':0,
+                    'models':[{'index':0,'name':report['review']['model_tag']}], 'rounds':len(report['split_logs'])}
         return {'token':token,'players':[str(n)[:100] for n in names],
                 'models':[{'index':int(k),'name':v} for k,v in report['naga_types'].items()],
                 'preferred_model':preferred_model(self.db,report['naga_types']), 'rounds':len(report['pred'])}
@@ -179,6 +197,8 @@ class Store(StudyMixin, AnalysisQueueMixin):
         if not row:
             raise ImportFailure('stage_expired')
         report = decode(row['payload'])
+        if report.get('engine') == 'Mortal':
+            return self.commit_mortal(row, report, seat, model, source_game_url, analysis_id)
         if str(model) not in report['naga_types'] or model not in (0,1):
             raise ImportFailure('unsupported_model')
         if source_game_url: source_game_url = source_url(source_game_url)
@@ -263,12 +283,63 @@ class Store(StudyMixin, AnalysisQueueMixin):
             remember_type(self.db,report['naga_types'][str(model)])
         return {'id':report_id,'duplicate':bool(existing)}
 
+    def commit_mortal(self, row, report, seat, model, source_game_url, analysis_id):
+        if seat != report['player_id'] or model != 0:
+            raise ImportFailure('mortal_target_required')
+        if source_game_url: source_game_url = source_url(source_game_url)
+        if analysis_id is not None:
+            entry = self.analysis_entry(analysis_id)
+            if source_game_url and source_game_url != entry['url']: raise ImportFailure('source_conflict')
+            source_game_url = entry['url']
+        try:
+            summary, valid, timeline = mortal_report.project(report)
+        except (ValueError, TypeError, KeyError, IndexError, OverflowError, AttributeError):
+            raise ImportFailure('reconstruction_failed') from None
+        source = digest(report)
+        game = digest([s['log'] for s in report['split_logs']])
+        report_id = digest([source, seat, model])
+        for s in valid:
+            # Same engine/game/decision retains its learning identity, while
+            # importing another engine never replaces an existing assessment.
+            s['id'] = digest([game,seat,s['round_index'],s['source_discard_index'],'discard','Mortal'])
+        important = rank_decisions(valid)
+        existing = self.db.execute('SELECT content FROM reports WHERE id=?',(report_id,)).fetchone()
+        content = {'id':report_id,'seat':seat,'model':model,'engine':'Mortal',
+                   'model_name':report['review']['model_tag'],'model_version':report['version'],
+                   'rounds':summary['rounds'],'decisions':valid,'timeline':timeline,
+                   'important':[s['id'] for s in important],'excluded':summary['excluded'],
+                   'rule':'mortal-policy-gap-v1-diverse10-positive','unknown_weights':0,
+                   'created':json.loads(existing['content'])['created'] if existing else datetime.now(timezone.utc).isoformat(),
+                   'source_link_kind':'manual' if source_game_url else 'unlinked'}
+        tomorrow = (self.moment().astimezone(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            linked = self.db.execute('SELECT source_game_url FROM reports WHERE id=?',(report_id,)).fetchone()
+            if linked and source_game_url and linked[0] not in (None, source_game_url):
+                raise ImportFailure('source_conflict')
+            self.db.execute('INSERT OR IGNORE INTO sources VALUES(?,?,?,?)',(source,row['payload'],row['url'],content['created']))
+            self.db.execute('''INSERT INTO reports VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+                content=excluded.content,source_game_url=COALESCE(reports.source_game_url,excluded.source_game_url)''',
+                (report_id,source,game,seat,model,source_game_url,json.dumps(content,ensure_ascii=False)))
+            auto_count = self.db.execute('SELECT COUNT(*) FROM study_items i JOIN reports r ON i.report=r.id WHERE r.game=? AND r.seat=? AND i.automatic=1',(game,seat)).fetchone()[0]
+            for s in important[:3]:
+                if auto_count >= 3: break
+                if self.db.execute('SELECT 1 FROM study_items WHERE id=?',(s['id'],)).fetchone(): continue
+                self.db.execute('INSERT INTO study_items(id,report,scene,automatic,manual,status,history,due) VALUES(?,?,?,?,?,?,?,?)',
+                                (s['id'],report_id,json.dumps(s,ensure_ascii=False),1,0,'未学習','[]',tomorrow))
+                auto_count += 1
+            if analysis_id is not None:
+                entry = self.analysis_entry(analysis_id)
+                if report_id not in entry['reports']: entry['reports'].append(report_id)
+                self._put_analysis(entry)
+        return {'id':report_id,'duplicate':bool(existing)}
+
     def state(self):
         reports=[]
         for row in self.db.execute('SELECT id,content,source_game_url FROM reports ORDER BY rowid DESC'):
             d=json.loads(row['content'])
             reports.append({k:d[k] for k in ('id','seat','model','model_name','rounds','created')} | {
-                'important_count':len(d['important']),'source_linked':bool(row['source_game_url'])})
+                'engine':d.get('engine','NAGA'),'important_count':len(d['important']),'source_linked':bool(row['source_game_url'])})
         items=[]
         for row in self.db.execute('SELECT * FROM study_items ORDER BY rowid'):
             item=dict(row)

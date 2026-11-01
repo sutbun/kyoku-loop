@@ -116,7 +116,7 @@ export function RealApp() {
     const result = await api<Stage>({ action: "inspect", ...data });
     setStage(result);
     setSource(analysis?.url ?? "");
-    setSeat("");
+    setSeat(result.target_seat != null ? String(result.target_seat) : "");
     setModel(
       result.preferred_model != null &&
         result.models.some((m) => m.index === result.preferred_model)
@@ -519,13 +519,19 @@ export function RealApp() {
                                 <RealTile value={assessment.actual!} />
                               </div>
                               <div>
-                                <span>NAGA推奨 · {detail.model_name}</span>
+                                <span>
+                                  {detail.engine ?? "NAGA"}推奨 ·{" "}
+                                  {detail.model_name}
+                                </span>
                                 <RealTile value={assessment.suggested!} />
                               </div>
                               <p>
                                 候補重み差 <b>{assessment.gap!.toFixed(2)}pt</b>
                                 <small>
-                                  分布合計を100に換算 · 勝率や損失ではありません
+                                  {detail.engine === "Mortal"
+                                    ? "モデルの選択傾向"
+                                    : "分布合計を100に換算"}{" "}
+                                  · 勝率や損失ではありません
                                 </small>
                               </p>
                             </div>
@@ -639,7 +645,7 @@ export function RealApp() {
           {!stage ? (
             <>
               <label>
-                NAGAレポートURL / report_id
+                NAGA / Mortal レポートURL
                 <input
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
@@ -668,10 +674,12 @@ export function RealApp() {
             <>
               <p>{stage.rounds}局を読み込みました。</p>
               <label>
-                あなたのプレイヤー
+                {stage.engine === "Mortal"
+                  ? "解析対象プレイヤー"
+                  : "あなたのプレイヤー"}
                 <select
                   value={seat}
-                  disabled={busy}
+                  disabled={busy || stage.engine === "Mortal"}
                   onChange={(e) => setSeat(e.target.value)}
                 >
                   <option value="">選択してください</option>
@@ -682,21 +690,25 @@ export function RealApp() {
                   ))}
                 </select>
               </label>
-              <label>
-                基準NAGAタイプ
-                <select
-                  value={model}
-                  disabled={busy}
-                  onChange={(e) => setModel(e.target.value)}
-                >
-                  <option value="">選択してください</option>
-                  {stage.models.map((m) => (
-                    <option key={m.index} value={m.index}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {stage.engine === "Mortal" ? (
+                <p>Mortal · {stage.models[0].name}</p>
+              ) : (
+                <label>
+                  基準NAGAタイプ
+                  <select
+                    value={model}
+                    disabled={busy}
+                    onChange={(e) => setModel(e.target.value)}
+                  >
+                    <option value="">選択してください</option>
+                    {stage.models.map((m) => (
+                      <option key={m.index} value={m.index}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label>
                 {analysis
                   ? "元の雀魂共有URL（選択済み）"

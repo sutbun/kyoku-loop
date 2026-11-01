@@ -47,7 +47,9 @@ export const errors: Record<string, string> = {
     "分岐した履歴があるため復元していません。現在のデータは保持しています。",
   backup_download_large:
     "圧縮後20MBを超えるためダウンロードできません。保存先のバックアップを別の場所へコピーしてください。",
-  invalid_url: "NAGAのレポートURLまたはreport_idを入力してください。",
+  invalid_url: "NAGAまたはMortalの解析結果URLを入力してください。",
+  mortal_target_required:
+    "このMortalレポートの解析対象プレイヤーを選んでください。",
   invalid_source_url: "雀魂の共有URLを確認してください。",
   invalid_json: "JSONを読み取れません。ファイルを確認してください。",
   size_limit: "ファイルが大きすぎます。上限は20MBです。",
@@ -62,7 +64,7 @@ export const errors: Record<string, string> = {
     "レポートが見つかりません。解析完了とURLを確認してください。",
   network_error: "接続できませんでした。再試行するかJSONを選択してください。",
   upstream_error:
-    "NAGAから取得できませんでした。時間をおいて再試行してください。",
+    "解析結果を取得できませんでした。時間をおいて再試行してください。",
   reconstruction_failed: "局面の整合性を確認できないため、登録していません。",
   stage_expired: "確認の有効時間が切れました。もう一度読み込んでください。",
   source_conflict:

@@ -6,6 +6,7 @@ export type Meld = {
   added?: string;
 };
 export type Scene = {
+  engine?: "NAGA" | "Mortal";
   id?: string;
   round_index: number;
   event_index: number;
@@ -34,6 +35,7 @@ export type Scene = {
   is_decision?: boolean;
 };
 export type Report = {
+  engine?: "NAGA" | "Mortal";
   id: string;
   seat: number;
   model: number;
@@ -117,6 +119,8 @@ export type Workspace = {
   session?: StudySession | null;
 };
 export type Stage = {
+  engine?: "NAGA" | "Mortal";
+  target_seat?: number;
   token: string;
   players: string[];
   models: { index: number; name: string }[];
