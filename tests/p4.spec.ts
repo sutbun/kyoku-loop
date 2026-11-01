@@ -102,9 +102,25 @@ test("PWA commits atomically, resumes with no network after browser restart and 
   try {
     let page = await context.newPage();
     await context.route("**/phone/api", (r) =>
-      r.fulfill({ json: { ok: true, data: pack } }),
+      r.request().postDataJSON().action === "sync"
+        ? r.fulfill({ status: 503, json: { ok: false } })
+        : r.fulfill({ json: { ok: true, data: pack } }),
     );
     await page.goto("http://127.0.0.1:1460/phone/");
+    expect(
+      await page.locator('link[rel="manifest"]').getAttribute("href"),
+    ).toBe("/phone/manifest.webmanifest");
+    expect(
+      await page.locator('link[rel="apple-touch-icon"]').getAttribute("href"),
+    ).toBe("/phone/icon-192.png");
+    for (const path of [
+      "/phone/manifest.webmanifest",
+      "/phone/icon-192.png",
+      "/phone/icon-512.png",
+    ])
+      expect(
+        (await context.request.get("http://127.0.0.1:1460" + path)).status(),
+      ).toBe(200);
     await expect(
       page.getByRole("button", { name: "問題を端末に保存", exact: true }),
     ).toBeEnabled();
@@ -123,7 +139,9 @@ test("PWA commits atomically, resumes with no network after browser restart and 
     await page
       .getByRole("button", { name: "問題を端末に保存", exact: true })
       .click();
-    await expect(page.getByRole("alert")).toContainText("空き容量");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "空き容量" }),
+    ).toBeVisible();
     expect((await read(page)).pack).toBeNull();
     await expect(page.getByTestId("offline-status")).not.toContainText(
       "オフライン利用可能",
@@ -185,7 +203,9 @@ test("PWA commits atomically, resumes with no network after browser restart and 
       };
     });
     await page.getByRole("button", { name: "理解した", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("空き容量");
+    await expect(
+      page.getByRole("alert").filter({ hasText: "空き容量" }),
+    ).toBeVisible();
     expect(await read(page)).toEqual(before);
     await page.evaluate(() => (window as any).restorePut());
     await page.getByRole("button", { name: "理解した", exact: true }).click();
@@ -222,6 +242,8 @@ test("PWA commits atomically, resumes with no network after browser restart and 
     await context.setOffline(false);
     let downloads = 0;
     await context.route("**/phone/api", (route) => {
+      if (route.request().postDataJSON().action === "sync")
+        return route.fulfill({ status: 503, json: { ok: false } });
       downloads++;
       return route.fulfill({ json: { ok: true, data: pack } });
     });
@@ -235,6 +257,59 @@ test("PWA commits atomically, resumes with no network after browser restart and 
     const oldBuild = originalHtml.match(
       /name="phone-build" content="([a-f0-9]+)"/,
     )![1];
+    // Repairing a healthy old generation must not cache a newer server HTML.
+    writeFileSync(
+      htmlFile,
+      originalHtml.replace(oldBuild, oldBuild + "foreign"),
+    );
+    await page.getByRole("button", { name: "アプリ本体の保存を確認" }).click();
+    await expect(page.getByTestId("offline-status")).toContainText(
+      "オフライン利用可能 · 5問",
+    );
+    const cachedBuild = await page.evaluate(async (build) => {
+      const c = await caches.open("kyokuloop-shell-" + build);
+      const response = await c.match("/phone/");
+      return (await response!.text()).match(
+        /name="phone-build" content="([^"]+)"/,
+      )![1];
+    }, oldBuild);
+    expect(cachedBuild).toBe(oldBuild);
+    const mixedBuild = oldBuild + "mixed";
+    writeFileSync(workerFile, originalWorker.replace(oldBuild, mixedBuild));
+    const installation = await page.evaluate(async () => {
+      const reg = (await navigator.serviceWorker.getRegistration("/phone/"))!;
+      const finished = new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error("installation did not settle")),
+          15000,
+        );
+        reg.addEventListener(
+          "updatefound",
+          () => {
+            const candidate = reg.installing!;
+            const check = () => {
+              if (["installed", "redundant"].includes(candidate.state)) {
+                clearTimeout(timer);
+                resolve(candidate.state);
+              }
+            };
+            candidate.addEventListener("statechange", check);
+            check();
+          },
+          { once: true },
+        );
+      });
+      await reg.update().catch(() => {});
+      return finished;
+    });
+    expect(installation).toBe("redundant");
+    expect(
+      await page.evaluate(
+        (name) => caches.has("kyokuloop-shell-" + name),
+        mixedBuild,
+      ),
+    ).toBe(false);
+    expect((await read(page)).events[0]).toEqual(event);
     const nextBuild = oldBuild + "generated";
     writeFileSync(workerFile, originalWorker.replace(oldBuild, nextBuild));
     writeFileSync(htmlFile, originalHtml.replace(oldBuild, nextBuild));
@@ -294,7 +369,9 @@ test("a failed first storage write can be retried without reloading or resetting
     };
   });
   await page.goto("/phone/");
-  await expect(page.getByRole("alert")).toContainText("空き容量");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "空き容量" }),
+  ).toBeVisible();
   await page.evaluate(() => (window as any).restorePut());
   await page
     .getByRole("button", { name: "保存状態を確認", exact: true })

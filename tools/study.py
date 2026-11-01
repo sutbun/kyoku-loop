@@ -28,6 +28,11 @@ def public_scene(scene):
 
 
 class StudyMixin:
+    def phone_sync(self,request):
+        try:from .sync import receive
+        except ImportError:from sync import receive
+        return receive(self,request)
+
     def phone_pack(self):
         """Read-only, minimal study bundle. No reports, identities or URLs."""
         source=self.db.execute("SELECT value FROM study_settings WHERE key='device'").fetchone()[0]
@@ -113,7 +118,9 @@ class StudyMixin:
     def _duplicate(self, event_id, request):
         row=self.db.execute('SELECT request FROM review_events WHERE id=?',(event_id,)).fetchone()
         if row:
-            if row[0] != json.dumps(request,sort_keys=True): raise StudyFailure('event_conflict')
+            stored=json.loads(row[0])
+            if stored.get('_sync')==1:stored=stored['original_request']
+            if stored != request: raise StudyFailure('event_conflict')
             return True
         return False
 
@@ -288,7 +295,10 @@ class StudyMixin:
 
     def item_history(self, ident):
         item=self._item(ident)
-        events=[dict(r) for r in self.db.execute('SELECT id,kind,at,day,device,cycle,session,answer,rating,credited,undo_of FROM review_events WHERE item=? ORDER BY rowid',(ident,))]
+        events=[dict(r) for r in self.db.execute('SELECT id,kind,at,day,device,cycle,session,answer,rating,credited,undo_of,request FROM review_events WHERE item=? ORDER BY rowid',(ident,))]
+        for e in events:
+            request=json.loads(e.pop('request'))
+            if request.get('_sync')==1:e['sync_reason']=request.get('reason','')
         undone={e['undo_of'] for e in events if e['undo_of']}
         for e in events: e['undone']=e['id'] in undone
         return {'id':ident,'scene':json.loads(item['scene']),'events':events,'legacy_history':json.loads(item['history'])}
@@ -414,6 +424,25 @@ class StudyMixin:
             prior[e['item']]=after
         for ident,last in prior.items():
             if self._snapshot_state(items[ident])!=last: raise StudyFailure('invalid_backup')
+        try:from .sync import envelope,original,validate,project
+        except ImportError:from sync import envelope,original,validate,project
+        wrapped_items={e['item'] for e in rows['review_events'] if envelope(e)}
+        backup_sessions={s['id']:json.loads(s['content']) for s in rows['study_sessions']}
+        for ident in wrapped_items:
+            group=[e for e in rows['review_events'] if e['item']==ident]
+            base=next(envelope(e)['base'] for e in group if envelope(e));events=[]
+            for e in group:
+                raw=original(e);validate(raw,items[ident],self.moment());wrapped=envelope(e)
+                session=backup_sessions.get(e['session'])
+                mode=raw.get('mode') or (session['mode'] if session else 'scheduled' if raw['credited'] else 'practice')
+                if wrapped:
+                    if wrapped['base']!=base or wrapped['mode']!=mode:raise StudyFailure('invalid_backup')
+                    events.append(wrapped)
+                else:events.append({'_sync':1,'original':raw,'base':base,'mode':mode,'original_request':json.loads(e['request'])})
+            state,derived=project(base,events)
+            if state!=self._snapshot_state(items[ident]) or len(derived)!=len(group):raise StudyFailure('invalid_backup')
+            for a,b in zip(derived,group):
+                if any(a[k]!=b[k] for k in ('id','cycle','credited','undo_of')) or any(json.loads(a[k])!=json.loads(b[k]) for k in ('before_state','after_state')):raise StudyFailure('invalid_backup')
         for session in rows['study_sessions']:
             s=json.loads(session['content'])
             if s['id']!=session['id'] or s['mode'] not in ('scheduled','practice') or type(s['index']) is not int or not 0<=s['index']<=len(s['queue'])<=5: raise StudyFailure('invalid_backup')
@@ -431,19 +460,21 @@ class StudyMixin:
         if any(r['value'] not in session_ids for r in rows['study_settings'] if r['key']=='active_session'): raise StudyFailure('invalid_backup')
 
     def backup_inspect(self,name):
+        try:from .sync import same_original
+        except ImportError:from sync import same_original
         fingerprint,rows=self._read_backup(name)
         conflicts=0
         adopt=[]
         for e in rows['review_events']:
             current=self.db.execute('SELECT * FROM review_events WHERE id=?',(e['id'],)).fetchone()
-            if current and dict(current)!=e: conflicts+=1
+            if current and not same_original(dict(current),e): conflicts+=1
         for item in rows['study_items']:
             current=self.db.execute('SELECT * FROM study_items WHERE id=?',(item['id'],)).fetchone()
             if not current:
                 adopt.append(item['id']); continue
             ours=[r[0] for r in self.db.execute('SELECT id FROM review_events WHERE item=? ORDER BY rowid',(item['id'],))]
             theirs=[e['id'] for e in rows['review_events'] if e['item']==item['id']]
-            if ours[:len(theirs)]!=theirs and theirs[:len(ours)]!=ours: conflicts+=1
+            if not set(ours).issubset(theirs) and not set(theirs).issubset(ours): conflicts+=1
             elif len(ours)<len(theirs): adopt.append(item['id'])
             if current['scene']!=item['scene'] or current['report']!=item['report']: conflicts+=1
         for table,key in [('sources','hash'),('reports','id')]:
@@ -460,6 +491,7 @@ class StudyMixin:
         self._snapshot('pre-restore')
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
+            empty=not self.db.execute('SELECT 1 FROM reports LIMIT 1').fetchone()
             plan=self.backup_inspect(name)
             if plan['hash']!=fingerprint: raise StudyFailure('backup_changed')
             if plan['conflicts']: raise StudyFailure('backup_conflict')
@@ -476,4 +508,11 @@ class StudyMixin:
             active=next((r['value'] for r in rows['study_settings'] if r['key']=='active_session'),None)
             if active:
                 self.db.execute("INSERT OR IGNORE INTO study_settings VALUES('active_session',?)",(active,))
+            if empty:
+                source=next((r['value'] for r in rows['study_settings'] if r['key']=='device'),None)
+                if source:self.db.execute("UPDATE study_settings SET value=? WHERE key='device'",(source,))
+            try:from .sync import envelope,reconcile
+            except ImportError:from sync import envelope,reconcile
+            affected={e['item'] for e in rows['review_events'] if envelope(e)}
+            for ident in affected:reconcile(self,ident)
         return {'restored':True}

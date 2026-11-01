@@ -67,7 +67,7 @@ export function phoneHosts(): string[] {
     return [];
   }
 }
-function exportPack(res: ServerResponse) {
+function callPhone(res: ServerResponse, payload: object) {
   const child = spawn(
     "python",
     [fileURLToPath(new URL("./p2_store.py", import.meta.url))],
@@ -115,7 +115,7 @@ function exportPack(res: ServerResponse) {
       end(503, '{"ok":false,"error":"local_service_error"}');
     }
   });
-  child.stdin.end(JSON.stringify({ action: "offline_pack" }));
+  child.stdin.end(JSON.stringify(payload));
 }
 export function phoneSite(): Plugin {
   const handle = (
@@ -160,17 +160,44 @@ export function phoneSite(): Plugin {
         res.end("{}");
         return;
       }
-      let body = "";
-      req.on("data", (b) => {
-        if (body.length < 1024) body += b.toString();
+      const chunks: Buffer[] = [];
+      let length = 0;
+      req.on("data", (b: Buffer) => {
+        length += b.length;
+        if (length <= 21 * 1024 * 1024) chunks.push(b);
       });
       req.on("end", () => {
-        if (body.length > 100 || body.trim() !== '{"action":"download"}') {
+        if (length > 21 * 1024 * 1024) {
+          res.statusCode = 413;
+          res.end('{"ok":false,"error":"size_limit"}');
+          return;
+        }
+        let body: Record<string, unknown>;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        } catch {
+          res.statusCode = 400;
+          res.end('{"ok":false,"error":"invalid_sync"}');
+          return;
+        }
+        if (body?.action === "download" && Object.keys(body).length === 1) {
+          callPhone(res, { action: "offline_pack" });
+          return;
+        }
+        if (
+          body?.action === "sync" &&
+          Object.keys(body).length === 2 &&
+          body.payload &&
+          typeof body.payload === "object"
+        ) {
+          callPhone(res, { action: "phone_sync", payload: body.payload });
+          return;
+        }
+        {
           res.statusCode = 403;
           res.end("{}");
           return;
         }
-        exportPack(res);
       });
       return;
     }
@@ -244,6 +271,11 @@ export function phoneBuild(): Plugin {
     generateBundle(_, bundle) {
       const html = bundle["phone/index.html"];
       if (!html || html.type !== "asset") throw new Error("Missing phone page");
+      // Public files already live under phone/. The custom mount supplies the base.
+      html.source = String(html.source).replace(
+        /\/phone\/phone\/(manifest\.webmanifest|icon-(?:192|512)\.png)/g,
+        "/phone/$1",
+      );
       const urls = [
         "/phone/",
         ...Object.keys(bundle)
@@ -254,9 +286,12 @@ export function phoneBuild(): Plugin {
         "/phone/icon-512.png",
       ];
       const worker = `const BUILD=__BUILD_JSON__, NAME='kyokuloop-shell-'+BUILD, URLS=${JSON.stringify(urls)};
-self.addEventListener('install',event=>event.waitUntil((async()=>{try{const c=await caches.open(NAME);await c.addAll(URLS);for(const u of URLS)if(!await c.match(u))throw Error('incomplete');}catch(e){await caches.delete(NAME);throw e;}})()));
+async function shellMatches(response){return !!response&&(await response.clone().text()).match(/name="phone-build" content="([^"]+)"/)?.[1]===BUILD;}
+async function complete(c){for(const u of URLS)if(!await c.match(u))return false;return shellMatches(await c.match('/phone/'));}
+async function repair(c){if(await complete(c))return;const responses=await Promise.all(URLS.map(u=>fetch(u,{cache:'no-store'})));if(responses.some(r=>!r.ok)||!await shellMatches(responses[0]))throw Error('mixed generation');await Promise.all(URLS.map((u,i)=>c.put(u,responses[i])));if(!await complete(c))throw Error('incomplete');}
+self.addEventListener('install',event=>event.waitUntil((async()=>{try{const c=await caches.open(NAME);await c.addAll(URLS);if(!await complete(c))throw Error('incomplete');}catch(e){await caches.delete(NAME);throw e;}})()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{const keys=(await caches.keys()).filter(k=>k.startsWith('kyokuloop-shell-'));for(const k of keys.slice(0,-2))if(k!==NAME)await caches.delete(k);await self.clients.claim();})()));
-self.addEventListener('message',event=>{if(['VERIFY','REPAIR'].includes(event.data?.type))event.waitUntil((async()=>{const c=await caches.open(NAME);let ok=event.data.build===BUILD;try{if(ok&&event.data.type==='REPAIR')await c.addAll(URLS);for(const u of URLS)if(!await c.match(u))ok=false;}catch{ok=false;}event.ports[0]?.postMessage({ok,build:BUILD});})());});
+self.addEventListener('message',event=>{if(['VERIFY','REPAIR'].includes(event.data?.type))event.waitUntil((async()=>{let ok=false;try{const c=await caches.open(NAME);if(event.data.type==='REPAIR')await repair(c);ok=event.data.build===BUILD&&await complete(c);}catch{}event.ports[0]?.postMessage({ok,build:BUILD});})());});
 self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==self.location.origin)return;const key=event.request.mode==='navigate'&&u.pathname.startsWith('/phone/')?'/phone/':u.pathname;if(URLS.includes(key))event.respondWith((async()=>{const c=await caches.open(NAME);const hit=await c.match(key);return hit||fetch(event.request);})());});
 `;
       const hash = createHash("sha256").update(worker);

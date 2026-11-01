@@ -1,4 +1,20 @@
 export const errors: Record<string, string> = {
+  phone_restore_exists:
+    "この端末には記録や途中の復習があるため上書きできません。Windowsのバックアップ画面から、ファイルの回答記録を追加できます。",
+  invalid_sync:
+    "同期する記録の整合性を確認できません。端末の記録は保持しています。",
+  invalid_receipt:
+    "Windowsの受信確認を検証できません。未送信のまま保持しています。",
+  sync_dependency:
+    "先行する記録が不足しています。記録を保持して再試行してください。",
+  sync_changed:
+    "同期中に新しい回答が追加されました。記録を保持して再試行します。",
+  sync_base_conflict:
+    "学習の開始状態が一致しません。現在の記録を保持しています。",
+  clock_ahead:
+    "端末の記録が未来の日時になっています。端末の日時を確認してください。記録は保持しています。",
+  invalid_phone_backup:
+    "この端末記録ファイルは読み取れません。現在の記録は保持しています。",
   pending_records:
     "未送信の記録または途中の復習があるため、問題を上書きできません。現在の問題と記録は保持しています。",
   different_source: "別のWindows保存先の問題です。現在の問題を保持しています。",

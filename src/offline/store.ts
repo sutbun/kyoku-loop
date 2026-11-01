@@ -2,6 +2,7 @@ import {
   freshPhoneState,
   phoneReduce,
   validatePack,
+  validatePhoneBackup,
   type PhoneState,
 } from "./engine";
 
@@ -27,6 +28,7 @@ function valid(s: PhoneState) {
   )
     throw new Error("unsupported_storage");
   if (s.pack) validatePack(s.pack);
+  validatePhoneBackup(s);
   return s;
 }
 // No awaited work inside the transaction. Only oncomplete means the write committed.
@@ -49,6 +51,11 @@ export async function phoneTransaction<T>(
       try {
         const before = r.result ? valid(r.result) : freshPhoneState();
         const reduced = phoneReduce(before, request);
+        if (
+          request.action === "apply_sync" ||
+          request.action === "restore_phone"
+        )
+          valid(reduced.state);
         result = reduced.data as T;
         // First read also establishes a durable device ID.
         if (!r.result || reduced.state.sequence !== before.sequence)

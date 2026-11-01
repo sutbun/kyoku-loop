@@ -317,6 +317,15 @@ def main():
         elif action=='study_undo_control': result=store.study_undo_control(request.get('original'),request.get('event'))
         elif action=='item_history': result=store.item_history(request.get('item'))
         elif action=='offline_pack': result=store.phone_pack()
+        elif action=='phone_sync': result=store.phone_sync(request.get('payload'))
+        elif action=='phone_backup_inspect':
+            try:from .sync import inspect_phone_backup
+            except ImportError:from sync import inspect_phone_backup
+            result=inspect_phone_backup(store,request.get('backup'))[0]
+        elif action=='phone_backup_restore':
+            try:from .sync import restore_phone_backup
+            except ImportError:from sync import restore_phone_backup
+            result=restore_phone_backup(store,request.get('backup'),request.get('hash'))
         elif action=='backup_list': result=store.backup_list()
         elif action=='backup_create': result=store.backup_create()
         elif action=='backup_export': result=store.backup_export(request.get('name'))

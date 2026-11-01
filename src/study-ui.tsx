@@ -139,6 +139,13 @@ type BackupPlan = {
   events: number;
   conflicts: number;
 };
+const syncReasons: Record<string, string> = {
+  same_day: "同じ日の定期復習は1回として集計",
+  old_cycle: "以前の学習サイクルの記録として保存",
+  inactive: "現在の出題状態へは反映せず記録を保存",
+  undo_conflict: "後続の記録があるため取消を反映せず保存",
+  not_due: "期限前の記録として保存",
+};
 const jstTime = (at: string) =>
   new Date(at).toLocaleString("ja-JP", {
     timeZone: "Asia/Tokyo",
@@ -156,6 +163,13 @@ function BackupDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [phonePlan, setPhonePlan] = useState<{
+    hash: string;
+    events: number;
+    duplicates: number;
+    new: number;
+    backup: unknown;
+  } | null>(null);
   const load = async () =>
     setList(await api<BackupList>({ action: "backup_list" }));
   const run = async (work: () => Promise<void>) => {
@@ -256,6 +270,67 @@ function BackupDialog({
             className="text-button"
             disabled={busy}
             onClick={() => setPlan(null)}
+          >
+            取り消す
+          </button>
+        </section>
+      )}
+      <label className="file-drop">
+        端末の記録ファイルを選択
+        <input
+          type="file"
+          accept=".json,application/json"
+          disabled={busy}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            setPhonePlan(null);
+            if (!file) return;
+            void run(async () => {
+              if (file.size > 20 * 1024 * 1024)
+                throw new Error("20MB以下の端末記録を選択してください。");
+              const backup = JSON.parse(await file.text());
+              const plan = await api<{
+                hash: string;
+                events: number;
+                duplicates: number;
+                new: number;
+              }>({ action: "phone_backup_inspect", backup });
+              setPhonePlan({ ...plan, backup });
+            });
+          }}
+        />
+      </label>
+      {phonePlan && (
+        <section className="restore-plan">
+          <h3>端末の回答記録を追加</h3>
+          <p>
+            追加 {phonePlan.new}件 · 登録済み {phonePlan.duplicates}件
+          </p>
+          <button
+            className="button primary"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await api({
+                  action: "phone_backup_restore",
+                  backup: phonePlan.backup,
+                  hash: phonePlan.hash,
+                });
+                setPhonePlan(null);
+                await onRefresh();
+                setNotice(
+                  "端末の回答記録を追加しました。現在の記録も保持しています。",
+                );
+              })
+            }
+          >
+            この記録を追加
+          </button>
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={() => setPhonePlan(null)}
           >
             取り消す
           </button>
@@ -760,6 +835,9 @@ export function StudyPanel({
                       ? "一致"
                       : "不一致"}
                   </p>
+                )}
+                {event.sync_reason && syncReasons[event.sync_reason] && (
+                  <small>{syncReasons[event.sync_reason]}</small>
                 )}
               </article>
             ))}

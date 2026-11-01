@@ -87,6 +87,7 @@ export type StudySession = {
   }[];
 };
 export type HistoryEvent = {
+  sync_reason?: string;
   id: string;
   kind: string;
   at: string;

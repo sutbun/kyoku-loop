@@ -40,6 +40,15 @@ export type PhoneEvent = Omit<HistoryEvent, "undone"> & {
   before_state: ItemState;
   after_state: ItemState;
   request: string;
+  mode?: "scheduled" | "practice";
+};
+export type Receipt = {
+  id: string;
+  hash: string;
+  credited: number;
+  before_state: ItemState;
+  after_state: ItemState;
+  reason: string;
 };
 export type PhoneState = {
   schema: 1;
@@ -48,6 +57,8 @@ export type PhoneState = {
   events: PhoneEvent[];
   session: LocalSession | null;
   sequence: number;
+  receipts?: Record<string, Receipt>;
+  last_sync?: string;
 };
 type Request = Record<string, any>;
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -209,6 +220,125 @@ export function validatePack(value: unknown): asserts value is PhonePack {
     fail("invalid_pack");
   }
 }
+const receiptFor = (state: PhoneState, id: string) =>
+  state.receipts && Object.hasOwn(state.receipts, id)
+    ? state.receipts[id]
+    : undefined;
+export const pendingEvents = (state: PhoneState) =>
+  state.events.filter((e) => !receiptFor(state, e.id));
+export function isItemState(value: unknown): value is ItemState {
+  const i = value as ItemState;
+  return (
+    !!i &&
+    typeof i === "object" &&
+    Object.keys(i).length === 6 &&
+    statuses.includes(i.status) &&
+    int(i.streak, 0, 5) &&
+    int(i.revision, 0) &&
+    typeof i.cycle === "string" &&
+    !!i.cycle &&
+    (i.due === "" || date(i.due)) &&
+    (i.last_credit_day === "" || date(i.last_credit_day))
+  );
+}
+export function validatePhoneBackup(
+  value: unknown,
+): asserts value is PhoneState {
+  const s = value as PhoneState;
+  try {
+    if (
+      !s ||
+      s.schema !== 1 ||
+      typeof s.device !== "string" ||
+      !s.device ||
+      !Array.isArray(s.events) ||
+      !int(s.sequence, 0)
+    )
+      fail("invalid_phone_backup");
+    if (!s.pack) {
+      if (s.events.length || s.session) fail("invalid_phone_backup");
+      return;
+    }
+    validatePack(s.pack);
+    const ids = new Set<string>();
+    const validState = isItemState;
+    for (const e of s.events) {
+      const item = s.pack.items.find((i) => i.id === e.item);
+      if (
+        !item ||
+        typeof e.id !== "string" ||
+        !e.id ||
+        ids.has(e.id) ||
+        !["answer", "undo", "pause", "resume", "restart"].includes(e.kind) ||
+        !Number.isFinite(Date.parse(e.at)) ||
+        jstDay(e.at) !== e.day ||
+        typeof e.device !== "string" ||
+        !e.device ||
+        typeof e.request !== "string" ||
+        !validState(e.before_state) ||
+        !validState(e.after_state) ||
+        e.after_state.revision !== e.before_state.revision + 1 ||
+        e.cycle !== e.before_state.cycle ||
+        ![0, 1].includes(e.credited)
+      )
+        fail("invalid_phone_backup");
+      if (
+        e.kind === "answer" &&
+        (!item!.scene.own_hand.includes(e.answer!) ||
+          !["理解した", "再復習", "保留"].includes(e.rating!))
+      )
+        fail("invalid_phone_backup");
+      if (e.kind === "undo" && (typeof e.undo_of !== "string" || !e.undo_of))
+        fail("invalid_phone_backup");
+      ids.add(e.id);
+    }
+    if (
+      s.receipts &&
+      (typeof s.receipts !== "object" ||
+        Object.entries(s.receipts).some(
+          ([id, r]) =>
+            !ids.has(id) ||
+            r.id !== id ||
+            !/^[a-f0-9]{64}$/.test(r.hash) ||
+            !validState(r.before_state) ||
+            !validState(r.after_state),
+        ))
+    )
+      fail("invalid_phone_backup");
+    if (s.session) {
+      const q = s.session;
+      if (
+        !["practice", "scheduled"].includes(q.mode) ||
+        typeof q.id !== "string" ||
+        !int(q.index, 0, q.queue.length) ||
+        q.queue.length > 5 ||
+        typeof q.revealed !== "boolean" ||
+        !q.queue.every(
+          (x) =>
+            s.pack!.items.some((i) => i.id === x.id) &&
+            int(x.revision, 0) &&
+            !!x.cycle,
+        ) ||
+        !q.answers.every(
+          (x) => ids.has(x.event) && int(x.index, 0, q.index - 1),
+        )
+      )
+        fail("invalid_phone_backup");
+      if (
+        q.selected !== null &&
+        (!q.queue[q.index] ||
+          !s.pack.items
+            .find((i) => i.id === q.queue[q.index].id)!
+            .scene.own_hand.includes(q.selected))
+      )
+        fail("invalid_phone_backup");
+      if (q.revealed && q.selected === null) fail("invalid_phone_backup");
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message === "unsupported_storage") throw e;
+    fail("invalid_phone_backup");
+  }
+}
 const itemState = (i: PhoneItem): ItemState => ({
   status: i.status,
   due: i.due,
@@ -260,8 +390,10 @@ export function phoneReduce(
       fail("study_changed");
     return i;
   };
-  const event = (id: string) =>
-    state.events.find((e) => e.id === id) ?? fail("cannot_undo");
+  const event = (id: string) => {
+    const raw = state.events.find((e) => e.id === id) ?? fail("cannot_undo");
+    return { ...raw, ...receiptFor(state, id) };
+  };
   const queue = (mode: string) =>
     [...(state.pack?.items ?? [])]
       .filter(
@@ -342,6 +474,7 @@ export function phoneReduce(
       before_state: before,
       after_state: after,
       request: signature(r),
+      ...(kind === "answer" ? { mode: state.session!.mode } : {}),
       ...extras,
     };
     state.events.push(e);
@@ -352,7 +485,11 @@ export function phoneReduce(
     const i = item(e.item);
     if (
       state.events.some((x) => x.undo_of === e.id) ||
-      JSON.stringify(itemState(i)) !== JSON.stringify(e.after_state)
+      Object.keys(itemState(i)).some(
+        (k) =>
+          itemState(i)[k as keyof ItemState] !==
+          e.after_state[k as keyof ItemState],
+      )
     )
       fail("study_changed");
     const restored = { ...e.before_state, revision: i.revision + 1 };
@@ -376,7 +513,7 @@ export function phoneReduce(
     case "install_pack": {
       validatePack(r.pack);
       if (
-        state.events.length ||
+        pendingEvents(state).length ||
         (state.session && state.session.index < state.session.queue.length)
       )
         fail("pending_records");
@@ -387,14 +524,72 @@ export function phoneReduce(
       data = { saved: true };
       break;
     }
+    case "apply_sync": {
+      const snapshot = r.snapshot,
+        reply = r.reply;
+      if (
+        !state.pack ||
+        snapshot.source !== state.pack.source ||
+        snapshot.device !== state.device ||
+        JSON.stringify(snapshot.events) !== JSON.stringify(state.events)
+      )
+        fail("sync_changed");
+      validatePack(reply.pack);
+      if (
+        reply.protocol !== 1 ||
+        reply.source !== snapshot.source ||
+        reply.device !== snapshot.device ||
+        reply.pack.source !== snapshot.source ||
+        !Array.isArray(reply.receipts) ||
+        reply.receipts.length !== state.events.length
+      )
+        fail("invalid_receipt");
+      const receipts: Record<string, Receipt> = Object.create(null);
+      for (const receipt of reply.receipts) {
+        if (
+          receipts[receipt.id] ||
+          !state.events.some((e) => e.id === receipt.id) ||
+          !/^[a-f0-9]{64}$/.test(receipt.hash)
+        )
+          fail("invalid_receipt");
+        receipts[receipt.id] = clone(receipt);
+      }
+      state.pack = clone(reply.pack);
+      state.receipts = receipts;
+      state.last_sync = reply.pack.exported_at;
+      data = { synced: true };
+      break;
+    }
+    case "restore_phone": {
+      validatePhoneBackup(r.backup);
+      if (
+        state.events.length ||
+        (state.session && state.session.index < state.session.queue.length)
+      )
+        fail("phone_restore_exists");
+      if (!r.backup.pack) fail("invalid_phone_backup");
+      if (state.pack && state.pack.source !== r.backup.pack!.source)
+        fail("different_source");
+      state.pack = clone(r.backup.pack);
+      state.events = clone(r.backup.events);
+      state.session = clone(r.backup.session);
+      state.receipts = {};
+      delete state.last_sync;
+      data = { restored: true };
+      break;
+    }
     case "state": {
       const items = (state.pack?.items ?? []).map((i) => ({
         ...i,
         scene: publicScene(i.scene),
         review_count:
           (i.review_count ?? 0) +
-          state.events.filter((e) => e.item === i.id && e.kind === "answer")
-            .length,
+          state.events.filter(
+            (e) =>
+              e.item === i.id &&
+              e.kind === "answer" &&
+              !state.pack!.histories[i.id]?.events.some((h) => h.id === e.id),
+          ).length,
       }));
       data = {
         reports: [],
@@ -554,7 +749,9 @@ export function phoneReduce(
       const original = state.pack!.histories[i.id];
       const events = [
         ...clone(original.events),
-        ...state.events.filter((e) => e.item === i.id),
+        ...state.events.filter(
+          (e) => e.item === i.id && !original.events.some((h) => h.id === e.id),
+        ),
       ];
       const undone = new Set(events.map((e) => e.undo_of).filter(Boolean));
       data = {
