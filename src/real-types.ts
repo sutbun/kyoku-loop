@@ -1,0 +1,124 @@
+export type Meld = {
+  type: string;
+  tile?: string;
+  consumed: string[];
+  target?: number;
+  added?: string;
+};
+export type Scene = {
+  id?: string;
+  round_index: number;
+  event_index: number;
+  seat: number;
+  bakaze: string;
+  kyoku: number;
+  honba: number;
+  own_wind: string;
+  own_hand: string[];
+  drawn: string | null;
+  rivers: { tile: string; called: boolean; reach: boolean }[][];
+  melds: Meld[][];
+  dora_markers: string[];
+  scores: number[];
+  kyotaku: number;
+  reach_declared: boolean[];
+  reach_accepted: boolean[];
+  source_discard_index: number;
+  event_type?: string;
+  actor?: number | null;
+  actual?: string;
+  suggested?: string;
+  gap?: number;
+  weights_percent?: number[];
+  model_name?: string;
+  is_decision?: boolean;
+};
+export type Report = {
+  id: string;
+  seat: number;
+  model: number;
+  model_name: string;
+  rounds: number;
+  created: string;
+  important_count: number;
+  source_linked: boolean;
+};
+export type Detail = Report & {
+  decisions: Scene[];
+  timeline: Scene[];
+  important: string[];
+  registered: string[];
+  manual: string[];
+  unknown_weights: number;
+  excluded: Record<string, number>;
+  source_link_kind: string;
+};
+export type LibraryItem = {
+  id: string;
+  report: string;
+  scene: Scene;
+  status: string;
+  history: string[];
+  due: string;
+  automatic: number;
+  manual: number;
+  streak?: number;
+  cycle?: string;
+  review_count?: number;
+};
+export type StudySession = {
+  id: string;
+  mode: "scheduled" | "practice";
+  index: number;
+  total: number;
+  selected: string | null;
+  revealed: boolean;
+  complete: boolean;
+  stale: boolean;
+  scene: Scene | null;
+  item_id?: string;
+  can_undo: boolean;
+  answers: {
+    id: string;
+    item: string;
+    rating: string;
+    credited: number;
+    day: string;
+  }[];
+};
+export type HistoryEvent = {
+  sync_reason?: string;
+  id: string;
+  kind: string;
+  at: string;
+  day: string;
+  device: string;
+  cycle: string;
+  answer: string | null;
+  rating: string | null;
+  credited: number;
+  undo_of: string | null;
+  undone: boolean;
+};
+export type ItemHistory = {
+  id: string;
+  scene: Scene;
+  events: HistoryEvent[];
+  legacy_history: string[];
+};
+export type Workspace = {
+  analysis_queue?: import("./analysis-queue").AnalysisEntry[];
+  analysis_setup?: boolean;
+  reports: Report[];
+  items: LibraryItem[];
+  today?: string;
+  due_count?: number;
+  practice_count?: number;
+  session?: StudySession | null;
+};
+export type Stage = {
+  token: string;
+  players: string[];
+  models: { index: number; name: string }[];
+  rounds: number;
+};
