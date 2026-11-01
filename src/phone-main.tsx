@@ -13,7 +13,7 @@ import type { AnalysisEntry } from "./analysis-queue";
 import "./style.css";
 import "./phone.css";
 
-const VERSION = "DEV-11.01-6";
+import { VERSION } from "./version";
 function PhoneApp() {
   const [workspace, setWorkspace] = useState<Workspace>({
     reports: [],

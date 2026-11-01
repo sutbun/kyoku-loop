@@ -19,7 +19,8 @@ import {
 import "./style.css";
 import { RealApp } from "./real-app";
 
-const VERSION = "DEV-11.01-1";
+import { IS_DAILY, VERSION as DAILY_VERSION } from "./version";
+const VERSION = IS_DAILY ? DAILY_VERSION : "DEV-11.01-1";
 const KEY = "kyokuloop-fictional-prototype-v2";
 function load(): State {
   try {

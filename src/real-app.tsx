@@ -6,7 +6,8 @@ import type { Detail, Scene, Stage, Workspace } from "./real-types";
 import { SourceInput, AnalysisList, AnalysisGuide } from "./analysis-ui";
 import type { AnalysisEntry } from "./analysis-queue";
 
-export const VERSION = "DEV-11.01-6";
+import { VERSION } from "./version";
+export { VERSION };
 export function RealApp() {
   const [workspace, setWorkspace] = useState<Workspace>({
     reports: [],
