@@ -30,6 +30,8 @@ export type Scene = {
   suggested?: string;
   gap?: number;
   weights_percent?: number[];
+  model_name?: string;
+  is_decision?: boolean;
 };
 export type Report = {
   id: string;
@@ -60,8 +62,57 @@ export type LibraryItem = {
   due: string;
   automatic: number;
   manual: number;
+  streak?: number;
+  cycle?: string;
+  review_count?: number;
 };
-export type Workspace = { reports: Report[]; items: LibraryItem[] };
+export type StudySession = {
+  id: string;
+  mode: "scheduled" | "practice";
+  index: number;
+  total: number;
+  selected: string | null;
+  revealed: boolean;
+  complete: boolean;
+  stale: boolean;
+  scene: Scene | null;
+  item_id?: string;
+  can_undo: boolean;
+  answers: {
+    id: string;
+    item: string;
+    rating: string;
+    credited: number;
+    day: string;
+  }[];
+};
+export type HistoryEvent = {
+  id: string;
+  kind: string;
+  at: string;
+  day: string;
+  device: string;
+  cycle: string;
+  answer: string | null;
+  rating: string | null;
+  credited: number;
+  undo_of: string | null;
+  undone: boolean;
+};
+export type ItemHistory = {
+  id: string;
+  scene: Scene;
+  events: HistoryEvent[];
+  legacy_history: string[];
+};
+export type Workspace = {
+  reports: Report[];
+  items: LibraryItem[];
+  today?: string;
+  due_count?: number;
+  practice_count?: number;
+  session?: StudySession | null;
+};
 export type Stage = {
   token: string;
   players: string[];

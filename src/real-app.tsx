@@ -1,234 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { tileLabel } from "./demo";
+import { api, errors } from "./api";
+import { RealTable, RealTile, roundLabel, eventLabels } from "./real-board";
+import { StudyPanel, PracticeCard } from "./study-ui";
 import type { Detail, Scene, Stage, Workspace } from "./real-types";
 
-export const VERSION = "DEV-11.01-2";
-const errors: Record<string, string> = {
-  invalid_url: "NAGAのレポートURLまたはreport_idを入力してください。",
-  invalid_source_url: "雀魂の共有URLを確認してください。",
-  invalid_json: "JSONを読み取れません。ファイルを確認してください。",
-  size_limit: "ファイルが大きすぎます。上限は20MBです。",
-  unsupported_format: "このレポート形式にはまだ対応していません。",
-  unsupported_model: "このモデル形式にはまだ対応していません。",
-  unsupported_rule: "四人麻雀のレポートを選択してください。",
-  access_denied:
-    "アクセスが拒否されました。本人が利用できるJSONファイルを選択してください。",
-  access_redirect:
-    "取得先で転送が要求されました。公式画面で確認し、取得済みJSONを選択してください。",
-  report_not_ready:
-    "レポートが見つかりません。解析完了とURLを確認してください。",
-  network_error: "接続できませんでした。再試行するかJSONを選択してください。",
-  upstream_error:
-    "NAGAから取得できませんでした。時間をおいて再試行してください。",
-  reconstruction_failed: "局面の整合性を確認できないため、登録していません。",
-  stage_expired: "確認の有効時間が切れました。もう一度読み込んでください。",
-  source_conflict:
-    "このレポートには別の元対局が登録されています。元対局URLを確認してください。",
-};
-async function api<T>(request: object): Promise<T> {
-  const response = await fetch("/api/local", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
-  if (!response.ok)
-    throw new Error("ローカル保存先に接続できません。再試行してください。");
-  const result = await response.json();
-  if (!result.ok)
-    throw new Error(
-      errors[result.error] ??
-        "読み込み・保存に失敗しました。データは置き換えていません。再試行してください。",
-    );
-  return result.data;
-}
-export const uiTile = (value: string) => {
-  const honor = ["E", "S", "W", "N", "P", "F", "C"].indexOf(value);
-  return honor >= 0
-    ? `${honor + 1}z`
-    : value.endsWith("r")
-      ? `0${value[1]}`
-      : value;
-};
-const wind = (value: string) =>
-  ({ E: "東", S: "南", W: "西", N: "北" })[value] ?? value;
-export const roundLabel = (scene: Scene) =>
-  `${wind(scene.bakaze)}${scene.kyoku}局 ${scene.honba}本場`;
-function RealTile({
-  value,
-  small = false,
-}: {
-  value: string;
-  small?: boolean;
-}) {
-  const tile = uiTile(value);
-  return (
-    <span
-      className={`tile ${small ? "small" : ""} suit-${tile[1]} ${tile[0] === "0" ? "red" : ""}`}
-      aria-label={tileLabel(tile)}
-    >
-      {tile.endsWith("z") ? (
-        <b>{tileLabel(tile)}</b>
-      ) : (
-        <>
-          <b>{tile[0] === "0" ? "5" : tile[0]}</b>
-          <small>{tileLabel(tile).slice(-1)}</small>
-        </>
-      )}
-      {tile[0] === "0" && <i />}
-    </span>
-  );
-}
-const eventLabels: Record<string, string> = {
-  start_kyoku: "配牌",
-  tsumo: "ツモ",
-  dahai: "打牌",
-  chi: "チー",
-  pon: "ポン",
-  daiminkan: "大明槓",
-  ankan: "暗槓",
-  kakan: "加槓",
-  reach: "リーチ宣言",
-  reach_accepted: "リーチ成立",
-  dora: "ドラ追加",
-};
-
-export function RealTable({ scene }: { scene: Scene }) {
-  const hand = [...scene.own_hand];
-  if (scene.drawn) hand.splice(hand.lastIndexOf(scene.drawn), 1);
-  const order = (t: string) => {
-    const v = uiTile(t);
-    return "mpsz".indexOf(v[1]) * 10 + (v[0] === "0" ? 5 : Number(v[0]));
-  };
-  hand.sort((a, b) => order(a) - order(b));
-  const own = scene.seat;
-  return (
-    <div className="table-wrap real-board">
-      <div className="table" aria-label={`${roundLabel(scene)}の卓`}>
-        {[0, 1, 2, 3].map((position) => {
-          const seat = (own + position - 2 + 4) % 4;
-          const label = ["対面", "上家", "あなた", "下家"][position];
-          const seatWind = ["東", "南", "西", "北"][
-            (seat - (scene.kyoku - 1) + 4) % 4
-          ];
-          return (
-            <div
-              className={`player player-${position}`}
-              key={seat}
-              data-seat={seat}
-            >
-              <div className="player-label">
-                <b>
-                  {label} · {seatWind}
-                </b>
-                <span>
-                  {scene.scores[seat].toLocaleString()}
-                  {scene.reach_declared[seat] ? " · リーチ" : ""}
-                </span>
-              </div>
-              <div
-                className="river"
-                aria-label={`${position === 2 ? "自分" : label}の河`}
-              >
-                {scene.rivers[seat].map((r, i) => (
-                  <span
-                    key={i}
-                    className={`${r.called ? "called" : ""} ${r.reach ? "reach-tile" : ""}`}
-                    title={
-                      r.called
-                        ? "副露された牌"
-                        : r.reach
-                          ? "リーチ宣言牌"
-                          : undefined
-                    }
-                  >
-                    <RealTile value={r.tile} small />
-                  </span>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        <div className="table-center">
-          <span>
-            {wind(scene.bakaze)}
-            {scene.kyoku}局
-          </span>
-          <strong>
-            {scene.source_discard_index + (scene.actual ? 1 : 0)}
-            <small>打目</small>
-          </strong>
-          <div>
-            {scene.honba}本場 · 供託{scene.kyotaku}
-          </div>
-          <div className="dora">
-            ドラ表示{" "}
-            {scene.dora_markers.map((t, i) => (
-              <RealTile value={t} small key={i} />
-            ))}
-          </div>
-        </div>
-      </div>
-      {scene.melds.some((m) => m.length > 0) && (
-        <div className="public-melds" aria-label="公開された副露">
-          {[0, 1, 2, 3].map((position) => {
-            const seat = (own + position - 2 + 4) % 4;
-            const label = ["対面", "上家", "あなた", "下家"][position];
-            return (
-              scene.melds[seat].length > 0 && (
-                <div className="public-meld-row" key={seat}>
-                  <b>{label}</b>
-                  <div className="melds" aria-label={`${label}の副露`}>
-                    {scene.melds[seat].map((m, i) => (
-                      <div className="meld" key={i}>
-                        <small>
-                          {eventLabels[m.type]}
-                          {m.target !== undefined
-                            ? `・${(m.target - seat + 4) % 4 === 1 ? "下家" : (m.target - seat + 4) % 4 === 2 ? "対面" : "上家"}から`
-                            : ""}
-                        </small>
-                        <span>
-                          {[
-                            ...m.consumed,
-                            ...(m.tile ? [m.tile] : []),
-                            ...(m.added ? [m.added] : []),
-                          ].map((t, n) => (
-                            <RealTile key={n} value={t} small />
-                          ))}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            );
-          })}
-        </div>
-      )}
-      <div className="hand-head">
-        <span>あなた · {wind(scene.own_wind)}家</span>
-        <span>
-          {scene.melds[own].length
-            ? `${scene.melds[own].length}副露`
-            : "副露なし"}{" "}
-          · {scene.reach_declared[own] ? "リーチ" : "リーチなし"}
-        </span>
-      </div>
-      <div className="hand" data-testid="real-hand" aria-label="自分の手牌">
-        {hand.map((t, i) => (
-          <span key={i}>
-            <RealTile value={t} />
-          </span>
-        ))}
-        {scene.drawn && (
-          <span className="drawn">
-            <RealTile value={scene.drawn} />
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
+export const VERSION = "DEV-11.01-3";
 export function RealApp() {
   const [workspace, setWorkspace] = useState<Workspace>({
     reports: [],
@@ -247,7 +23,8 @@ export function RealApp() {
   const [stage, setStage] = useState<Stage | null>(null);
   const [seat, setSeat] = useState("");
   const [model, setModel] = useState("");
-  const [filter, setFilter] = useState("すべて");
+  const [filter, setFilter] = useState("今日");
+  const [learning, setLearning] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const focus = useRef<HTMLElement | null>(null);
   const refresh = async () =>
@@ -264,11 +41,18 @@ export function RealApp() {
     }
   };
   useEffect(() => {
-    void run(refresh);
+    void run(async () => {
+      const data = await api<Workspace>({ action: "state" });
+      setWorkspace(data);
+      if (data.session && !data.session.complete) {
+        setScreen("study");
+        setLearning(true);
+      }
+    });
   }, []);
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [screen, index]);
+  }, [screen, index, workspace.session?.index]);
   useEffect(() => {
     if (adding) {
       focus.current = document.activeElement as HTMLElement;
@@ -383,7 +167,10 @@ export function RealApp() {
       <aside className="sidebar">
         <button
           className="brand"
-          onClick={() => setScreen("home")}
+          onClick={() => {
+            setLearning(false);
+            setScreen("home");
+          }}
           aria-label="KyokuLoop ホーム"
         >
           <span className="brand-icon">局</span>
@@ -405,7 +192,7 @@ export function RealApp() {
               onClick={() =>
                 key === "review" && !detail && workspace.reports[0]
                   ? void run(() => open(workspace.reports[0].id))
-                  : setScreen(key)
+                  : (setLearning(false), setScreen(key))
               }
               aria-current={screen === key ? "page" : undefined}
             >
@@ -459,6 +246,20 @@ export function RealApp() {
                   ＋ 牌譜を追加
                 </button>
               </div>
+              <PracticeCard
+                workspace={workspace}
+                disabled={busy}
+                onBegin={(mode) =>
+                  void run(async () => {
+                    const session = await api<
+                      import("./real-types").StudySession
+                    >({ action: "study_start", mode });
+                    setWorkspace((prev) => ({ ...prev, session }));
+                    setLearning(true);
+                    setScreen("study");
+                  })
+                }
+              />
               <section className="panel">
                 <div className="section-title">
                   <h2>取り込んだ牌譜</h2>
@@ -682,62 +483,22 @@ export function RealApp() {
             </>
           )}
           {screen === "study" && (
-            <>
-              <div className="page-heading">
-                <h1>学習ライブラリ</h1>
-                <span className="muted">復習機能は準備中</span>
-              </div>
-              <div className="filters" aria-label="学習状態">
-                {["未学習", "復習中", "習得済み", "保留", "すべて"].map((s) => (
-                  <button
-                    className={filter === s ? "chosen" : ""}
-                    key={s}
-                    onClick={() => setFilter(s)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <div className="library-list">
-                {workspace.items
-                  .filter(
-                    (item) => filter === "すべて" || item.status === filter,
-                  )
-                  .map((item) => (
-                    <div
-                      className="library-row"
-                      data-testid="real-library-row"
-                      key={item.id}
-                    >
-                      <div>
-                        <strong>
-                          {roundLabel(item.scene)} ·{" "}
-                          {item.scene.source_discard_index + 1}打目
-                        </strong>
-                        <small>
-                          {item.automatic ? "自動登録" : "手動保存"}
-                        </small>
-                      </div>
-                      <span className="badge neutral">{item.status}</span>
-                      <span className="due">
-                        次回 <b>{item.due}</b>
-                      </span>
-                      <button
-                        className="text-button"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(() => open(item.report, item.id))
-                        }
-                      >
-                        局面を確認
-                      </button>
-                    </div>
-                  ))}
-              </div>
-              {workspace.items.length === 0 && (
-                <div className="empty">登録された問題はありません。</div>
-              )}
-            </>
+            <StudyPanel
+              workspace={workspace}
+              active={learning}
+              filter={filter}
+              onFilter={setFilter}
+              onActive={setLearning}
+              onRefresh={refresh}
+              onSession={(session) =>
+                setWorkspace((prev) => ({ ...prev, session }))
+              }
+              onHome={() => {
+                setLearning(false);
+                setScreen("home");
+              }}
+              onReview={(report, id) => void run(() => open(report, id))}
+            />
           )}
           <footer>
             <span>KyokuLoop</span>

@@ -53,13 +53,11 @@ test("real import confirms player, opens top scene, persists registration and av
   });
   await page.goto("/");
   await page.getByRole("button", { name: "牌譜を追加", exact: false }).click();
-  await page
-    .getByLabel("JSON / JSON.gz ファイル")
-    .setInputFiles({
-      name: "generated.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(generated.raw)),
-    });
+  await page.getByLabel("JSON / JSON.gz ファイル").setInputFiles({
+    name: "generated.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(generated.raw)),
+  });
   await expect(
     page.getByRole("button", { name: "このプレイヤーで登録" }),
   ).toBeDisabled();
@@ -82,9 +80,11 @@ test("real import confirms player, opens top scene, persists registration and av
     page.getByRole("heading", { name: "収録手順 3 / 3" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "学習", exact: true }).click();
+  await page.getByRole("button", { name: "すべて", exact: true }).click();
   await expect(page.getByTestId("real-library-row")).toHaveCount(1);
   await page.reload();
   await page.getByRole("button", { name: "学習", exact: true }).click();
+  await page.getByRole("button", { name: "すべて", exact: true }).click();
   await expect(page.getByTestId("real-library-row")).toHaveCount(1);
   await page.getByRole("button", { name: "ホーム", exact: true }).click();
   await page.getByRole("button", { name: "牌譜を追加", exact: false }).click();

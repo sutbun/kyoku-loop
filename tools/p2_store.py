@@ -6,6 +6,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 import re
 import secrets
 import sqlite3
@@ -19,8 +20,10 @@ from pathlib import Path
 
 try:
     from .p0_verify import inspect_report, tile_index
+    from .study import StudyMixin, StudyFailure, public_scene
 except ImportError:
     from p0_verify import inspect_report, tile_index
+    from study import StudyMixin, StudyFailure, public_scene
 
 ROOT = Path('D:/dev-data/kyoku-loop/private')
 LIMIT = 20 * 1024 * 1024
@@ -131,8 +134,9 @@ def rank_decisions(scenes):
     return sorted(selected, key=lambda s:(-s['gap'],s['round_index'],s.get('event_index',0)))
 
 
-class Store:
-    def __init__(self, path=None):
+class Store(StudyMixin):
+    def __init__(self, path=None, clock=None):
+        self.clock=clock
         self.path = Path(path or ROOT / 'app/kyokuloop.sqlite3').resolve()
         if ROOT.resolve() not in self.path.parents or any((p/'.git').exists() for p in self.path.parents):
             raise ImportFailure('private_storage_required')
@@ -146,6 +150,7 @@ class Store:
         CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY,source TEXT REFERENCES sources(hash),game TEXT NOT NULL,seat INTEGER NOT NULL,model INTEGER NOT NULL,source_game_url TEXT,content TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS study_items(id TEXT PRIMARY KEY,report TEXT REFERENCES reports(id),scene TEXT NOT NULL,automatic INTEGER NOT NULL,manual INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL,history TEXT NOT NULL,due TEXT NOT NULL);
         ''')
+        self.init_study()
 
     def close(self):
         self.db.close()
@@ -221,7 +226,7 @@ class Store:
                    'unknown_weights':unknown_weights,'reach_locked':reach_skipped,
                    'created':json.loads(existing['content'])['created'] if existing else datetime.now(timezone.utc).isoformat(),
                    'source_link_kind':'manual' if source_game_url else 'unlinked'}
-        tomorrow = (datetime.now(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
+        tomorrow = (self.moment().astimezone(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
         with self.db:
             self.db.execute('INSERT OR IGNORE INTO sources VALUES(?,?,?,?)',(source,row['payload'],row['url'],content['created']))
             self.db.execute('''INSERT INTO reports VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
@@ -236,7 +241,7 @@ class Store:
                 existed = self.db.execute('SELECT 1 FROM study_items WHERE id=?',(s['id'],)).fetchone()
                 if existed:
                     continue
-                self.db.execute('INSERT OR IGNORE INTO study_items VALUES(?,?,?,?,?,?,?,?)',(s['id'],report_id,json.dumps(s,ensure_ascii=False),1,0,'未学習','[]',tomorrow))
+                self.db.execute('INSERT OR IGNORE INTO study_items(id,report,scene,automatic,manual,status,history,due) VALUES(?,?,?,?,?,?,?,?)',(s['id'],report_id,json.dumps(s,ensure_ascii=False),1,0,'未学習','[]',tomorrow))
                 auto_count += 1
         return {'id':report_id,'duplicate':bool(existing)}
 
@@ -250,9 +255,11 @@ class Store:
         for row in self.db.execute('SELECT * FROM study_items ORDER BY rowid'):
             item=dict(row)
             item['history']=json.loads(item['history'])
-            item['scene']=json.loads(item['scene'])
+            item['scene']=public_scene(json.loads(item['scene']))
+            item['review_count']=self.db.execute("SELECT count(*) FROM review_events WHERE item=? AND kind='answer'",(item['id'],)).fetchone()[0]
             items.append(item)
-        return {'reports':reports,'items':items}
+        return {'reports':reports,'items':items,'today':self.today(),'due_count':len(self._queue('scheduled')),
+                'practice_count':len(self._queue('practice')),'session':self.study_current()}
 
     def detail(self, ident):
         row=self.db.execute('SELECT content,source_game_url FROM reports WHERE id=?',(ident,)).fetchone()
@@ -269,14 +276,14 @@ class Store:
         scene=next((s for s in detail['decisions'] if s['id']==ident),None)
         if scene is None or type(saved) is not bool:
             raise ImportFailure('not_a_decision')
-        tomorrow=(datetime.now(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
+        tomorrow=(self.moment().astimezone(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
         with self.db:
             if saved:
-                self.db.execute('INSERT OR IGNORE INTO study_items VALUES(?,?,?,?,?,?,?,?)',(ident,report_id,json.dumps(scene,ensure_ascii=False),0,1,'未学習','[]',tomorrow))
+                self.db.execute('INSERT OR IGNORE INTO study_items(id,report,scene,automatic,manual,status,history,due) VALUES(?,?,?,?,?,?,?,?)',(ident,report_id,json.dumps(scene,ensure_ascii=False),0,1,'未学習','[]',tomorrow))
                 self.db.execute('UPDATE study_items SET manual=1 WHERE id=?',(ident,))
             else:
                 self.db.execute('UPDATE study_items SET manual=0 WHERE id=?',(ident,))
-                self.db.execute("DELETE FROM study_items WHERE id=? AND automatic=0 AND manual=0 AND history='[]'",(ident,))
+                self.db.execute("DELETE FROM study_items WHERE id=? AND automatic=0 AND manual=0 AND history='[]' AND NOT EXISTS(SELECT 1 FROM review_events WHERE item=study_items.id)",(ident,))
         return self.detail(report_id)
 
 
@@ -284,7 +291,7 @@ def main():
     store=None
     try:
         request=json.loads(sys.stdin.buffer.read(30*1024*1024+1))
-        store=Store()
+        store=Store(os.environ.get('KYOKULOOP_DB') or None)
         action=request.get('action')
         if action=='state':
             result=store.state()
@@ -300,10 +307,25 @@ def main():
             result=store.detail(request.get('id'))
         elif action=='save':
             result=store.save(request.get('report'),request.get('id'),request.get('saved'))
+        elif action=='study_start': result=store.study_start(request.get('mode'))
+        elif action=='study_current': result=store.study_current()
+        elif action=='study_choice': result=store.study_choice(request.get('session'),request.get('answer'),request.get('choice'))
+        elif action=='study_rate': result=store.study_rate(request.get('session'),request.get('item'),request.get('rating'),request.get('event'))
+        elif action=='study_undo': result=store.study_undo(request.get('session'),request.get('event'))
+        elif action=='study_skip': result=store.study_skip(request.get('session'))
+        elif action=='study_control': result=store.study_control(request.get('item'),request.get('control'),request.get('event'))
+        elif action=='study_undo_control': result=store.study_undo_control(request.get('original'),request.get('event'))
+        elif action=='item_history': result=store.item_history(request.get('item'))
+        elif action=='backup_list': result=store.backup_list()
+        elif action=='backup_create': result=store.backup_create()
+        elif action=='backup_export': result=store.backup_export(request.get('name'))
+        elif action=='backup_upload': result=store.backup_upload(request.get('data'))
+        elif action=='backup_inspect': result=store.backup_inspect(request.get('name'))
+        elif action=='backup_restore': result=store.backup_restore(request.get('name'),request.get('hash'))
         else:
             raise ImportFailure('invalid_request')
         print(json.dumps({'ok':True,'data':result},ensure_ascii=True))
-    except ImportFailure as exc:
+    except (ImportFailure,StudyFailure) as exc:
         print(json.dumps({'ok':False,'error':str(exc)}))
     except Exception:
         # Never leak payloads, URLs, names, filesystem paths or tracebacks.
