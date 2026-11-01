@@ -141,7 +141,9 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
   try {
     let page = await context.newPage();
     await page.goto("/phone/");
-    await page.getByLabel("雀魂共有URL", { exact: true }).fill(url);
+    await page
+      .getByLabel("雀魂共有URL", { exact: true })
+      .fill(`雀魂牌譜:${url}`);
     await page.getByRole("button", { name: "保存", exact: true }).click();
     await expect(page.getByTestId("analysis-row")).toContainText(
       "この端末に保存済み・未同期",

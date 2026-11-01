@@ -49,6 +49,29 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(len(self.store.state()['analysis_queue']),1)
         self.assertFalse(self.store.state()['reports'])
 
+    def test_shared_label_normalizes_without_loosening_url_validation(self):
+        values=['雀魂牌譜:'+URL,'  雀魂牌譜：  '+URL+' \n',
+                '雀魂牌譜:'+URL.replace('https:', 'https\\:')]
+        with patch('urllib.request.OpenerDirector.open',side_effect=AssertionError('network forbidden')):
+            for value in values:
+                self.assertEqual(source_url(value),URL)
+                entries=self.store.analysis_add(value)['entries']
+                self.assertEqual(len(entries),1)
+                self.assertEqual(entries[0]['url'],URL)
+                self.assertEqual(entries[0]['id'],URL.split('paipu=')[1])
+            self.store.analysis_add(URL)
+            self.assertEqual(len(self.store.analysis_entries()),1)
+        for value in ['メモ '+URL,'雀魂牌譜:'+URL+' '+OTHER,
+                      '雀魂牌譜:'+URL+'&x=1','雀魂牌譜:'+URL+'#x',
+                      '雀魂牌譜:'+URL.replace('game.','game.evil.'),
+                      '雀魂牌譜:'+URL.replace('https:','http:'),
+                      '雀魂牌譜:雀魂牌譜:'+URL]:
+            with self.assertRaises(StudyFailure):source_url(value)
+        result=self.commit('雀魂牌譜:'+URL)
+        self.assertEqual(self.store.analysis_entries()[0]['reports'],[result['id']])
+        self.assertEqual(self.store.db.execute('SELECT source_game_url FROM reports WHERE id=?',
+                                              (result['id'],)).fetchone()[0],URL)
+
     def test_invalid_batch_is_atomic(self):
         e={'id':URL.split('=')[1],'url':URL,'created':'2026-01-01T00:00:00Z'}
         for bad in [dict(e,id='wrong'),dict(e,created='bad'),dict(e,url=OTHER)]:
