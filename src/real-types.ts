@@ -1,0 +1,70 @@
+export type Meld = {
+  type: string;
+  tile?: string;
+  consumed: string[];
+  target?: number;
+  added?: string;
+};
+export type Scene = {
+  id?: string;
+  round_index: number;
+  event_index: number;
+  seat: number;
+  bakaze: string;
+  kyoku: number;
+  honba: number;
+  own_wind: string;
+  own_hand: string[];
+  drawn: string | null;
+  rivers: { tile: string; called: boolean; reach: boolean }[][];
+  melds: Meld[][];
+  dora_markers: string[];
+  scores: number[];
+  kyotaku: number;
+  reach_declared: boolean[];
+  reach_accepted: boolean[];
+  source_discard_index: number;
+  event_type?: string;
+  actor?: number | null;
+  actual?: string;
+  suggested?: string;
+  gap?: number;
+  weights_percent?: number[];
+};
+export type Report = {
+  id: string;
+  seat: number;
+  model: number;
+  model_name: string;
+  rounds: number;
+  created: string;
+  important_count: number;
+  source_linked: boolean;
+};
+export type Detail = Report & {
+  decisions: Scene[];
+  timeline: Scene[];
+  important: string[];
+  registered: string[];
+  manual: string[];
+  unknown_weights: number;
+  excluded: Record<string, number>;
+  source_link_kind: string;
+};
+export type LibraryItem = {
+  id: string;
+  report: string;
+  scene: Scene;
+  status: string;
+  history: string[];
+  due: string;
+  automatic: number;
+  manual: number;
+};
+export type Workspace = { reports: Report[]; items: LibraryItem[] };
+export type Stage = {
+  token: string;
+  players: string[];
+  models: { index: number; name: string }[];
+  rounds: number;
+};

@@ -8,8 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "npm run test:p0 && playwright test",
-    "test:p0": "python -m unittest discover -s tests -p test_p0_verify.py"
+    "test": "npm run test:core && playwright test --workers=1",
+    "test:p0": "python -m unittest discover -s tests -p test_p0_verify.py",
+    "test:core": "python -m unittest discover -s tests -p test_p*.py"
   },
   "dependencies": {
     "react": "^19.3.1",

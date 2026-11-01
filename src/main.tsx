@@ -17,6 +17,7 @@ import {
   type StudyStatus,
 } from "./demo";
 import "./style.css";
+import { RealApp } from "./real-app";
 
 const VERSION = "DEV-11.01-1";
 const KEY = "kyokuloop-fictional-prototype-v2";
@@ -1021,4 +1022,10 @@ function App() {
     </>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  new URLSearchParams(location.search).get("demo") === "1" ? (
+    <App />
+  ) : (
+    <RealApp />
+  ),
+);

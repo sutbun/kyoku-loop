@@ -1,0 +1,317 @@
+"""Loopback application's private data boundary. Stdlib only; no paid APIs."""
+from __future__ import annotations
+
+import base64
+import gzip
+import hashlib
+import io
+import json
+import re
+import secrets
+import sqlite3
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+try:
+    from .p0_verify import inspect_report, tile_index
+except ImportError:
+    from p0_verify import inspect_report, tile_index
+
+ROOT = Path('D:/dev-data/kyoku-loop/private')
+LIMIT = 20 * 1024 * 1024
+RULE = 'gap-percent-v1-diverse10-positive'
+ID = r'[a-f0-9]{64}v[0-9]+_[0-9]+'
+
+
+class ImportFailure(ValueError):
+    pass
+
+
+def canonical_report_url(value):
+    if not isinstance(value, str):
+        raise ImportFailure('invalid_url')
+    value = value.strip()
+    if re.fullmatch(ID, value):
+        return f'https://naga.dmv.nico/reports/{value}.json'
+    try:
+        u = urllib.parse.urlsplit(value)
+        if u.scheme != 'https' or u.netloc != 'naga.dmv.nico' or u.fragment:
+            raise ImportFailure('invalid_url')
+        query = urllib.parse.parse_qs(u.query, strict_parsing=True, keep_blank_values=True)
+        if any(len(v) != 1 for v in query.values()):
+            raise ImportFailure('invalid_url')
+        if u.path in ('/htmls/report_viewer.html', '/htmls/report_viewer_v2.html'):
+            if set(query) - {'report_id', 'tw'} or ('tw' in query and query['tw'][0] not in ('0','1','2','3')):
+                raise ImportFailure('invalid_url')
+            ident = query.get('report_id', [''])[0]
+        else:
+            match = re.fullmatch(r'/(?:reports/('+ID+r')\.json(?:\.gz)?|htmls/('+ID+r')\.html)', u.path)
+            if not match or query:
+                raise ImportFailure('invalid_url')
+            ident = match[1] or match[2]
+        if not re.fullmatch(ID, ident):
+            raise ImportFailure('invalid_url')
+        return f'https://naga.dmv.nico/reports/{ident}.json'
+    except (ValueError, IndexError):
+        raise ImportFailure('invalid_url') from None
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ImportFailure('access_redirect')
+
+
+def fetch_report(value):
+    url = canonical_report_url(value)
+    try:
+        # No CookieProcessor, proxy credentials, authentication or redirects.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        with opener.open(urllib.request.Request(url, headers={'Accept': 'application/json'}), timeout=25) as response:
+            payload = response.read(LIMIT + 1)
+        return payload, url
+    except urllib.error.HTTPError as exc:
+        raise ImportFailure('access_denied' if exc.code in (401,403) else 'report_not_ready' if exc.code == 404 else 'upstream_error') from None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise ImportFailure('network_error') from None
+
+
+def decode(payload):
+    try:
+        if len(payload) > LIMIT:
+            raise ImportFailure('size_limit')
+        if payload[:2] == b'\x1f\x8b':
+            with gzip.GzipFile(fileobj=io.BytesIO(payload)) as stream:
+                payload = stream.read(LIMIT + 1)
+        if len(payload) > LIMIT:
+            raise ImportFailure('size_limit')
+        report = json.loads(payload.decode('utf-8-sig'))
+        if not isinstance(report, dict):
+            raise ImportFailure('invalid_json')
+        if report.get('data_version') != [1,0] or not isinstance(report.get('custom_haihu'),list):
+            raise ImportFailure('unsupported_format')
+        rounds = report.get('pred')
+        if not isinstance(rounds,list) or not 1 <= len(rounds) <= 200 or any(not isinstance(r,list) or not 1 <= len(r) <= 2000 for r in rounds):
+            raise ImportFailure('unsupported_format')
+        if any(len(r[0]['info']['msg']['tehais']) != 4 for r in rounds):
+            raise ImportFailure('unsupported_rule')
+        # Only model output/version exercised in P0. Unknown versions stay closed.
+        if report.get('naga_version') != [2,2]:
+            raise ImportFailure('unsupported_model')
+        if report.get('game_type') != 0:
+            raise ImportFailure('unsupported_rule')
+        models = report.get('naga_types')
+        if not isinstance(models,dict) or not models or any(not k.isdigit() or not isinstance(v,str) for k,v in models.items()):
+            raise ImportFailure('unsupported_model')
+        return report
+    except ImportFailure:
+        raise
+    except (ValueError, TypeError, KeyError, IndexError, OSError, EOFError, RecursionError):
+        raise ImportFailure('invalid_json') from None
+
+
+def digest(value):
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',',':')).encode()).hexdigest()
+
+
+def rank_decisions(scenes):
+    candidates = sorted((s for s in scenes if s['gap'] > 0), key=lambda s:(-s['gap'],s['round_index'],s.get('event_index',0)))
+    heads, rest, seen = [], [], set()
+    for s in candidates:
+        if s['round_index'] not in seen:
+            heads.append(s)
+            seen.add(s['round_index'])
+        else:
+            rest.append(s)
+    selected = (heads + rest)[:10]
+    return sorted(selected, key=lambda s:(-s['gap'],s['round_index'],s.get('event_index',0)))
+
+
+class Store:
+    def __init__(self, path=None):
+        self.path = Path(path or ROOT / 'app/kyokuloop.sqlite3').resolve()
+        if ROOT.resolve() not in self.path.parents or any((p/'.git').exists() for p in self.path.parents):
+            raise ImportFailure('private_storage_required')
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.db = sqlite3.connect(self.path, timeout=30)
+        self.db.row_factory = sqlite3.Row
+        self.db.execute('PRAGMA foreign_keys=ON')
+        self.db.executescript('''
+        CREATE TABLE IF NOT EXISTS staging(token TEXT PRIMARY KEY,payload BLOB NOT NULL,url TEXT,created REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS sources(hash TEXT PRIMARY KEY,payload BLOB NOT NULL,url TEXT,created TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY,source TEXT REFERENCES sources(hash),game TEXT NOT NULL,seat INTEGER NOT NULL,model INTEGER NOT NULL,source_game_url TEXT,content TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS study_items(id TEXT PRIMARY KEY,report TEXT REFERENCES reports(id),scene TEXT NOT NULL,automatic INTEGER NOT NULL,manual INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL,history TEXT NOT NULL,due TEXT NOT NULL);
+        ''')
+
+    def close(self):
+        self.db.close()
+
+    def stage(self, payload, url):
+        report = decode(payload)
+        token = secrets.token_urlsafe(32)
+        names = report.get('player_info',{}).get('name',[])
+        if not isinstance(names,list) or len(names) != 4:
+            names = [f'席{i+1}' for i in range(4)]
+        with self.db:
+            self.db.execute('DELETE FROM staging WHERE created < ?', (time.time()-1800,))
+            self.db.execute('INSERT INTO staging VALUES(?,?,?,?)',(token,payload,url,time.time()))
+        return {'token':token,'players':[str(n)[:100] for n in names],
+                'models':[{'index':int(k),'name':v} for k,v in report['naga_types'].items()], 'rounds':len(report['pred'])}
+
+    def commit(self, token, seat, model, source_game_url):
+        if type(seat) is not int or seat not in range(4) or type(model) is not int:
+            raise ImportFailure('selection_required')
+        row = self.db.execute('SELECT * FROM staging WHERE token=? AND created>?',(token,time.time()-1800)).fetchone()
+        if not row:
+            raise ImportFailure('stage_expired')
+        report = decode(row['payload'])
+        if str(model) not in report['naga_types'] or model not in (0,1):
+            raise ImportFailure('unsupported_model')
+        if source_game_url:
+            if not isinstance(source_game_url,str) or not re.fullmatch(r'https://game\.mahjongsoul\.com/\?paipu=[A-Za-z0-9_-]+',source_game_url):
+                raise ImportFailure('invalid_source_url')
+        source = digest(report)
+        # Gameplay identity excludes evaluations, model and display names. Raw
+        # editor round data includes all draws, discards and round outcomes.
+        try:
+            raw = [json.loads(r) if isinstance(r,str) else r for r in report['custom_haihu']]
+        except (ValueError,TypeError):
+            raise ImportFailure('reconstruction_failed') from None
+        game = digest(raw)
+        report_id = digest([source,seat,model])
+        existing = self.db.execute('SELECT source_game_url,content FROM reports WHERE id=?',(report_id,)).fetchone()
+        if existing:
+            if source_game_url and existing['source_game_url'] not in (None,source_game_url):
+                raise ImportFailure('source_conflict')
+        timeline = []
+        try:
+            summary, scenes = inspect_report(report,seat,model,timeline)
+        except (ValueError, TypeError, KeyError, IndexError, OverflowError):
+            raise ImportFailure('reconstruction_failed') from None
+        if summary['issues']:
+            raise ImportFailure('reconstruction_failed')
+        valid, reach_skipped, unknown_weights = [], 0, 0
+        for scene in scenes:
+            # Once own reach is declared the normal discard-choice exercise
+            # no longer applies. Do not manufacture a free discard choice.
+            if scene['reach_declared'][seat] or scene['reach_accepted'][seat]:
+                reach_skipped += 1
+                continue
+            weights = scene['raw_weights']
+            # P0 observed integer count distributions, rounded to ~10000.
+            # Do not interpret a new scale as this format or silently rescale it.
+            if any(type(w) is not int for w in weights) or not 9900 <= sum(weights) <= 10000:
+                unknown_weights += 1
+                continue
+            s = dict(scene)
+            total = sum(weights)
+            s['gap'] = (max(weights)-weights[tile_index(s['actual'])])*100/total
+            s['weights_percent'] = [w*100/total for w in weights]
+            s['id'] = digest([game,seat,s['round_index'],s['source_discard_index'],'discard'])
+            valid.append(s)
+        important = rank_decisions(valid)
+        content = {'id':report_id,'seat':seat,'model':model,'model_name':report['naga_types'][str(model)],
+                   'model_version':report.get('naga_version'),'rounds':summary['rounds'],
+                   'decisions':valid,'important':[s['id'] for s in important],
+                   'timeline':timeline,'excluded':summary['excluded'],'rule':RULE,
+                   'unknown_weights':unknown_weights,'reach_locked':reach_skipped,
+                   'created':json.loads(existing['content'])['created'] if existing else datetime.now(timezone.utc).isoformat(),
+                   'source_link_kind':'manual' if source_game_url else 'unlinked'}
+        tomorrow = (datetime.now(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
+        with self.db:
+            self.db.execute('INSERT OR IGNORE INTO sources VALUES(?,?,?,?)',(source,row['payload'],row['url'],content['created']))
+            self.db.execute('''INSERT INTO reports VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+                content=excluded.content,source_game_url=COALESCE(reports.source_game_url,excluded.source_game_url)''',
+                (report_id,source,game,seat,model,source_game_url,json.dumps(content,ensure_ascii=False)))
+            # A second model/source for identical gameplay must not silently
+            # expand the automatic set or replace its original assessment.
+            auto_count = self.db.execute('SELECT COUNT(*) FROM study_items i JOIN reports r ON i.report=r.id WHERE r.game=? AND r.seat=? AND i.automatic=1',(game,seat)).fetchone()[0]
+            for s in important[:3]:
+                if auto_count >= 3:
+                    break
+                existed = self.db.execute('SELECT 1 FROM study_items WHERE id=?',(s['id'],)).fetchone()
+                if existed:
+                    continue
+                self.db.execute('INSERT OR IGNORE INTO study_items VALUES(?,?,?,?,?,?,?,?)',(s['id'],report_id,json.dumps(s,ensure_ascii=False),1,0,'未学習','[]',tomorrow))
+                auto_count += 1
+        return {'id':report_id,'duplicate':bool(existing)}
+
+    def state(self):
+        reports=[]
+        for row in self.db.execute('SELECT id,content,source_game_url FROM reports ORDER BY rowid DESC'):
+            d=json.loads(row['content'])
+            reports.append({k:d[k] for k in ('id','seat','model','model_name','rounds','created')} | {
+                'important_count':len(d['important']),'source_linked':bool(row['source_game_url'])})
+        items=[]
+        for row in self.db.execute('SELECT * FROM study_items ORDER BY rowid'):
+            item=dict(row)
+            item['history']=json.loads(item['history'])
+            item['scene']=json.loads(item['scene'])
+            items.append(item)
+        return {'reports':reports,'items':items}
+
+    def detail(self, ident):
+        row=self.db.execute('SELECT content,source_game_url FROM reports WHERE id=?',(ident,)).fetchone()
+        if not row:
+            raise ImportFailure('not_found')
+        content=json.loads(row['content'])
+        content['source_link_kind']='manual' if row['source_game_url'] else 'unlinked'
+        content['registered']=[r['id'] for r in self.db.execute('SELECT id FROM study_items')]
+        content['manual']=[r['id'] for r in self.db.execute('SELECT id FROM study_items WHERE manual=1')]
+        return content
+
+    def save(self, report_id, ident, saved):
+        detail=self.detail(report_id)
+        scene=next((s for s in detail['decisions'] if s['id']==ident),None)
+        if scene is None or type(saved) is not bool:
+            raise ImportFailure('not_a_decision')
+        tomorrow=(datetime.now(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
+        with self.db:
+            if saved:
+                self.db.execute('INSERT OR IGNORE INTO study_items VALUES(?,?,?,?,?,?,?,?)',(ident,report_id,json.dumps(scene,ensure_ascii=False),0,1,'未学習','[]',tomorrow))
+                self.db.execute('UPDATE study_items SET manual=1 WHERE id=?',(ident,))
+            else:
+                self.db.execute('UPDATE study_items SET manual=0 WHERE id=?',(ident,))
+                self.db.execute("DELETE FROM study_items WHERE id=? AND automatic=0 AND manual=0 AND history='[]'",(ident,))
+        return self.detail(report_id)
+
+
+def main():
+    store=None
+    try:
+        request=json.loads(sys.stdin.buffer.read(30*1024*1024+1))
+        store=Store()
+        action=request.get('action')
+        if action=='state':
+            result=store.state()
+        elif action=='inspect':
+            if request.get('url'):
+                payload,url=fetch_report(request['url'])
+            else:
+                payload,url=base64.b64decode(request.get('data',''),validate=True),None
+            result=store.stage(payload,url)
+        elif action=='commit':
+            result=store.commit(request.get('token'),request.get('seat'),request.get('model'),request.get('source_url') or None)
+        elif action=='detail':
+            result=store.detail(request.get('id'))
+        elif action=='save':
+            result=store.save(request.get('report'),request.get('id'),request.get('saved'))
+        else:
+            raise ImportFailure('invalid_request')
+        print(json.dumps({'ok':True,'data':result},ensure_ascii=True))
+    except ImportFailure as exc:
+        print(json.dumps({'ok':False,'error':str(exc)}))
+    except Exception:
+        # Never leak payloads, URLs, names, filesystem paths or tracebacks.
+        print(json.dumps({'ok':False,'error':'storage_or_input_error'}))
+    finally:
+        if store:
+            store.close()
+
+
+if __name__=='__main__':
+    main()

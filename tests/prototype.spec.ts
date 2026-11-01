@@ -28,7 +28,7 @@ test("study queue excludes paused and graduated items, and detects broken demo s
 test("manual saving registers one library item, and cancellation removes that registration", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "新しい牌譜を確認" }).click();
   await page.getByRole("button", { name: "学習に保存", exact: true }).click();
   await page.getByRole("button", { name: "学習", exact: true }).click();
@@ -52,7 +52,7 @@ test("malformed fictional local storage starts safely with a fresh prototype", a
       }),
     ),
   );
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await expect(
     page.getByRole("button", { name: "今日の復習を始める" }),
   ).toBeVisible();
@@ -83,7 +83,7 @@ test("fictional scene projections keep tile counts and draw/discard continuity",
 test("review opens at top priority, traverses important and all events, saves with undo", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "新しい牌譜を確認" }).click();
   await expect(
     page.getByRole("heading", { name: "重要局面 1 / 5" }),
@@ -111,7 +111,7 @@ test("review opens at top priority, traverses important and all events, saves wi
 test("five question flow conceals answers, supports corrections, self rating and completion", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.screenshot({
     path: `test-results/home-${test.info().project.name}.png`,
     fullPage: true,
@@ -159,7 +159,7 @@ test("five question flow conceals answers, supports corrections, self rating and
 test("interruption and reload retain demo progress without revealing the next answer", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "今日の復習を始める" }).click();
   await page.getByTestId("hand").getByRole("button").first().click();
   await page.getByRole("button", { name: "回答する", exact: true }).click();
@@ -175,7 +175,7 @@ test("interruption and reload retain demo progress without revealing the next an
 test("library has four states, details, pause/resume and undo", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "学習", exact: true }).click();
   for (const state of ["未学習", "復習中", "習得済み", "保留"]) {
     await page.getByRole("button", { name: state, exact: true }).click();
@@ -204,7 +204,7 @@ test("no external data calls, layout fits viewport and shows build and stub boun
   page.on("request", (r) => {
     if (!r.url().startsWith("http://127.0.0.1:1460")) requests.push(r.url());
   });
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await expect(
     page.getByText("DEV-11.01-1", { exact: true }).filter({ visible: true }),
   ).toBeVisible();
@@ -232,7 +232,7 @@ test("local save failure stays visible and never claims saved or synced", async 
       throw new DOMException("test quota", "QuotaExceededError");
     };
   });
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await expect(page.getByRole("alert")).toContainText("保存できません");
   await page.getByRole("button", { name: "今日の復習を始める" }).click();
   await expect(page.getByRole("alert")).toContainText(

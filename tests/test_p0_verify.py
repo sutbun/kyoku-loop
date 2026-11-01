@@ -25,7 +25,7 @@ def fixture():
         {"info": {"msg": {"type": "tsumo", "actor": 0, "pai": "5pr", "real_dahai": "5pr", "pred_dahai": ["1m"]}}, "dahai_pred": [row]},
         {"info": {"msg": {"type": "dahai", "actor": 0, "pai": "5pr", "tsumogiri": True}}},
     ]
-    return {"data_version": [1, 0], "naga_types": {"0": "架空モデル"},
+    return {"data_version": [1, 0], "naga_version": [2,2], "game_type": 0, "naga_types": {"0": "架空モデル"},
             "pred": [entries], "custom_haihu": [json.dumps([raw])]}
 
 
@@ -108,9 +108,11 @@ class P0Tests(unittest.TestCase):
         raw[0][2] = [39, 38]
         report['custom_haihu'][0] = json.dumps(raw)
         report['pred'][0].insert(2, {'info': {'msg': {'type': 'dora', 'dora_marker': '8s'}}})
-        summary, scenes = inspect_report(report)
+        timeline=[]
+        summary, scenes = inspect_report(report,timeline=timeline)
         self.assertEqual(summary['issues'], {})
         self.assertEqual(scenes[0]['dora_markers'], ['9s', '8s'])
+        self.assertEqual(timeline[1]['dora_markers'],['9s'])
 
     def test_dora_update_must_match_converted_source(self):
         report = fixture()

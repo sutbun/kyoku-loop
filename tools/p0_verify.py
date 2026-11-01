@@ -50,7 +50,7 @@ def validate_weights(row, declared: str) -> str | None:
     return None
 
 
-def inspect_report(report: dict, seat: int = 0, model: int = 0) -> tuple[dict, list[dict]]:
+def inspect_report(report: dict, seat: int = 0, model: int = 0, timeline: list | None = None) -> tuple[dict, list[dict]]:
     """Compare embedded converted logs with report events, then project scenes.
 
     This establishes internal consistency only. The embedded converted log is
@@ -72,7 +72,7 @@ def inspect_report(report: dict, seat: int = 0, model: int = 0) -> tuple[dict, l
     totals, issues, excluded, scenes = Counter(), Counter(), Counter(), []
     round_results = []
     for ri, entries in enumerate(rounds):
-        counts, errors, pending = Counter(), Counter(), []
+        counts, errors, pending, steps = Counter(), Counter(), [], []
         try:
             raw_group = json.loads(raw_chunks[ri]) if isinstance(raw_chunks[ri], str) else raw_chunks[ri]
             if not isinstance(raw_group, list) or len(raw_group) != 1 or len(raw_group[0]) != 17:
@@ -81,7 +81,18 @@ def inspect_report(report: dict, seat: int = 0, model: int = 0) -> tuple[dict, l
             start = entries[0]["info"]["msg"]
             if start["type"] != "start_kyoku" or len(start["tehais"]) != 4:
                 raise ValueError("start_shape")
+            if (start["bakaze"] not in HONORS[:4] or type(start["kyoku"]) is not int or start["kyoku"] not in range(1,5)
+                    or any(type(start[k]) is not int or start[k] < 0 for k in ("honba","kyotaku","oya"))
+                    or not isinstance(start["scores"],list) or len(start["scores"]) != 4
+                    or any(type(s) is not int for s in start["scores"])):
+                raise ValueError("start_metadata")
             hands = copy.deepcopy(start["tehais"])
+            if any(not isinstance(h,list) or len(h) != 13 for h in hands):
+                raise ValueError("initial_hand_length")
+            if any(t not in TILES and t not in ("5mr","5pr","5sr") for h in hands for t in h):
+                raise ValueError("initial_tile")
+            if max(Counter(t.removesuffix("r") for h in hands for t in h).values()) > 4:
+                raise ValueError("initial_tile_count")
             if all(Counter(map(tile, raw[4 + 3 * a])) == Counter(hands[a]) for a in range(4)):
                 counts["initial_hands_match"] += 1
             else:
@@ -105,6 +116,18 @@ def inspect_report(report: dict, seat: int = 0, model: int = 0) -> tuple[dict, l
             rivers, melds = [[] for _ in range(4)], [[] for _ in range(4)]
             declared_reach, accepted_reach = [False] * 4, [False] * 4
             scores, dora, kyotaku = start["scores"].copy(), [start["dora_marker"]], start["kyotaku"]
+            def snapshot(index, kind, actor):
+                return copy.deepcopy({
+                    "round_index": ri, "event_index": index, "seat": seat,
+                    "bakaze": start["bakaze"], "kyoku": start["kyoku"], "honba": start["honba"],
+                    "own_wind": HONORS[(seat - start["oya"]) % 4], "own_hand": hands[seat],
+                    "drawn": last_draw[seat], "rivers": rivers, "melds": melds,
+                    "dora_markers": dora, "scores": scores, "kyotaku": kyotaku,
+                    "reach_declared": declared_reach, "reach_accepted": accepted_reach,
+                    "source_discard_index": discards[seat], "event_type": kind, "actor": actor,
+                })
+            if timeline is not None:
+                steps.append(snapshot(0, "start_kyoku", None))
             for ei, entry in enumerate(entries[1:], 1):
                 msg = entry["info"]["msg"]
                 kind, actor = msg["type"], msg.get("actor")
@@ -212,6 +235,10 @@ def inspect_report(report: dict, seat: int = 0, model: int = 0) -> tuple[dict, l
                 elif kind == "reach":
                     declared_reach[actor] = True
                 elif kind == "reach_accepted":
+                    expected_scores = scores.copy()
+                    expected_scores[actor] -= 1000
+                    if msg["scores"] != expected_scores or any(type(s) is not int for s in msg["scores"]):
+                        errors["reach_scores_mismatch"] += 1
                     accepted_reach[actor] = True
                     scores = msg["scores"].copy()
                     kyotaku += 1
@@ -221,6 +248,12 @@ def inspect_report(report: dict, seat: int = 0, model: int = 0) -> tuple[dict, l
                     else:
                         counts["dora_update_match"] += 1
                     dora.append(msg["dora_marker"])
+                if kind in ("tsumo", "dahai", "pon", "chi", "daiminkan", "ankan", "kakan"):
+                    expected = 13 - 3 * len(melds[actor]) + (1 if kind in ("tsumo", "pon", "chi") else 0)
+                    if len(hands[actor]) != expected:
+                        errors["event_hand_length_mismatch"] += 1
+                if timeline is not None:
+                    steps.append(snapshot(ei, kind, actor))
                 if "dahai_pred" not in entry:
                     continue
                 following = next(((index, s["info"]["msg"]) for index, s in enumerate(entries[ei + 1:], ei + 1)
@@ -281,6 +314,8 @@ def inspect_report(report: dict, seat: int = 0, model: int = 0) -> tuple[dict, l
         issues.update(errors)
         if not errors:
             scenes.extend(pending)
+            if timeline is not None:
+                timeline.extend(steps)
         round_results.append({"round_index": ri, "counts": dict(counts), "issues": dict(errors), "projected_decisions": len(pending) if not errors else 0})
     summary = {"rounds": len(rounds), "events": sum(map(len, rounds)), "seat": seat, "model": model,
                "counts": dict(totals), "issues": dict(issues), "excluded": dict(excluded),
