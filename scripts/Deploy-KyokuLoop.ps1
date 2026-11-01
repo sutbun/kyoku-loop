@@ -85,7 +85,7 @@ try {
                 $link.Save()
             }
         }
-        if (Test-Path -LiteralPath $pointer) { [IO.File]::Replace($staged,$pointer,$null) } else { [IO.File]::Move($staged,$pointer) }
+        & (Join-Path $releaseFolder 'scripts\Switch-KyokuLoopRelease.ps1') -StagedPath $staged -PointerPath $pointer -BackupPath (Join-Path $taskInstall ('current-replaced-'+$stamp+'.json'))
     } catch {
         $previousLauncher = Join-Path $taskInstall ('launcher-previous-'+$stamp+'.ps1')
         if (Test-Path -LiteralPath $previousLauncher) { Copy-Item -LiteralPath $previousLauncher -Destination $launcher -Force }

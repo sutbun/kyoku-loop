@@ -25,7 +25,7 @@
 
 `scripts/Deploy-KyokuLoop.ps1 -ExpectedSha <確認済みGitHub mainの40桁SHA>` を使用する。GitHub mainとfetch後のmainの両方が指定SHAと一致する場合だけ、git archiveから新しい版ディレクトリを作り、lockfileどおり依存を導入してビルドする。作業ブランチからの配備は行わない。
 
-版は `E:/Apps/KyokuLoop/releases/<版>-<SHA先頭12桁>/`。必要ファイルのハッシュと実行環境をrelease.jsonへ記録し、ビルド後だけcurrent.jsonを切り替える。旧版と前の参照/ランチャーは保持する。同じ版のディレクトリを上書きせず、失敗した配備で実データを削除しない。
+版は `E:/Apps/KyokuLoop/releases/<版>-<SHA先頭12桁>/`。必要ファイルのハッシュと実行環境をrelease.jsonへ記録し、ビルド後だけcurrent.jsonを切り替える。旧版と前の参照/ランチャーは保持する。参照の置換はSwitch-KyokuLoopRelease.ps1が明示的なバックアップファイル名を使って行い、Windows PowerShell 5でも更新できるようにする。同じ版のディレクトリを上書きせず、失敗した配備で実データを削除しない。
 
 `scripts/KyokuLoop.ps1` は配備先に置く安定したランチャーとなる。Launch/Stop/Backup/Statusに対応。開始前にコードのハッシュを検査し、ローカル制御のPID/role/SHAとprivate nonceを照合して所有するサーバーだけを正常終了させる。実行中APIとPython子プロセスが残っていれば終了を拒否する。強制終了は行わない。
 
