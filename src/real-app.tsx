@@ -209,9 +209,7 @@ export function RealApp() {
           aria-label="KyokuLoop ホーム"
         >
           <span className="brand-icon">局</span>
-          <span>
-            KyokuLoop<small>局を、学びに。</small>
-          </span>
+          <span>KyokuLoop</span>
         </button>
         <nav aria-label="メインナビゲーション">
           {(
@@ -242,7 +240,7 @@ export function RealApp() {
           <span className="version">{VERSION}</span>
         </div>
       </aside>
-      <main>
+      <main className="real-main">
         <header className="topbar">
           <span>
             {screen === "home"
@@ -269,10 +267,22 @@ export function RealApp() {
           </div>
         )}
         <div className="content">
+          {notice && (
+            <div className="inline-notice" role="status">
+              {notice}
+              <button
+                className="text-button"
+                aria-label="通知を閉じる"
+                onClick={() => setNotice("")}
+              >
+                ×
+              </button>
+            </div>
+          )}
           {screen === "home" && (
             <>
-              <div className="page-heading">
-                <h1>一局の気づきを、次の一打へ。</h1>
+              <div className="page-heading home-actions">
+                <h1 className="visually-hidden">ホーム</h1>
                 <button
                   className="button primary"
                   disabled={busy}
@@ -590,20 +600,8 @@ export function RealApp() {
               onReview={(report, id) => void run(() => open(report, id))}
             />
           )}
-          <footer>
-            <span>KyokuLoop</span>
-            <span>{VERSION}</span>
-          </footer>
         </div>
       </main>
-      {notice && (
-        <div className="toast" role="status">
-          {notice}
-          <button aria-label="通知を閉じる" onClick={() => setNotice("")}>
-            ×
-          </button>
-        </div>
-      )}
       <dialog
         ref={dialog}
         onCancel={(e) => {

@@ -1,37 +1,155 @@
 .phone-app {
-  max-width: 1100px;
+  max-width: 900px;
   margin: auto;
-  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  padding-bottom: calc(60px + env(safe-area-inset-bottom));
 }
 .phone-app main {
   margin: 0;
   min-width: 0;
+  min-height: 0;
+  padding-bottom: 0;
 }
 .phone-header {
-  padding: calc(16px + env(safe-area-inset-top)) 20px 16px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
   background: #244d42;
   color: white;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-height: 44px;
 }
 .phone-header span {
-  font-size: 11px;
+  font-size: 10px;
   opacity: 0.8;
 }
 .phone-status {
   display: flex;
-  justify-content: space-between;
-  font-size: 12px;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 11px;
   color: var(--muted);
-  margin-bottom: 18px;
+  margin-bottom: 6px;
 }
-.phone-download small {
-  display: block;
-  margin-top: 12px;
+.phone-app .content {
+  padding: 10px 12px;
 }
 .phone-app .panel {
-  margin-top: 20px;
+  margin-top: 10px;
+  padding: 12px;
+}
+.phone-app .panel h2 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+.phone-app .page-heading {
+  margin: 0 0 8px;
+  align-items: center;
+}
+.phone-app .page-heading h1 {
+  font-size: 19px;
+  margin: 0;
+}
+.phone-app .study-heading {
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.phone-app .study-heading h1 {
+  font-size: 17px;
+}
+.phone-app .study-progress {
+  margin: 0 auto 0 0;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.phone-app .study-heading .text-button {
+  font-size: 12px;
+  padding: 8px;
+}
+.phone-app .study-hero {
+  margin-bottom: 10px;
+}
+.phone-app .source-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+.phone-app .source-input label {
+  min-width: 0;
+  gap: 4px;
+  font-size: 11px;
+}
+.phone-app .source-input input {
+  padding: 9px;
+  min-height: 44px;
+  font-size: 16px;
+}
+.phone-app .source-input .button {
+  margin: 0;
+  min-height: 44px;
+}
+.phone-app .source-input [role] {
+  grid-column: 1 / -1;
+}
+.phone-app .analysis-list {
+  margin-top: 0;
+}
+.phone-app .analysis-row {
+  padding: 8px 0 0;
+  margin-top: 8px;
+  gap: 4px 10px;
+}
+.phone-app .analysis-row small {
+  margin-top: 2px;
+  font-size: 10px;
+}
+.phone-app .analysis-row > div {
+  min-width: 0;
+}
+.phone-download p {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+.phone-storage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.phone-storage-actions .button {
+  flex: 1 1 auto;
+  font-size: 12px;
+  padding: 9px 10px;
+}
+.phone-download .install-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.phone-app .phone-tools {
+  padding: 0 12px;
+}
+.phone-tools summary {
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+  font-size: 12px;
+}
+.phone-tools-content {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+.phone-tools-content small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.phone-tools .file-drop {
+  margin: 0;
+  padding: 10px;
+}
+.phone-tools input {
+  max-width: 100%;
+  font-size: 16px;
 }
 .phone-nav {
   position: fixed;
@@ -40,15 +158,16 @@
   right: 0;
   display: flex;
   background: #fff;
-  border-top: 1px solid #deded7;
-  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  padding: 4px 12px calc(4px + env(safe-area-inset-bottom));
   z-index: 10;
 }
 .phone-nav button {
   flex: 1;
-  padding: 12px;
+  min-height: 44px;
+  padding: 8px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: none;
   color: #555;
 }
@@ -57,12 +176,54 @@
   color: #244d42;
   font-weight: 700;
 }
-.phone-app .content {
-  padding: 20px;
+.phone-app .quiz-layout {
+  gap: 8px;
 }
-.phone-app .page-heading h1 {
-  font-size: 24px;
+.phone-app .board-title {
+  padding: 8px 10px;
+}
+.phone-app .board-title h2 {
+  font-size: 13px;
+}
+.phone-app .table-wrap {
+  padding: 0 6px 8px;
+}
+.phone-app .hand-head {
+  padding: 6px 0;
+  font-size: 10px;
 }
 .phone-app .board-panel {
-  overflow: hidden;
+  overflow: visible;
+}
+.phone-app .table {
+  width: min(100%, 330px);
+}
+.phone-app .quiz-answer {
+  margin: 0;
+}
+.phone-app .filters {
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.phone-app .filters button {
+  padding: 8px 10px;
+  min-height: 44px;
+}
+.phone-app .library-row {
+  padding: 12px;
+  gap: 8px;
+}
+.phone-app .library-row small {
+  margin-top: 4px;
+}
+@media (max-width: 600px) {
+  .phone-app .table {
+    width: min(100%, clamp(250px, calc(100svh - 430px), 310px));
+  }
+}
+
+@media (max-width: 600px) {
+  .phone-app .quiz-layout.is-revealed .table {
+    width: min(100%, clamp(240px, calc(100svh - 430px), 270px));
+  }
 }

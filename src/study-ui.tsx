@@ -120,10 +120,12 @@ function Compare({ scene, answer }: { scene: Scene; answer?: string | null }) {
         <span>NAGA推奨 · {scene.model_name}</span>
         <RealTile value={scene.suggested!} />
       </div>
-      <p>
-        候補重み差 <b>{scene.gap?.toFixed(2)}pt</b>
+      <details className="comparison-weight">
+        <summary>
+          候補重み差 <b>{scene.gap?.toFixed(2)}pt</b>
+        </summary>
         <small>分布合計を100に換算 · 勝率や損失ではありません</small>
-      </p>
+      </details>
     </div>
   );
 }
@@ -526,17 +528,24 @@ export function StudyPanel({
       )}
       {active && session ? (
         <>
-          <div className="page-heading compact">
+          <div className="page-heading compact study-heading">
             <h1>{session.mode === "practice" ? "自主練習" : "今日の復習"}</h1>
-            <button className="text-button" disabled={busy} onClick={onHome}>
-              中断してホームへ
+            {!session.complete && (
+              <span className="study-progress">
+                {session.index + 1} / {session.total} 問
+              </span>
+            )}
+            <button
+              className="text-button"
+              aria-label="中断してホームへ"
+              disabled={busy}
+              onClick={onHome}
+            >
+              中断
             </button>
           </div>
           {!session.complete ? (
             <>
-              <div className="study-progress">
-                {session.index + 1} / {session.total} 問
-              </div>
               {session.stale || !session.scene ? (
                 <div className="panel">
                   <p>この問題の学習状態が変更されました。</p>
@@ -558,13 +567,12 @@ export function StudyPanel({
                   </button>
                 </div>
               ) : (
-                <div className="quiz-layout">
+                <div
+                  className={`quiz-layout ${session.revealed ? "is-revealed" : ""}`}
+                >
                   <section className="board-panel">
                     <div className="board-title">
                       <h2>{roundLabel(session.scene)}</h2>
-                      <span>
-                        {session.mode === "practice" ? "自主練習" : "定期復習"}
-                      </span>
                     </div>
                     <fieldset className="quiz-board" disabled={busy}>
                       <RealTable
@@ -576,7 +584,9 @@ export function StudyPanel({
                       />
                     </fieldset>
                   </section>
-                  <aside className="panel quiz-answer">
+                  <aside
+                    className={`panel quiz-answer ${session.revealed ? "revealed" : "choosing"}`}
+                  >
                     {session.revealed ? (
                       <>
                         <h2>答え合わせ</h2>
@@ -591,8 +601,12 @@ export function StudyPanel({
                         >
                           回答を選び直す
                         </button>
-                        <h3>今回の理解度</h3>
-                        <div className="ratings">
+                        <h3 className="rating-heading">今回の理解度</h3>
+                        <div
+                          className="ratings"
+                          role="group"
+                          aria-label="今回の理解度"
+                        >
                           {["理解した", "再復習", "保留"].map((rating, i) => (
                             <button
                               className={`button ${i === 0 ? "primary" : "secondary"}`}
@@ -612,7 +626,7 @@ export function StudyPanel({
                       </>
                     ) : (
                       <>
-                        <h2>切る牌を選択</h2>
+                        <h2 className="answer-prompt">切る牌を選択</h2>
                         <div className="chosen-tile">
                           {session.selected ? (
                             <RealTile value={session.selected} />
@@ -629,10 +643,11 @@ export function StudyPanel({
                         </button>
                         <button
                           className="text-button"
+                          aria-label="選択を取り消す"
                           disabled={busy || !session.selected}
                           onClick={() => choice("clear")}
                         >
-                          選択を取り消す
+                          取消
                         </button>
                       </>
                     )}

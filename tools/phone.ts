@@ -251,6 +251,7 @@ export function phoneSite(): Plugin {
           css: "text/css",
           webmanifest: "application/manifest+json",
           png: "image/png",
+          svg: "image/svg+xml",
         } as Record<string, string>
       )[ext] ?? "application/octet-stream",
     );
