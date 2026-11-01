@@ -46,6 +46,8 @@ npm test
 
 ## 仕様と検証
 
+- [PR #1 統合前レビューと実レポートの一連確認](docs/INTEGRATION-REVIEW.md)
+
 - [MVP全体との照合と残る確認](docs/MVP-ACCEPTANCE.md)
 - [解析待ち入口と結果紐づけ](docs/ANALYSIS-INBOX-RESULT.md)
 
