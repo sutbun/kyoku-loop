@@ -5,6 +5,7 @@ import { StudyPanel, PracticeCard } from "./study-ui";
 import type { Detail, Scene, Stage, Workspace } from "./real-types";
 import { SourceInput, AnalysisList, AnalysisGuide } from "./analysis-ui";
 import type { AnalysisEntry } from "./analysis-queue";
+import { openMortal, MORTAL_COPIED, MORTAL_PAGE } from "./mortal-handoff";
 
 import { VERSION } from "./version";
 export { VERSION };
@@ -270,6 +271,11 @@ export function RealApp() {
           {notice && (
             <div className="inline-notice" role="status">
               {notice}
+              {notice.startsWith("URLをコピー") && (
+                <a href={MORTAL_PAGE} target="_blank" rel="noopener noreferrer">
+                  Mortalを開く
+                </a>
+              )}
               <button
                 className="text-button"
                 aria-label="通知を閉じる"
@@ -316,6 +322,7 @@ export function RealApp() {
                   </button>
                 </div>
                 <SourceInput
+                  mortal
                   disabled={busy}
                   onSave={async (url) => {
                     await api({ action: "analysis_add", url });
@@ -326,8 +333,14 @@ export function RealApp() {
                   entries={workspace.analysis_queue ?? []}
                   disabled={busy}
                   onOpen={(entry) => {
-                    window.open(entry.url, "_blank", "noopener,noreferrer");
-                    if (!workspace.analysis_setup) setGuide(true);
+                    void run(async () => {
+                      const copied = await openMortal(entry.url);
+                      setNotice(
+                        copied
+                          ? MORTAL_COPIED
+                          : `URLをコピーできませんでした。手動でコピーしてください：${entry.url}`,
+                      );
+                    });
                   }}
                   onResult={(entry) => {
                     setAnalysis(entry);

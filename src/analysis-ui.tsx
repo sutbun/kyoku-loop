@@ -1,5 +1,11 @@
 import { useState } from "react";
 import {
+  openMortal,
+  MORTAL_COPIED,
+  MORTAL_COPY_FAILED,
+  MORTAL_PAGE,
+} from "./mortal-handoff";
+import {
   analysisStatus,
   sourceURL,
   type AnalysisEntry,
@@ -8,34 +14,61 @@ import {
 export function SourceInput({
   disabled,
   onSave,
+  mortal,
 }: {
   disabled: boolean;
   onSave: (url: string) => Promise<void>;
+  mortal?: boolean;
 }) {
   const [url, setURL] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false),
     [error, setError] = useState("");
+  const submit = (analyse: boolean) => {
+    let canonical: string;
+    try {
+      canonical = sourceURL(url);
+    } catch {
+      setError("雀魂の共有URLを確認してください。");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setNotice("");
+    let handoff: Promise<boolean | null>;
+    try {
+      handoff = analyse ? openMortal(canonical) : Promise.resolve(null);
+    } catch {
+      setSaving(false);
+      setError("Mortal画面を開けませんでした。もう一度操作してください。");
+      return;
+    }
+    const saved = Promise.resolve().then(() => onSave(canonical));
+    void Promise.all([saved, handoff])
+      .then(([, copied]) => {
+        if (copied === false) {
+          setNotice("解析待ちに追加しました");
+          setError(MORTAL_COPY_FAILED);
+        } else {
+          setURL("");
+          setNotice(copied ? MORTAL_COPIED : "解析待ちに追加しました");
+        }
+      })
+      .catch((e) =>
+        setError(
+          e instanceof Error
+            ? e.message
+            : "保存できませんでした。同じURLで再試行できます。",
+        ),
+      )
+      .finally(() => setSaving(false));
+  };
   return (
     <form
       className="source-input"
       onSubmit={(e) => {
         e.preventDefault();
-        setSaving(true);
-        setError("");
-        void onSave(url)
-          .then(() => {
-            setURL("");
-            setNotice("解析待ちに追加しました");
-          })
-          .catch((e) =>
-            setError(
-              e instanceof Error
-                ? e.message
-                : "保存できませんでした。同じURLで再試行できます。",
-            ),
-          )
-          .finally(() => setSaving(false));
+        submit(!!mortal);
       }}
     >
       <label>
@@ -60,12 +93,32 @@ export function SourceInput({
         />
       </label>
       <button
-        className="button primary"
+        className={`button ${mortal ? "secondary" : "primary"}`}
+        type={mortal ? "button" : "submit"}
+        onClick={mortal ? () => submit(false) : undefined}
         disabled={disabled || saving || !url.trim()}
       >
         保存
       </button>
-      {notice && <span role="status">{notice}</span>}
+      {mortal && (
+        <button
+          type="submit"
+          className="button primary"
+          disabled={disabled || saving || !url.trim()}
+        >
+          コピーしてMortalへ
+        </button>
+      )}
+      {notice && (
+        <span role="status">
+          {notice}
+          {mortal && (
+            <a href={MORTAL_PAGE} target="_blank" rel="noopener noreferrer">
+              Mortalを開く
+            </a>
+          )}
+        </span>
+      )}
       {error && <span role="alert">{error}</span>}
     </form>
   );
@@ -106,7 +159,7 @@ export function AnalysisList({
                 disabled={disabled}
                 onClick={() => onOpen?.(e)}
               >
-                NAGAで解析
+                コピーしてMortalへ
               </button>
               <button
                 className="button secondary"
@@ -137,30 +190,19 @@ export function AnalysisGuide({ onClose }: { onClose: () => void }) {
     <section className="panel analysis-guide" aria-label="解析の手順">
       <h2>解析の手順</h2>
       <ol>
-        <li>「NAGAで解析」で雀魂の牌譜を開き、必要ならログインします。</li>
+        <li>雀魂の共有URLを貼り、「コピーしてMortalへ」を押します。</li>
         <li>
-          本人が用意した変換手段で、必要な局を天鳳牌譜エディタ形式にします。例として
           <a
-            href="https://chromewebstore.google.com/detail/kdmfnkdgpialmejpgflfllkjakolamcc"
+            href="https://mjai.ekyu.moe/ja.html"
             target="_blank"
             rel="noreferrer"
           >
-            雀魂牌譜検討サポーター
+            Mortal
           </a>
-          があります。利用する拡張の権限・対応環境は提供元で確認してください。
+          の牌譜URL欄に貼り付け、使用するAIがMortalであることを確認して「送信」。雀魂へのログイン・拡張は不要です。四麻半荘が対象です。
         </li>
         <li>
-          <a
-            href="https://naga.dmv.nico/naga_report/top/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            NAGA公式
-          </a>
-          のカスタム牌譜解析で、対象局・タイプ・消費ポイントを確認し、本人が実行します。
-        </li>
-        <li>
-          完了したレポートURLを、この牌譜の「結果を登録」へ貼り付けます。取得済みJSONファイルも使えます。
+          解析後、この牌譜の「結果を登録」へ結果URLまたは取得済みJSONを渡します。URL取得が拒否された場合はJSONを使います。
         </li>
       </ol>
       <button className="button secondary" onClick={onClose}>

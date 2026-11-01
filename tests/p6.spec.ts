@@ -147,6 +147,9 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
     await page.getByRole("button", { name: "保存", exact: true }).click();
     await expect(page.getByTestId("analysis-row")).toContainText(
       "この端末に保存済み・未同期",
+      // The real Python route fixture can block the test controller beyond
+      // its default five seconds; still require the committed row to appear.
+      { timeout: 30000 },
     );
     await expect
       .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), {
@@ -181,11 +184,14 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
     await win.goto("http://127.0.0.1:1460/");
     const row = win.getByTestId("analysis-row");
     await expect(row).toContainText("保存済み・未解析");
-    // Opening a game is navigation only; it does not mark NAGA as running.
+    // Copy/open is preparation only; it does not mark an analysis as requested.
     await win.evaluate(() => {
       window.open = () => null;
     });
-    await row.getByRole("button", { name: "NAGAで解析", exact: true }).click();
+    await row
+      .getByRole("button", { name: "コピーしてMortalへ", exact: true })
+      .click();
+    await win.getByRole("button", { name: "解析の手順", exact: true }).click();
     await expect(win.getByRole("region", { name: "解析の手順" })).toBeVisible();
     await win
       .getByRole("button", { name: "確認しました", exact: true })
@@ -195,7 +201,9 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
       .click();
     await expect(row).toContainText("本人申告");
     await win.reload();
-    await row.getByRole("button", { name: "NAGAで解析", exact: true }).click();
+    await row
+      .getByRole("button", { name: "コピーしてMortalへ", exact: true })
+      .click();
     await expect(win.getByRole("region", { name: "解析の手順" })).toHaveCount(
       0,
     );

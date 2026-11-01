@@ -224,7 +224,9 @@ test("PWA commits atomically, resumes with no network after browser restart and 
     await expect(page.getByTestId("offline-status")).toContainText(
       "オフライン利用可能 · 5問",
     );
-    await expect(page.getByText("回答 未送信 1件", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("回答 未送信 1件", { exact: true }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "復習を再開する" }).click();
     await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
     expect((await read(page)).events[0]).toEqual(event);
@@ -303,12 +305,22 @@ test("PWA commits atomically, resumes with no network after browser restart and 
       return finished;
     });
     expect(installation).toBe("redundant");
-    expect(
-      await page.evaluate(
-        (name) => caches.has("kyokuloop-shell-" + name),
-        mixedBuild,
-      ),
-    ).toBe(false);
+    // Registration/repair may queue another update attempt. Wait for it to
+    // settle as well as for the failed generation's cache to disappear.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async (name) => {
+            const registration =
+              await navigator.serviceWorker.getRegistration("/phone/");
+            return (
+              !registration?.installing &&
+              !(await caches.has("kyokuloop-shell-" + name))
+            );
+          }, mixedBuild),
+        { timeout: 15000 },
+      )
+      .toBe(true);
     expect((await read(page)).events[0]).toEqual(event);
     const nextBuild = oldBuild + "generated";
     writeFileSync(workerFile, originalWorker.replace(oldBuild, nextBuild));
