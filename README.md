@@ -2,9 +2,9 @@
 
 対局後の気づきを反復学習へつなげる、完全な個人利用・非公開の四人麻雀ツール。販売・配布・公開サービス化は目的にしない。
 
-現在は **P3 Windows復習 DEV-11.01-3**。NAGA現行カスタムレポートの取り込み・局面表示・登録に加え、実データの最大5問復習、回答履歴、JST期限、卒業・保留・再学習、バックアップと復元に対応する。
+現在は **P4 オフラインPWA DEV-11.01-4**。Windowsの実データ復習に加え、専用の `/phone/` に本体・問題・回答を端末保存するPWAを実装。本人限定HTTPSで問題取得と保存完了を確認済み。実iPhoneでの合格確認が残る。
 
-**P0の中核ゲート通過、P1のクイズ動線はユーザー確認済み**。P2では指定9レポート・両モデルの内部検証と原雀魂の5判断照合を実施。P3は固定日時のテストと実データのprivate複製で復習・期限・復元を検証した。iPhoneオフラインと同期はP4/P5の範囲で未実装。
+**P0の中核ゲート通過、P1のクイズ動線はユーザー確認済み**。P2では指定9レポート・両モデルの内部検証と原雀魂の5判断照合を実施。P3は固定日時と実データのprivate複製で復習・期限・復元を検証した。P4実機ゲートは未合格、P5同期は未実装。
 
 ## 起動
 
@@ -17,13 +17,15 @@ npm run dev
 
 [アプリを開く](http://127.0.0.1:1460/)。ポート1460は `sutbun/ai-dev/DEV-PORTS.md` に登録済み。loopback限定、使用中は他の番号へ自動変更しない。終了は起動したコンソールでCtrl+C。
 
+iPhone用は先に `npm run build` を実行してから起動し、本人限定HTTPS経路で `/phone/` を開く。[P4の設定・保存と実機確認](docs/P4-OFFLINE-RESULT.md)を参照。
+
 ```powershell
 npm run check
 npm run build
 npm test
 ```
 
-`npm test` はP0/P2/P3のPythonテストと画面テストを実行する。画面テストは既存Edgeで、Windows幅とiPhone 13相当の幅を使用。Safari/iPhone実機の検証とは異なる。P3の画面テストは生成データをprivateの一時SQLiteへ保存し、実バックエンドへ接続する。利用中のDBや実レポートを必要としない。GitHub Actionsは使用しない。
+`npm test` はビルド後にP0〜P4のPython・画面・オフラインテストを実行する。画面テストは既存Edgeで、Windows幅とiPhone 13相当の幅を使用。Safari/iPhone実機の検証とは異なる。生成データをprivateの一時SQLite/ブラウザプロファイルへ保存し、利用中のDBや実レポートを必要としない。Worker更新のテストはビルド済み静的ファイルを一時変更して最後に復元するため、必ず `--workers=1` で実行し、同時にビルドしない。GitHub Actionsは使用しない。
 
 ## 現在の範囲
 
@@ -48,6 +50,7 @@ npm test
 - [P1 画面状態・再現手順・ゲート](docs/P1-UX-RESULT.md)
 - [P2 実装境界・検証結果](docs/P2-WINDOWS-RESULT.md)
 - [P3 学習・期限・復元の仕様と検証](docs/P3-STUDY-RESULT.md)
+- [P4 オフラインの保存・アクセス・実機ゲート](docs/P4-OFFLINE-RESULT.md)
 - 共通ルール: [sutbun/ai-dev](https://github.com/sutbun/ai-dev)
 
 実牌譜・個人URL・Cookie・認証情報・実学習履歴はGit登録禁止。私的検証データはrepo外の `D:/dev-data/kyoku-loop/private/` に置く。旧ツール由来データは使用しない。ログやスクリーンショットにも実データを混入させない。

@@ -28,6 +28,26 @@ def public_scene(scene):
 
 
 class StudyMixin:
+    def phone_pack(self):
+        """Read-only, minimal study bundle. No reports, identities or URLs."""
+        source=self.db.execute("SELECT value FROM study_settings WHERE key='device'").fetchone()[0]
+        items=[]
+        histories={}
+        for row in self.db.execute('SELECT * FROM study_items ORDER BY rowid'):
+            item=dict(row)
+            scene=json.loads(item['scene'])
+            safe=public_scene(scene)
+            safe.update({k:scene[k] for k in ('actual','suggested','gap','weights_percent','model_name')})
+            item['scene']=safe
+            item['history']=json.loads(item['history'])
+            item['review_count']=self.db.execute("SELECT count(*) FROM review_events WHERE item=? AND kind='answer'",(item['id'],)).fetchone()[0]
+            items.append(item)
+            history=self.item_history(item['id'])
+            history['scene']=safe
+            histories[item['id']]=history
+        return {'schema':1,'policy':1,'source':source,'exported_at':self.moment().isoformat(),
+                'items':items,'histories':histories}
+
     def moment(self):
         value = self.clock() if self.clock else datetime.now(timezone.utc)
         if value.tzinfo is None:

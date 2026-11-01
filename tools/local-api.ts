@@ -15,6 +15,12 @@ function handle(req: IncomingMessage, res: ServerResponse, next: () => void) {
   };
   if (
     req.headers.host !== "127.0.0.1:1460" ||
+    Object.keys(req.headers).some(
+      (k) =>
+        k.startsWith("tailscale-") ||
+        k.startsWith("x-forwarded-") ||
+        k === "forwarded",
+    ) ||
     (req.headers.origin && req.headers.origin !== "http://127.0.0.1:1460") ||
     req.headers["sec-fetch-site"] === "cross-site" ||
     req.method !== "POST" ||

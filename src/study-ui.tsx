@@ -316,6 +316,7 @@ function BackupDialog({
   );
 }
 export function StudyPanel({
+  portable = false,
   workspace,
   active,
   filter,
@@ -326,6 +327,7 @@ export function StudyPanel({
   onHome,
   onReview,
 }: {
+  portable?: boolean;
   workspace: Workspace;
   active: boolean;
   filter: string;
@@ -596,13 +598,15 @@ export function StudyPanel({
         <>
           <div className="page-heading">
             <h1>学習ライブラリ</h1>
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={() => setBackups(true)}
-            >
-              バックアップと復元
-            </button>
+            {!portable && (
+              <button
+                className="button secondary"
+                disabled={busy}
+                onClick={() => setBackups(true)}
+              >
+                バックアップと復元
+              </button>
+            )}
           </div>
           <PracticeCard workspace={workspace} disabled={busy} onBegin={begin} />
           <div className="filters" aria-label="学習状態">
@@ -712,18 +716,20 @@ export function StudyPanel({
           <h3>{roundLabel(history.scene)}</h3>
           <RealTable scene={history.scene} />
           <Compare scene={history.scene} />
-          <button
-            className="text-button"
-            onClick={() => {
-              onReview(
-                workspace.items.find((i) => i.id === history.id)!.report,
-                history.id,
-              );
-              setHistory(null);
-            }}
-          >
-            元の牌譜を確認
-          </button>
+          {!portable && (
+            <button
+              className="text-button"
+              onClick={() => {
+                onReview(
+                  workspace.items.find((i) => i.id === history.id)!.report,
+                  history.id,
+                );
+                setHistory(null);
+              }}
+            >
+              元の牌譜を確認
+            </button>
+          )}
           <h3>回答履歴</h3>
           <div className="answer-history">
             {history.events.map((event) => (

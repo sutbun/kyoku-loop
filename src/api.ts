@@ -1,4 +1,15 @@
 export const errors: Record<string, string> = {
+  pending_records:
+    "未送信の記録または途中の復習があるため、問題を上書きできません。現在の問題と記録は保持しています。",
+  different_source: "別のWindows保存先の問題です。現在の問題を保持しています。",
+  invalid_pack:
+    "問題の整合性を確認できません。現在の保存内容は保持しています。",
+  pack_large: "問題が多すぎます。保存内容は保持しています。",
+  shell_missing:
+    "アプリ本体の保存を確認できません。通信を確認し、アプリを完全に閉じて開き直してから保存し直してください。",
+  secure_required: "Safariで専用のHTTPSアドレスを開いてください。",
+  storage_blocked:
+    "別の画面で保存先を使用中です。ほかのKyokuLoop画面を閉じて再試行してください。",
   unsupported_storage:
     "この保存データは別の版で作成されています。対応するアプリで開いてください。",
   study_changed: "学習状態が変更されています。最新の状態を確認してください。",
@@ -37,6 +48,24 @@ export const errors: Record<string, string> = {
     "このレポートには別の元対局が登録されています。元対局URLを確認してください。",
 };
 export async function api<T>(request: object): Promise<T> {
+  if (location.pathname.startsWith("/phone/")) {
+    try {
+      return await (
+        await import("./offline/store")
+      ).phoneTransaction<T>(request as Record<string, unknown>);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "QuotaExceededError")
+        throw new Error(
+          "空き容量が足りず保存できません。今回の操作は完了していません。",
+        );
+      throw new Error(
+        e instanceof Error
+          ? (errors[e.message] ??
+              "端末に保存できませんでした。同じ操作で再試行してください。")
+          : "端末に保存できませんでした。",
+      );
+    }
+  }
   let response: Response;
   try {
     response = await fetch("/api/local", {

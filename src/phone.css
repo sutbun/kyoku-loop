@@ -1,0 +1,68 @@
+.phone-app {
+  max-width: 1100px;
+  margin: auto;
+  padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+.phone-app main {
+  margin: 0;
+  min-width: 0;
+}
+.phone-header {
+  padding: calc(16px + env(safe-area-inset-top)) 20px 16px;
+  background: #244d42;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.phone-header span {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.phone-status {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+.phone-download small {
+  display: block;
+  margin-top: 12px;
+}
+.phone-app .panel {
+  margin-top: 20px;
+}
+.phone-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: #fff;
+  border-top: 1px solid #deded7;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  z-index: 10;
+}
+.phone-nav button {
+  flex: 1;
+  padding: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #555;
+}
+.phone-nav button[aria-current="page"] {
+  background: #e8eee7;
+  color: #244d42;
+  font-weight: 700;
+}
+.phone-app .content {
+  padding: 20px;
+}
+.phone-app .page-heading h1 {
+  font-size: 24px;
+}
+.phone-app .board-panel {
+  overflow: hidden;
+}

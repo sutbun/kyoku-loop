@@ -4,7 +4,7 @@ import { RealTable, RealTile, roundLabel, eventLabels } from "./real-board";
 import { StudyPanel, PracticeCard } from "./study-ui";
 import type { Detail, Scene, Stage, Workspace } from "./real-types";
 
-export const VERSION = "DEV-11.01-3";
+export const VERSION = "DEV-11.01-4";
 export function RealApp() {
   const [workspace, setWorkspace] = useState<Workspace>({
     reports: [],
@@ -203,7 +203,7 @@ export function RealApp() {
         </nav>
         <div className="sidebar-foot">
           <span className="demo-tag">Windows · ローカル保存</span>
-          <small>同期・オフライン未対応</small>
+          <a href="/phone/">iPhone用オフライン版</a>
           <span className="version">{VERSION}</span>
         </div>
       </aside>

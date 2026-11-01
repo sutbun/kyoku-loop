@@ -316,6 +316,7 @@ def main():
         elif action=='study_control': result=store.study_control(request.get('item'),request.get('control'),request.get('event'))
         elif action=='study_undo_control': result=store.study_undo_control(request.get('original'),request.get('event'))
         elif action=='item_history': result=store.item_history(request.get('item'))
+        elif action=='offline_pack': result=store.phone_pack()
         elif action=='backup_list': result=store.backup_list()
         elif action=='backup_create': result=store.backup_create()
         elif action=='backup_export': result=store.backup_export(request.get('name'))
