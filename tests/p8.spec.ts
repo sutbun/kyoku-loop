@@ -99,6 +99,16 @@ test("Mortal result import fixes its analysed player, preserves exact red tile a
 });
 
 test("Mortal phone policy survives offline study, redaction and backup without changing the red tile", () => {
+  expect(generated.pack.policy).toBe(2);
+  const wrongPolicy = structuredClone(generated.pack);
+  wrongPolicy.policy = 1;
+  expect(() =>
+    phoneReduce(
+      freshPhoneState("wrong-policy"),
+      { action: "install_pack", pack: wrongPolicy },
+      "2026-11-02T12:00:00+09:00",
+    ),
+  ).toThrow("invalid_pack");
   const at = "2026-11-02T12:00:00+09:00";
   let state = phoneReduce(
     freshPhoneState("fictional-mortal-phone"),

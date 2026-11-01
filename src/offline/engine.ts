@@ -23,7 +23,7 @@ export type ItemState = {
 export type PhoneItem = LibraryItem & ItemState;
 export type PhonePack = {
   schema: 1;
-  policy: 1;
+  policy: 1 | 2;
   source: string;
   exported_at: string;
   items: PhoneItem[];
@@ -102,7 +102,7 @@ export function validatePack(value: unknown): asserts value is PhonePack {
     if (
       !p ||
       p.schema !== 1 ||
-      p.policy !== 1 ||
+      ![1, 2].includes(p.policy) ||
       typeof p.source !== "string" ||
       !p.source ||
       !Number.isFinite(Date.parse(p.exported_at)) ||
@@ -130,6 +130,9 @@ export function validatePack(value: unknown): asserts value is PhonePack {
         fail("invalid_pack");
       ids.add(i.id);
       const s = i.scene;
+      if (s?.engine !== undefined && !["NAGA", "Mortal"].includes(s.engine))
+        fail("invalid_pack");
+      if (s?.engine === "Mortal" && p.policy !== 2) fail("invalid_pack");
       if (
         !s ||
         s.id !== i.id ||

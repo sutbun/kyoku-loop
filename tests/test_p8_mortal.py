@@ -114,6 +114,7 @@ class MortalTests(unittest.TestCase):
         self.assertEqual(first['id'],again['id'])
         self.assertEqual(before,self.store.state()['items'])
         pack=self.store.phone_pack()
+        self.assertEqual(pack['policy'],2)
         self.assertEqual(pack['items'][0]['scene']['engine'],'Mortal')
         self.assertNotIn('raw_weights',pack['items'][0]['scene'])
         saved=self.store.backup_create()

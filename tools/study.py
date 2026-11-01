@@ -55,7 +55,10 @@ class StudyMixin:
             history=self.item_history(item['id'])
             history['scene']=safe
             histories[item['id']]=history
-        return {'schema':1,'policy':1,'source':source,'exported_at':self.moment().isoformat(),
+        # Older phone shells hard-code NAGA labels. They must refuse a Mortal
+        # bundle instead of displaying another engine's evaluations as NAGA.
+        policy = 2 if any(i['scene'].get('engine') == 'Mortal' for i in items) else 1
+        return {'schema':1,'policy':policy,'source':source,'exported_at':self.moment().isoformat(),
                 'items':items,'histories':histories}
 
     def moment(self):
