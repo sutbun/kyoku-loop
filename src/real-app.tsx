@@ -7,6 +7,11 @@ import { SourceInput, AnalysisList, AnalysisGuide } from "./analysis-ui";
 import type { AnalysisEntry } from "./analysis-queue";
 import { mortalLink, MORTAL_PAGE } from "./mortal-handoff";
 import { BulkHistoryInput } from "./bulk-history-ui";
+import {
+  MortalInboxSettings,
+  ReportSourceLink,
+  entryLabel,
+} from "./mortal-inbox-ui";
 
 import { VERSION } from "./version";
 export { VERSION };
@@ -114,10 +119,10 @@ export function RealApp() {
       );
     }
   };
-  const inspect = async (data: object) => {
+  const inspect = async (data: object, entry = analysis) => {
     const result = await api<Stage>({ action: "inspect", ...data });
     setStage(result);
-    setSource(analysis?.url ?? "");
+    setSource(entry?.url ?? "");
     setSeat(result.target_seat != null ? String(result.target_seat) : "");
     setModel(
       result.preferred_model != null &&
@@ -126,16 +131,25 @@ export function RealApp() {
         : "",
     );
   };
-  const upload = (file: File | undefined) => {
+  const upload = (file: File | undefined, entry = analysis) => {
     if (!file) return;
+    setStage(null);
     void run(async () => {
       if (file.size > 20 * 1024 * 1024) throw new Error(errors.size_limit);
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = "";
       for (let n = 0; n < bytes.length; n += 8192)
         binary += String.fromCharCode(...bytes.subarray(n, n + 8192));
-      await inspect({ data: btoa(binary) });
+      await inspect({ data: btoa(binary) }, entry);
     });
+  };
+  const resultEntry = (entry: AnalysisEntry) => {
+    setAnalysis(entry);
+    setStage(null);
+    setUrl("");
+    setSource(entry.url);
+    setError("");
+    setAdding(true);
   };
   const important =
     detail?.important
@@ -344,6 +358,14 @@ export function RealApp() {
                 <AnalysisList
                   entries={workspace.analysis_queue ?? []}
                   disabled={busy}
+                  onDropResult={(entry, files) => {
+                    resultEntry(entry);
+                    if (files.length !== 1) {
+                      setError(errors.multiple_files);
+                      return;
+                    }
+                    upload(files[0], entry);
+                  }}
                   onOpen={(entry) => {
                     window.open(
                       mortalLink(entry.url),
@@ -352,12 +374,7 @@ export function RealApp() {
                     );
                   }}
                   onResult={(entry) => {
-                    setAnalysis(entry);
-                    setStage(null);
-                    setUrl("");
-                    setSource(entry.url);
-                    setError("");
-                    setAdding(true);
+                    resultEntry(entry);
                   }}
                   onRequested={(entry) =>
                     void run(async () => {
@@ -370,6 +387,7 @@ export function RealApp() {
                     })
                   }
                 />
+                <MortalInboxSettings disabled={busy} onChange={refresh} />
               </section>
               {guide && (
                 <AnalysisGuide
@@ -409,6 +427,24 @@ export function RealApp() {
                         <span className="badge">
                           重要局面 {r.important_count}
                         </span>
+                        {r.engine === "Mortal" && !r.source_linked && (
+                          <ReportSourceLink
+                            report={r.id}
+                            entries={workspace.analysis_queue ?? []}
+                            disabled={busy}
+                            onLink={(report, analysis_id) =>
+                              void run(async () => {
+                                setWorkspace(
+                                  await api<Workspace>({
+                                    action: "report_link",
+                                    report,
+                                    analysis_id,
+                                  }),
+                                );
+                              })
+                            }
+                          />
+                        )}
                         <button
                           className="button secondary"
                           disabled={busy}
@@ -645,7 +681,11 @@ export function RealApp() {
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
-            if (!busy) upload(e.dataTransfer.files[0]);
+            if (!busy) {
+              if (e.dataTransfer.files.length !== 1)
+                setError(errors.multiple_files);
+              else upload(e.dataTransfer.files[0]);
+            }
           }}
         >
           <div className="section-title">
@@ -663,6 +703,11 @@ export function RealApp() {
             <div className="error" role="alert">
               {error}
             </div>
+          )}
+          {analysis && (
+            <p className="source-context" data-testid="result-source-context">
+              {entryLabel(analysis)}
+            </p>
           )}
           {!stage ? (
             <>

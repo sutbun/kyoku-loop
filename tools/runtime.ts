@@ -13,6 +13,11 @@ import type { Plugin, ViteDevServer } from "vite";
 import { DEVELOPMENT_VERSION } from "../src/version.ts";
 
 const children = new Set<ChildProcess>();
+const backgroundStops = new Set<() => void>();
+export function registerBackgroundStop(stop: () => void) {
+  backgroundStops.add(stop);
+  return () => backgroundStops.delete(stop);
+}
 export function trackChild(child: ChildProcess) {
   children.add(child);
   child.once("close", () => children.delete(child));
@@ -101,6 +106,7 @@ export function createRuntimeControl(
         if (active || childCount()) return reply(409, { error: "busy" });
         if (draining) return reply(409, { error: "stopping" });
         draining = true;
+        for (const stopBackground of backgroundStops) stopBackground();
         res.once("finish", () => {
           setImmediate(() => void stop());
         });

@@ -1,8 +1,95 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
-import { trackChild } from "./runtime.ts";
+import { trackChild, registerBackgroundStop } from "./runtime.ts";
+
+// Runs in the existing Windows process even when its browser tab is closed.
+// A disabled/unconfigured inbox launches no background Python process.
+export function startInbox(
+  server: Pick<import("vite").ViteDevServer, "httpServer">,
+) {
+  let running = false,
+    stopped = false;
+  const settings = join(
+    dirname(
+      process.env.KYOKULOOP_DB ||
+        "D:/dev-data/kyoku-loop/private/app/kyokuloop.sqlite3",
+    ),
+    "mortal-inbox-settings.json",
+  );
+  const failure = join(dirname(settings), "mortal-inbox-error.json");
+  const timer = setInterval(() => {
+    if (
+      running ||
+      stopped ||
+      !server.httpServer?.listening ||
+      existsSync(failure)
+    )
+      return;
+    try {
+      if (JSON.parse(readFileSync(settings, "utf8")).enabled !== true) return;
+    } catch {
+      return;
+    }
+    running = true;
+    const child = spawn(
+      process.env.KYOKULOOP_PYTHON || "python",
+      [fileURLToPath(new URL("./p2_store.py", import.meta.url))],
+      {
+        stdio: ["pipe", "pipe", "ignore"],
+        windowsHide: true,
+      },
+    );
+    trackChild(child);
+    let output = "",
+      timedOut = false;
+    child.stdout.on("data", (chunk) => {
+      if (output.length < 65536) output += chunk.toString();
+    });
+    const failed = () => {
+      try {
+        writeFileSync(failure, '{"error":"inbox_service_error"}');
+      } catch {}
+    };
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      failed();
+      child.kill();
+    }, 60000);
+    const finish = () => {
+      clearTimeout(timeout);
+      running = false;
+    };
+    child.once("error", () => {
+      failed();
+      finish();
+    });
+    child.once("close", (code) => {
+      try {
+        if (timedOut || code !== 0 || !JSON.parse(output).ok) failed();
+      } catch {
+        failed();
+      }
+      finish();
+    });
+    child.stdin.on("error", () => {});
+    child.stdin.end(JSON.stringify({ action: "inbox_scan" }));
+  }, 5000);
+  timer.unref();
+  const stop = () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+  const unregister = registerBackgroundStop(stop);
+  server.httpServer?.once("close", () => {
+    stop();
+    unregister();
+  });
+  return stop;
+}
 
 // Vite and preview share one loopback port. No separate exposed API service.
 function handle(req: IncomingMessage, res: ServerResponse, next: () => void) {
@@ -92,9 +179,11 @@ export function localApi(): Plugin {
   return {
     name: "kyokuloop-private-local-api",
     configureServer(server) {
+      startInbox(server);
       server.middlewares.use(handle);
     },
     configurePreviewServer(server) {
+      startInbox(server);
       server.middlewares.use(handle);
     },
   };

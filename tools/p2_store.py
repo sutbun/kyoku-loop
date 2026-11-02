@@ -376,6 +376,24 @@ class Store(StudyMixin, AnalysisQueueMixin):
                 self.db.execute("DELETE FROM study_items WHERE id=? AND automatic=0 AND manual=0 AND history='[]' AND NOT EXISTS(SELECT 1 FROM review_events WHERE item=study_items.id)",(ident,))
         return self.detail(report_id)
 
+    def link_source(self, report_id, analysis_id):
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            entry = self.analysis_entry(analysis_id)
+            row = self.db.execute('SELECT content,source_game_url FROM reports WHERE id=?', (report_id,)).fetchone()
+            if not row:
+                raise ImportFailure('invalid_request')
+            if row['source_game_url'] and row['source_game_url'] != entry['url']:
+                raise ImportFailure('source_conflict')
+            content = json.loads(row['content'])
+            content['source_link_kind'] = 'manual'
+            self.db.execute('UPDATE reports SET source_game_url=?,content=? WHERE id=?',
+                            (entry['url'], json.dumps(content,ensure_ascii=False), report_id))
+            if report_id not in entry['reports']:
+                entry['reports'].append(report_id)
+            self._put_analysis(entry)
+        return self.state()
+
 
 def main():
     store=None
@@ -393,6 +411,14 @@ def main():
             result=store.stage(payload,url)
         elif action=='commit':
             result=store.commit(request.get('token'),request.get('seat'),request.get('model'),request.get('source_url') or None,request.get('analysis_id'))
+        elif action in ('inbox_status','inbox_config','inbox_scan'):
+            try:from .mortal_inbox import MortalInbox
+            except ImportError:from mortal_inbox import MortalInbox
+            inbox=MortalInbox(store)
+            if action=='inbox_config': result=inbox.configure(request.get('enabled'),request.get('folder'))
+            elif action=='inbox_scan': result=inbox.scan()
+            else: result=inbox.status()
+        elif action=='report_link': result=store.link_source(request.get('report'),request.get('analysis_id'))
         elif action=='analysis_add': result=store.analysis_add(request.get('url'))
         elif action=='analysis_bulk': result=store.analysis_bulk(request.get('data'))
         elif action=='analysis_sync': result=store.analysis_receive(request.get('entries'))
