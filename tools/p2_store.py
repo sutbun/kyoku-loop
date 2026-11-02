@@ -467,4 +467,7 @@ def main():
 
 
 if __name__=='__main__':
+    # Optional local adapters import the same exception/codec definitions when
+    # this file is launched as a script as well as when imported by tests.
+    sys.modules.setdefault('p2_store', sys.modules[__name__])
     main()

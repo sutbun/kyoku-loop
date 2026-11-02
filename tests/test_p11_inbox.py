@@ -2,6 +2,9 @@
 import gzip
 import json
 import tempfile
+import subprocess
+import os
+import sys
 import unittest
 from pathlib import Path
 from tools.p2_store import Store, ImportFailure
@@ -155,6 +158,13 @@ class InboxTests(unittest.TestCase):
         self.assertEqual(self.inbox.status()['error'],'inbox_service_error')
         self.inbox.configure(True,str(self.folder))
         self.assertIsNone(self.inbox.status()['error'])
+
+    def test_cli_uses_the_same_public_validation_errors_as_imported_store(self):
+        response=subprocess.run([sys.executable,'tools/p2_store.py'],
+            input=json.dumps({'action':'inbox_config','enabled':True,'folder':'relative'}),
+            text=True,capture_output=True,check=True,
+            env={**os.environ,'KYOKULOOP_DB':str(self.store.path)})
+        self.assertEqual(json.loads(response.stdout),{'ok':False,'error':'invalid_inbox_folder'})
 
     def test_receipt_without_restored_report_does_not_skip_the_file(self):
         self.write()
