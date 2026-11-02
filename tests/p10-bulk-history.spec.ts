@@ -2,8 +2,12 @@ import { test, expect } from "@playwright/test";
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve, sep } from "node:path";
+import { DEVELOPMENT_VERSION } from "../src/version";
 
-const code = readFileSync("public/history-collector.js", "utf8");
+const code = readFileSync("public/history-collector.js", "utf8").replaceAll(
+  "__KYOKULOOP_VERSION__",
+  DEVELOPMENT_VERSION,
+);
 const bookmarklet = "javascript:" + encodeURIComponent(code.trim());
 const actor = 1358437 + ((7 * 123456 + 1117113) ^ 86216345);
 const url = `https://game.mahjongsoul.com/?paipu=260101-fictional-bulk_a${actor}`;

@@ -1,3 +1,4 @@
+import { DEVELOPMENT_VERSION } from "../src/version";
 import { test, expect } from "@playwright/test";
 import {
   decisions,
@@ -206,7 +207,7 @@ test("no external data calls, layout fits viewport and shows build and stub boun
   });
   await page.goto("/?demo=1");
   await expect(
-    page.getByText("DEV-11.02-6", { exact: true }).filter({ visible: true }),
+    page.getByText(DEVELOPMENT_VERSION, { exact: true }).filter({ visible: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "牌譜を追加", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("利用条件を確認中");

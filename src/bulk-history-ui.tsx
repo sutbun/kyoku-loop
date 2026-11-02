@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import collector from "../public/history-collector.js?raw";
+import { VERSION } from "./version";
 
-export const HISTORY_BOOKMARKLET = `javascript:${encodeURIComponent(collector.trim())}`;
+export const HISTORY_BOOKMARKLET = `javascript:${encodeURIComponent(collector.trim().replaceAll("__KYOKULOOP_VERSION__", VERSION))}`;
 
 export function BulkHistoryInput({
   disabled,
