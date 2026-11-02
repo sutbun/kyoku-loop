@@ -50,7 +50,8 @@ function access(): Access | null {
   try {
     return JSON.parse(
       readFileSync(
-        "D:/dev-data/kyoku-loop/private/phone-access.json",
+        process.env.KYOKULOOP_PHONE_ACCESS_FILE ||
+          "D:/dev-data/kyoku-loop/private/phone-access.json",
         "utf8",
       ).replace(/^\uFEFF/, ""),
     );

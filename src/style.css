@@ -2155,3 +2155,51 @@ dialog::backdrop {
   min-width: 44px;
   flex-shrink: 0;
 }
+
+.bulk-history {
+  margin: 10px 0 14px;
+  font-size: 13px;
+}
+.bulk-history summary {
+  cursor: pointer;
+  color: var(--green);
+  padding: 8px 0;
+}
+.bookmark-steps {
+  padding-left: 20px;
+  line-height: 1.7;
+  margin: 4px 0 10px;
+}
+.bookmark-steps a {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid #abc1b5;
+  border-radius: 5px;
+  background: #eef3ec;
+  color: var(--green);
+  cursor: grab;
+}
+.bulk-history label {
+  display: grid;
+  gap: 4px;
+}
+.bulk-history textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid #d7dfd7;
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+}
+.bulk-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.analysis-row > div:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

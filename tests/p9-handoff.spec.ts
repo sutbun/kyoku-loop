@@ -139,7 +139,7 @@ test("one action saves the labelled URL, copies it and opens the normal Japanese
   );
   await page
     .getByTestId("analysis-row")
-    .getByRole("button", { name: "コピーしてMortalへ" })
+    .getByRole("button", { name: "Mortalへ", exact: true })
     .click();
   await expect
     .poll(

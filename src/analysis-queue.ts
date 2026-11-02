@@ -6,6 +6,13 @@ export type AnalysisEntry = {
   requested?: boolean;
   reports?: string[];
   ready?: boolean;
+  history?: {
+    at: string;
+    rank: number;
+    seat: number;
+    mode: number;
+    players: { name: string; score: number }[];
+  };
 };
 export const sourceURL = (value: string): string => {
   let url = value.trim();

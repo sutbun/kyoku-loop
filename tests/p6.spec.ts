@@ -189,7 +189,7 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
       window.open = () => null;
     });
     await row
-      .getByRole("button", { name: "コピーしてMortalへ", exact: true })
+      .getByRole("button", { name: "Mortalへ", exact: true })
       .click();
     await win.getByRole("button", { name: "解析の手順", exact: true }).click();
     await expect(win.getByRole("region", { name: "解析の手順" })).toBeVisible();
@@ -202,7 +202,7 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
     await expect(row).toContainText("本人申告");
     await win.reload();
     await row
-      .getByRole("button", { name: "コピーしてMortalへ", exact: true })
+      .getByRole("button", { name: "Mortalへ", exact: true })
       .click();
     await expect(win.getByRole("region", { name: "解析の手順" })).toHaveCount(
       0,

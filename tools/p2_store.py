@@ -394,6 +394,7 @@ def main():
         elif action=='commit':
             result=store.commit(request.get('token'),request.get('seat'),request.get('model'),request.get('source_url') or None,request.get('analysis_id'))
         elif action=='analysis_add': result=store.analysis_add(request.get('url'))
+        elif action=='analysis_bulk': result=store.analysis_bulk(request.get('data'))
         elif action=='analysis_sync': result=store.analysis_receive(request.get('entries'))
         elif action=='analysis_requested': result=store.analysis_requested(request.get('id'),request.get('requested'))
         elif action=='analysis_setup': result=store.analysis_setup(request.get('seen'))

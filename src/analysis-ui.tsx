@@ -139,13 +139,26 @@ export function AnalysisList({
   onResult?: (entry: AnalysisEntry) => void;
   onRequested?: (entry: AnalysisEntry) => void;
 }) {
+  const [limit, setLimit] = useState(10);
+  const ordered = [...entries].reverse();
   return (
     <div className="analysis-list">
-      {[...entries].reverse().map((e, i) => (
+      {(portable ? ordered : ordered.slice(0, limit)).map((e, i) => (
         <div className="analysis-row" key={e.id} data-testid="analysis-row">
           <div>
-            <strong>保存牌譜 {entries.length - i}</strong>
-            <small>保存：{new Date(e.created).toLocaleString("ja-JP")}</small>
+            <strong>
+              {!portable && e.history
+                ? `${new Date(e.history.at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · ${e.history.rank}位`
+                : `保存牌譜 ${entries.length - i}`}
+            </strong>
+            <small>
+              {!portable && e.history
+                ? e.history.players
+                    .filter((_, seat) => seat !== e.history!.seat)
+                    .map((p) => p.name)
+                    .join(" / ")
+                : `保存：${new Date(e.created).toLocaleString("ja-JP")}`}
+            </small>
           </div>
           <span className="badge">{analysisStatus(e)}</span>
           {portable ? (
@@ -156,10 +169,15 @@ export function AnalysisList({
             <div className="analysis-actions">
               <button
                 className="button secondary"
-                disabled={disabled}
+                disabled={
+                  disabled ||
+                  (!!e.history && ![9, 12, 16].includes(e.history.mode))
+                }
                 onClick={() => onOpen?.(e)}
               >
-                コピーしてMortalへ
+                {e.history && ![9, 12, 16].includes(e.history.mode)
+                  ? "東風は対象外"
+                  : "Mortalへ"}
               </button>
               <button
                 className="button secondary"
@@ -181,6 +199,11 @@ export function AnalysisList({
           )}
         </div>
       ))}
+      {!portable && ordered.length > limit && (
+        <button className="text-button" onClick={() => setLimit((n) => n + 10)}>
+          さらに10件表示（残り{ordered.length - limit}件）
+        </button>
+      )}
     </div>
   );
 }
