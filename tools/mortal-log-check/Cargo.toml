@@ -1,0 +1,11 @@
+[package]
+name = "kyokuloop-mortal-log-check"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+convlog = { git = "https://github.com/Equim-chan/mjai-reviewer", rev = "2dc5ec5c8b28517cfb45f57eb21536d9a8f67aa9" }
+serde_json = "1"
+percent-encoding = "2"
