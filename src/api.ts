@@ -1,4 +1,6 @@
 export const errors: Record<string, string> = {
+  invalid_history:
+    "一括データを確認してください。対応する雀魂URLを1行に1件、または一括取得データを貼り付けてください（最大500件）。",
   invalid_queue:
     "解析待ちの記録を確認できません。保存済みのURLを保持しています。",
   queue_not_found: "解析待ちが見つかりません。一覧を更新してください。",

@@ -56,7 +56,36 @@ class AnalysisQueueMixin:
     def _analysis_view(self, entry):
         entry['ready']=any(self.db.execute('''SELECT 1 FROM study_items i JOIN reports a ON i.report=a.id
             JOIN reports b ON a.game=b.game AND a.seat=b.seat WHERE b.id=? LIMIT 1''',(r,)).fetchone() for r in entry['reports'])
+        try:from .paipu_history import META_PREFIX, validated_meta
+        except ImportError:from paipu_history import META_PREFIX, validated_meta
+        meta = self.db.execute('SELECT value FROM study_settings WHERE key=?', (META_PREFIX+entry['id'],)).fetchone()
+        if meta:
+            value = validated_meta(json.loads(meta[0]))
+            if value['url'] != entry['url']: raise StudyFailure('invalid_history')
+            entry['history'] = value
         return entry
+
+    def analysis_bulk(self, value):
+        try:from .paipu_history import parse_batch, META_PREFIX
+        except ImportError:from paipu_history import parse_batch, META_PREFIX
+        try: valid, supplied = parse_batch(value)
+        except (ValueError, TypeError, KeyError, OverflowError, RecursionError):
+            raise StudyFailure('invalid_history') from None
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            existing = {e['url'] for e in self.analysis_entries()}
+            added = sum(v['url'] not in existing for v in valid)
+            if len(existing) + added > 1000: raise StudyFailure('queue_full')
+            for value in reversed(valid):
+                url = value['url']
+                ident = url.split('paipu=')[1]
+                entry = {'id': ident, 'url': url, 'created': self.moment().isoformat(), 'requested': False, 'reports': []}
+                self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)',
+                                (PREFIX+ident, json.dumps(entry, ensure_ascii=False)))
+                if value['meta']:
+                    self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)',
+                                    (META_PREFIX+ident, json.dumps(value['meta'], ensure_ascii=False)))
+        return {'added': added, 'existing': supplied-added, 'total': len(existing)+added}
 
     def analysis_entry(self, ident):
         if not isinstance(ident, str): raise StudyFailure('queue_not_found')

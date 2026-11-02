@@ -5,7 +5,8 @@ import { StudyPanel, PracticeCard } from "./study-ui";
 import type { Detail, Scene, Stage, Workspace } from "./real-types";
 import { SourceInput, AnalysisList, AnalysisGuide } from "./analysis-ui";
 import type { AnalysisEntry } from "./analysis-queue";
-import { openMortal, MORTAL_COPIED, MORTAL_PAGE } from "./mortal-handoff";
+import { mortalLink, MORTAL_PAGE } from "./mortal-handoff";
+import { BulkHistoryInput } from "./bulk-history-ui";
 
 import { VERSION } from "./version";
 export { VERSION };
@@ -329,18 +330,26 @@ export function RealApp() {
                     await refresh();
                   }}
                 />
+                <BulkHistoryInput
+                  disabled={busy}
+                  onImport={async (value) => {
+                    const result = await api<{
+                      added: number;
+                      existing: number;
+                    }>({ action: "analysis_bulk", data: value });
+                    await refresh();
+                    return result;
+                  }}
+                />
                 <AnalysisList
                   entries={workspace.analysis_queue ?? []}
                   disabled={busy}
                   onOpen={(entry) => {
-                    void run(async () => {
-                      const copied = await openMortal(entry.url);
-                      setNotice(
-                        copied
-                          ? MORTAL_COPIED
-                          : `URLをコピーできませんでした。手動でコピーしてください：${entry.url}`,
-                      );
-                    });
+                    window.open(
+                      mortalLink(entry.url),
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
                   }}
                   onResult={(entry) => {
                     setAnalysis(entry);

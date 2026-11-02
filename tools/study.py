@@ -496,7 +496,13 @@ class StudyMixin:
         try:from .analysis_queue import stored_entry, PREFIX
         except ImportError:from analysis_queue import stored_entry, PREFIX
         reports={r['id']:r for r in rows['reports']}
+        try:from .paipu_history import META_PREFIX, validated_meta
+        except ImportError:from paipu_history import META_PREFIX, validated_meta
+        analysis_urls = {r['key'][len(PREFIX):]:stored_entry(json.loads(r['value']))['url'] for r in rows['study_settings'] if r['key'].startswith(PREFIX)}
         for row in rows['study_settings']:
+            if row['key'].startswith(META_PREFIX):
+                meta = validated_meta(json.loads(row['value']))
+                if analysis_urls.get(row['key'][len(META_PREFIX):]) != meta['url']: raise StudyFailure('invalid_backup')
             if row['key'].startswith(PREFIX):
                 entry=stored_entry(json.loads(row['value']))
                 if row['key']!=PREFIX+entry['id'] or any(r not in reports or reports[r]['source_game_url']!=entry['url'] for r in entry['reports']):
@@ -567,6 +573,12 @@ class StudyMixin:
                     else:self._put_analysis(incoming)
                 elif row['key'] in ('analysis_setup',NAGA_PREFERENCE):
                     self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)',(row['key'],row['value']))
+            try:from .paipu_history import META_PREFIX, validated_meta
+            except ImportError:from paipu_history import META_PREFIX, validated_meta
+            for row in rows['study_settings']:
+                if row['key'].startswith(META_PREFIX):
+                    meta = validated_meta(json.loads(row['value']))
+                    self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)', (row['key'],json.dumps(meta,ensure_ascii=False)))
             # Resume the backed-up in-flight session only if this installation
             # has no active session. A newer local progress is retained.
             active=next((r['value'] for r in rows['study_settings'] if r['key']=='active_session'),None)
