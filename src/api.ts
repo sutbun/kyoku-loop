@@ -1,4 +1,13 @@
 export const errors: Record<string, string> = {
+  invalid_inbox_folder:
+    "D:/dev-data/kyoku-loop/private 内の専用フォルダを指定してください。アプリの保存先は使用できません。",
+  inbox_unavailable: "取り込みフォルダを開けません。保存先を確認してください。",
+  inbox_service_error:
+    "自動取り込みを停止しました。保存先を確認して設定を保存し直してください。",
+  inbox_mortal_only: "Mortalの結果JSONを選択してください。",
+  inbox_file_error:
+    "ファイルを読めません。保存を確認し、保存し直してください。",
+  multiple_files: "ファイルを1つ選んでください。",
   invalid_history:
     "一括データを確認してください。対応する雀魂URLを1行に1件、または一括取得データを貼り付けてください（最大500件）。",
   invalid_queue:

@@ -1874,6 +1874,59 @@ dialog::backdrop {
 .analysis-row > div:first-child {
   flex: 1 1 180px;
 }
+.analysis-row.drop-active {
+  outline: 2px solid var(--green);
+  background: #e8eee7;
+}
+.mortal-inbox {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.mortal-inbox summary,
+.report-source-link summary {
+  cursor: pointer;
+  color: var(--green);
+  padding: 8px 0;
+}
+.mortal-inbox form,
+.report-source-link {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.mortal-inbox label,
+.report-source-link label {
+  display: grid;
+  gap: 4px;
+}
+.mortal-inbox .inbox-toggle {
+  display: flex;
+  align-items: center;
+}
+.inbox-toggle input {
+  width: auto;
+}
+.mortal-inbox input:not([type="checkbox"]),
+.report-source-link select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.inbox-files {
+  list-style: none;
+  padding: 0;
+}
+.inbox-files li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+.source-context {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
 .analysis-row small {
   display: block;
 }

@@ -131,6 +131,7 @@ export function AnalysisList({
   onOpen,
   onResult,
   onRequested,
+  onDropResult,
 }: {
   entries: AnalysisEntry[];
   portable?: boolean;
@@ -138,13 +139,43 @@ export function AnalysisList({
   onOpen?: (entry: AnalysisEntry) => void;
   onResult?: (entry: AnalysisEntry) => void;
   onRequested?: (entry: AnalysisEntry) => void;
+  onDropResult?: (entry: AnalysisEntry, files: File[]) => void;
 }) {
   const [limit, setLimit] = useState(10);
+  const [dragged, setDragged] = useState<string | null>(null);
   const ordered = [...entries].reverse();
   return (
     <div className="analysis-list">
       {(portable ? ordered : ordered.slice(0, limit)).map((e, i) => (
-        <div className="analysis-row" key={e.id} data-testid="analysis-row">
+        <div
+          className={`analysis-row${dragged === e.id ? " drop-active" : ""}`}
+          key={e.id}
+          data-testid="analysis-row"
+          onDragOver={(event) => {
+            if (
+              portable ||
+              !onDropResult ||
+              !event.dataTransfer.types.includes("Files")
+            )
+              return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = disabled ? "none" : "copy";
+            if (!disabled) setDragged(e.id);
+          }}
+          onDragLeave={(event) => {
+            if (
+              !event.currentTarget.contains(event.relatedTarget as Node | null)
+            )
+              setDragged(null);
+          }}
+          onDrop={(event) => {
+            if (portable || !onDropResult) return;
+            event.preventDefault();
+            setDragged(null);
+            if (!disabled)
+              onDropResult(e, Array.from(event.dataTransfer.files));
+          }}
+        >
           <div>
             <strong>
               {!portable && e.history
