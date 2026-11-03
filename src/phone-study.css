@@ -1,0 +1,212 @@
+.phone-app.is-studying {
+  max-width: 1400px;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.phone-app.is-studying .phone-nav {
+  display: none;
+}
+.phone-app.is-studying .content {
+  padding: 4px 12px 8px;
+}
+.phone-app.is-studying .study-heading {
+  min-height: 44px;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.phone-app.is-studying .study-heading .text-button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px;
+}
+.phone-app.is-studying .study-undo {
+  font-size: 22px;
+}
+.phone-app.is-studying .quiz-layout {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+}
+.phone-app.is-studying .board-title {
+  padding: 4px 10px;
+  min-height: 26px;
+}
+.phone-app.is-studying .table-wrap {
+  container-type: inline-size;
+  padding: 0 8px 6px;
+}
+.phone-app.is-studying .quiz-layout .table {
+  width: min(100%, var(--study-table-width, 330px));
+  max-width: none;
+}
+.phone-app.is-studying .hand-head {
+  padding: 4px 0 2px;
+}
+.phone-app.is-studying .real-board .hand {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 4px 2px;
+  padding: 5px 0 2px;
+}
+.phone-app.is-studying .real-board .hand > .tile-choice,
+.phone-app.is-studying .real-board .hand > span {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 48px;
+}
+.phone-app.is-studying .real-board .hand .tile {
+  width: min(100%, 54px);
+  height: auto;
+  aspect-ratio: 3 / 4;
+  max-width: none;
+  max-height: none;
+  min-height: 0;
+}
+.phone-app.is-studying .real-board .hand .drawn {
+  margin-left: 0;
+  padding-left: 4px;
+}
+.phone-app.is-studying .tile-choice.selected {
+  transform: translateY(-3px);
+  outline-width: 2px;
+  outline-offset: -1px;
+}
+@container (max-width: 650px) {
+  .phone-app.is-studying .real-board .hand {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+  .phone-app.is-studying .real-board .hand .tile {
+    width: 33px;
+    max-width: 100%;
+    height: 44px;
+  }
+}
+@container (max-width: 322px) {
+  .phone-app.is-studying .real-board .hand {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+.phone-app.is-studying .quiz-answer {
+  min-height: 184px;
+  padding: 6px 10px;
+}
+.phone-app.is-studying .quiz-answer.choosing {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-content: start;
+  align-items: center;
+  gap: 4px 8px;
+}
+.phone-app.is-studying .quiz-answer .answer-prompt {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  margin: 0;
+}
+.phone-app.is-studying .quiz-answer .chosen-tile {
+  height: 46px;
+}
+.phone-app.is-studying .quiz-answer .chosen-tile .tile {
+  width: 30px;
+  height: 40px;
+}
+.phone-app.is-studying .quiz-answer .button,
+.phone-app.is-studying .quiz-answer .text-button {
+  min-height: 44px;
+  margin: 0;
+}
+.phone-app.is-studying .quiz-answer > h2:not(.answer-prompt),
+.phone-app.is-studying .quiz-answer .rating-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.phone-app.is-studying .quiz-answer .comparison {
+  margin: 0 0 4px;
+  gap: 2px 8px;
+}
+.phone-app.is-studying
+  [data-testid="study-comparison"]
+  > div
+  > span:first-child {
+  min-height: 28px;
+  margin-bottom: 2px;
+  font-size: 11px;
+}
+.phone-app.is-studying .comparison .tile {
+  width: 30px;
+  height: 40px;
+  margin-bottom: 0;
+}
+.phone-app.is-studying .comparison-tools {
+  align-items: start;
+  border-top: 1px solid var(--line);
+}
+.phone-app.is-studying .comparison-weight {
+  border: 0;
+  padding: 0;
+}
+.phone-app.is-studying .comparison-weight summary {
+  min-height: 44px;
+}
+.phone-app.is-studying .comparison-weight small {
+  font-size: 11px;
+}
+.phone-app.is-studying .quiz-answer .ratings {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+.phone-app.is-studying .ratings .button {
+  justify-content: center;
+  padding: 8px 4px;
+}
+.phone-app.is-studying .quiz-answer > small {
+  display: block;
+  margin-top: 3px;
+}
+.phone-app.is-studying .phone-status {
+  margin-bottom: 0;
+}
+@media (min-width: 700px) {
+  .phone-app.is-studying .quiz-answer {
+    min-height: 198px;
+  }
+  .phone-app.is-studying .quiz-answer .comparison {
+    max-width: none;
+  }
+  .phone-app.is-studying
+    [data-testid="study-comparison"]
+    > div
+    > span:first-child {
+    font-size: 13px;
+    min-height: 32px;
+  }
+  .phone-app.is-studying .comparison .tile {
+    width: 40px;
+    height: 54px;
+  }
+}
+.phone-app.is-studying .phone-sync-notice {
+  padding: 0 10px;
+  margin-bottom: 4px;
+}
+.phone-sync-notice summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+}
+.phone-sync-notice > div {
+  padding-bottom: 6px;
+}
+.phone-sync-notice .text-button {
+  min-height: 44px;
+}
+@media (min-width: 700px) and (min-aspect-ratio: 4/3) {
+  .phone-app.is-studying .quiz-layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 12px;
+  }
+}

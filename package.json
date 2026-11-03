@@ -9,6 +9,7 @@
     "check": "tsc --noEmit",
     "preview": "vite preview",
     "test": "npm run build && npm run test:core && playwright test --workers=1",
+    "test:layout": "npm run build && playwright test -c playwright.layout.config.ts --project=phone --workers=1",
     "test:p0": "python -m unittest discover -s tests -p test_p0_verify.py",
     "test:core": "python -m unittest discover -s tests -p test_p*.py"
   },
