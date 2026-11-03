@@ -22,6 +22,8 @@ import {
 } from "./offline/mortal-compiler";
 import "./style.css";
 import "./phone.css";
+import "./phone-study.css";
+import { usePhoneStudyLayout } from "./phone-study-layout";
 
 import { VERSION } from "./version";
 function PhoneApp() {
@@ -31,6 +33,14 @@ function PhoneApp() {
   });
   const [screen, setScreen] = useState<"home" | "study">("home");
   const [active, setActive] = useState(false);
+  const studying =
+    screen === "study" &&
+    active &&
+    !!workspace.session &&
+    !workspace.session.complete &&
+    !workspace.session.stale &&
+    !!workspace.session.scene;
+  const studyRef = usePhoneStudyLayout(studying, workspace.session?.item_id);
   const [filter, setFilter] = useState("今日");
   const [busy, setBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
@@ -282,7 +292,10 @@ function PhoneApp() {
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     });
   return (
-    <div className="phone-app">
+    <div
+      ref={studyRef}
+      className={`phone-app${studying ? " is-studying" : ""}`}
+    >
       <header className="phone-header">
         <b>KyokuLoop</b>
         <span>{VERSION}</span>
@@ -305,17 +318,33 @@ function PhoneApp() {
               {!!urlPending && <span>URL 未同期 {urlPending}件</span>}
             </div>
           )}
-          {syncError && (
-            <div className="error" role="alert">
-              {syncError}
-              <button
-                className="text-button"
-                disabled={syncing}
-                onClick={() => void syncRecords(false, true)}
-              >
-                同期を再試行
-              </button>
-            </div>
+          {syncError && studying ? (
+            <details className="error phone-sync-notice" role="alert">
+              <summary>同期の確認が必要です</summary>
+              <div>
+                {syncError}
+                <button
+                  className="text-button"
+                  disabled={syncing}
+                  onClick={() => void syncRecords(false, true)}
+                >
+                  同期を再試行
+                </button>
+              </div>
+            </details>
+          ) : (
+            syncError && (
+              <div className="error" role="alert">
+                {syncError}
+                <button
+                  className="text-button"
+                  disabled={syncing}
+                  onClick={() => void syncRecords(false, true)}
+                >
+                  同期を再試行
+                </button>
+              </div>
+            )
           )}
           {error && (
             <div className="error" role="alert">
