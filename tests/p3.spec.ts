@@ -71,6 +71,10 @@ test("real study five-question flow, durable answer concealment, undo and librar
     ).toBeEnabled();
     if (n === 1) {
       await page.reload();
+      await expect(
+        page.getByRole("heading", { name: "ホーム", exact: true }),
+      ).toBeAttached();
+      await page.getByRole("button", { name: "復習を再開する" }).click();
       await expect(page.getByText("1 / 5 問", { exact: true })).toBeVisible();
       await expect(
         page.getByRole("button", { name: "回答する", exact: true }),
