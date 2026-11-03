@@ -14,6 +14,7 @@ export type LocalMaterial = {
   items: PhoneItem[];
   payload: string;
   reveals?: Record<string, string[][]>;
+  policies?: Record<string, number[]>;
 };
 async function matches(
   response: Response | undefined,
@@ -102,9 +103,11 @@ export async function verifyLocalBackup(state: PhoneState) {
       entry.material.payload,
       entry.material.created,
     );
-    const { payload: a, reveals: ar, ...left } = actual;
-    const { payload: b, reveals: br, ...right } = entry.material;
+    const { payload: a, reveals: ar, policies: ap, ...left } = actual;
+    const { payload: b, reveals: br, policies: bp, ...right } = entry.material;
     if (JSON.stringify(left) !== JSON.stringify(right))
+      throw Error("invalid_phone_backup");
+    if (bp && JSON.stringify(bp) !== JSON.stringify(ap))
       throw Error("invalid_phone_backup");
     if (br && JSON.stringify(br) !== JSON.stringify(ar))
       throw Error("invalid_phone_backup");
@@ -121,9 +124,28 @@ export async function verifyLocalBackup(state: PhoneState) {
 
 export async function retainedReveals(material: LocalMaterial) {
   const actual = await execute(material.payload, material.created);
-  const { payload: a, reveals: ar, ...left } = actual;
-  const { payload: b, reveals: br, ...right } = material;
+  const { payload: a, reveals: ar, policies: ap, ...left } = actual;
+  const { payload: b, reveals: br, policies: bp, ...right } = material;
   if (JSON.stringify(left) !== JSON.stringify(right))
     throw Error("invalid_phone_backup");
   return ar ?? {};
+}
+
+// Old device records retain the original report. Derive exact policy without
+// changing their questions, answers, due dates or stored assessment.
+const policies = new Map<string, Promise<Record<string, number[]>>>();
+export async function retainedPolicy(material: LocalMaterial, id: string) {
+  let pending = policies.get(material.id);
+  if (!pending) {
+    pending = execute(material.payload, material.created).then((actual) => {
+      const { payload: a, reveals: ar, policies: ap, ...left } = actual;
+      const { payload: b, reveals: br, policies: bp, ...right } = material;
+      if (JSON.stringify(left) !== JSON.stringify(right))
+        throw Error("invalid_phone_backup");
+      return ap ?? {};
+    });
+    policies.set(material.id, pending);
+    pending.catch(() => policies.delete(material.id));
+  }
+  return (await pending)[id];
 }

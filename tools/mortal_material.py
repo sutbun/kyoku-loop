@@ -101,4 +101,5 @@ def compile_upload(encoded, created_at):
             'model':content['model_name'],'rounds':content['rounds'],'created':created_at,
             'players':[str(v)[:100] for v in report['split_logs'][0]['name']],
             'important_count':len(content['important']),'family_ids':material['family_ids'],
+            'policies':{i['id']:[v*100/byid[i['id']]['weight_total'] for v in byid[i['id']]['raw_weights']] for i in items},
             'items':items,'payload':base64.b64encode(gzip.compress(raw,mtime=0)).decode(), 'reveals':reveals}

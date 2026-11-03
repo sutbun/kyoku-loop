@@ -33,7 +33,9 @@ class StandaloneTests(unittest.TestCase):
         pack = self.store.phone_pack()
         for initial in self.material['items']:
             item = next(i for i in pack['items'] if i['id']==initial['id'])
-            self.assertEqual(item['scene'], initial['scene'])
+            projected = dict(item['scene'])
+            self.assertEqual(projected.pop('policy_percent'), self.material['policies'][initial['id']])
+            self.assertEqual(projected, initial['scene'])
             self.assertEqual(item['due'], '2026-11-04')
         before = [tuple(r) for r in self.store.db.execute('SELECT * FROM study_items')]
         self.assertTrue(self.register()['duplicate'])
