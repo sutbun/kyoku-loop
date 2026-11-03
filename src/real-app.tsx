@@ -56,10 +56,6 @@ export function RealApp() {
     void run(async () => {
       const data = await api<Workspace>({ action: "state" });
       setWorkspace(data);
-      if (data.session && !data.session.complete) {
-        setScreen("study");
-        setLearning(true);
-      }
     });
   }, []);
   useEffect(() => {
