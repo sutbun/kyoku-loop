@@ -160,7 +160,9 @@ function PhoneApp() {
       const savedState = await readPhone();
       if (
         !savedState?.pack &&
-        savedState?.analysis_queue?.some((e) => e.ready)
+        (manual ||
+          savedState?.schema === 2 ||
+          savedState?.analysis_queue?.some((e) => e.ready))
       ) {
         await saveShell();
         await api({ action: "install_pack", pack: await downloadPhonePack() });
@@ -261,8 +263,8 @@ function PhoneApp() {
       const old = await readPhone();
       if (old?.schema === 2) {
         await saveCompiler();
+        if (navigator.onLine) await syncRecords(true);
         await refresh();
-        if (navigator.onLine) void syncRecords();
         return;
       }
       if (
@@ -480,14 +482,12 @@ function PhoneApp() {
                   <button
                     className="button secondary"
                     disabled={
-                      busy ||
-                      importBusy ||
-                      syncing ||
-                      !loaded ||
-                      (!workspace.items.length && !analysisQueue.length) ||
-                      !online
+                      busy || importBusy || syncing || !loaded || !online
                     }
-                    onClick={() => void syncRecords(false, true)}
+                    onClick={() => {
+                      setError("");
+                      void syncRecords(false, true);
+                    }}
                   >
                     {syncing ? "同期中…" : "今すぐ同期"}
                   </button>
