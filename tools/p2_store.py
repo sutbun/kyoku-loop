@@ -24,12 +24,14 @@ try:
     from .analysis_queue import AnalysisQueueMixin, source_url
     from .naga_preferences import preferred_model, remember_type
     from . import mortal_report
+    from .mortal_material import digest, rank_decisions, compile_material
 except ImportError:
     from p0_verify import inspect_report, tile_index
     from study import StudyMixin, StudyFailure, public_scene
     from analysis_queue import AnalysisQueueMixin, source_url
     from naga_preferences import preferred_model, remember_type
     import mortal_report
+    from mortal_material import digest, rank_decisions, compile_material
 
 ROOT = Path('D:/dev-data/kyoku-loop/private')
 LIMIT = 20 * 1024 * 1024
@@ -132,23 +134,6 @@ def decode(payload):
         raise
     except (ValueError, TypeError, KeyError, IndexError, OSError, EOFError, RecursionError):
         raise ImportFailure('invalid_json') from None
-
-
-def digest(value):
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',',':')).encode()).hexdigest()
-
-
-def rank_decisions(scenes):
-    candidates = sorted((s for s in scenes if s['gap'] > 0), key=lambda s:(-s['gap'],s['round_index'],s.get('event_index',0)))
-    heads, rest, seen = [], [], set()
-    for s in candidates:
-        if s['round_index'] not in seen:
-            heads.append(s)
-            seen.add(s['round_index'])
-        else:
-            rest.append(s)
-    selected = (heads + rest)[:10]
-    return sorted(selected, key=lambda s:(-s['gap'],s['round_index'],s.get('event_index',0)))
 
 
 class Store(StudyMixin, AnalysisQueueMixin):
@@ -283,7 +268,7 @@ class Store(StudyMixin, AnalysisQueueMixin):
             remember_type(self.db,report['naga_types'][str(model)])
         return {'id':report_id,'duplicate':bool(existing)}
 
-    def commit_mortal(self, row, report, seat, model, source_game_url, analysis_id):
+    def commit_mortal(self, row, report, seat, model, source_game_url, analysis_id, created_at=None, item_ids=None):
         if seat != report['player_id'] or model != 0:
             raise ImportFailure('mortal_target_required')
         if source_game_url: source_game_url = source_url(source_game_url)
@@ -292,25 +277,26 @@ class Store(StudyMixin, AnalysisQueueMixin):
             if source_game_url and source_game_url != entry['url']: raise ImportFailure('source_conflict')
             source_game_url = entry['url']
         try:
-            summary, valid, timeline = mortal_report.project(report)
+            prepared = compile_material(report)
         except (ValueError, TypeError, KeyError, IndexError, OverflowError, AttributeError):
             raise ImportFailure('reconstruction_failed') from None
-        source = digest(report)
-        game = digest([s['log'] for s in report['split_logs']])
-        report_id = digest([source, seat, model])
-        for s in valid:
-            # Same engine/game/decision retains its learning identity, while
-            # importing another engine never replaces an existing assessment.
-            s['id'] = digest([game,seat,s['round_index'],s['source_discard_index'],'discard','Mortal'])
-        important = rank_decisions(valid)
-        content = {'id':report_id,'seat':seat,'model':model,'engine':'Mortal',
-                   'model_name':report['review']['model_tag'],'model_version':report['version'],
-                   'rounds':summary['rounds'],'decisions':valid,'timeline':timeline,
-                   'important':[s['id'] for s in important],'excluded':summary['excluded'],
-                   'rule':'mortal-policy-gap-v1-diverse10-positive','unknown_weights':0,
-                   'created':datetime.now(timezone.utc).isoformat(),
-                   'source_link_kind':'manual' if source_game_url else 'unlinked'}
-        tomorrow = (self.moment().astimezone(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
+        source, game, content = prepared['source'], prepared['game'], prepared['content']
+        report_id = content['id']
+        byid = {s['id']:s for s in content['decisions']}
+        important = [byid[ident] for ident in content['important']]
+        created = datetime.now(timezone.utc).isoformat()
+        initial_time = self.moment()
+        if created_at is not None or item_ids is not None:
+            try:
+                initial_time = datetime.fromisoformat(created_at.replace('Z','+00:00'))
+                created = initial_time.isoformat()
+                if initial_time.tzinfo is None or initial_time.year < 2000 or initial_time > self.moment()+timedelta(days=1): raise ValueError()
+                if not isinstance(item_ids,list) or len(item_ids)>3 or len(set(item_ids))!=len(item_ids) or any(ident not in content['important'][:3] for ident in item_ids): raise ValueError()
+            except (ValueError, TypeError, AttributeError):
+                raise ImportFailure('invalid_sync') from None
+        content.update(created=created,
+                       source_link_kind='manual' if source_game_url else 'unlinked')
+        tomorrow = (initial_time.astimezone(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             linked = self.db.execute('SELECT source_game_url,content FROM reports WHERE id=?',(report_id,)).fetchone()
@@ -330,6 +316,11 @@ class Store(StudyMixin, AnalysisQueueMixin):
                 self.db.execute('INSERT INTO study_items(id,report,scene,automatic,manual,status,history,due) VALUES(?,?,?,?,?,?,?,?)',
                                 (s['id'],report_id,json.dumps(s,ensure_ascii=False),1,0,'未学習','[]',tomorrow))
                 auto_count += 1
+            # Preserve locally studied candidates when another model already filled the
+            # automatic quota. Existing items, states and history are never replaced.
+            for ident in item_ids or []:
+                self.db.execute('INSERT OR IGNORE INTO study_items(id,report,scene,automatic,manual,status,history,due) VALUES(?,?,?,?,?,?,?,?)',
+                                (ident,report_id,json.dumps(byid[ident],ensure_ascii=False),0,1,'未学習','[]',tomorrow))
             if analysis_id is not None:
                 entry = self.analysis_entry(analysis_id)
                 if report_id not in entry['reports']: entry['reports'].append(report_id)
@@ -415,9 +406,9 @@ class Store(StudyMixin, AnalysisQueueMixin):
         if report.get('engine') != 'Mortal': raise ImportFailure('inbox_mortal_only')
         return self.stage(payload, None) | {'source': own}
 
-    def phone_mortal_register(self, token, source, analysis_id):
+    def phone_mortal_register(self, token, source, analysis_id, created_at=None, item_ids=None):
         own = self.phone_mortal_source(source)
-        row = self.db.execute('SELECT payload FROM staging WHERE token=? AND created>?',
+        row = self.db.execute('SELECT * FROM staging WHERE token=? AND created>?',
                               (token, time.time()-1800)).fetchone()
         if not row: raise ImportFailure('stage_expired')
         report = decode(row['payload'])
@@ -429,7 +420,7 @@ class Store(StudyMixin, AnalysisQueueMixin):
         else:
             url = self.analysis_entry(analysis_id)['url']
         # The client cannot choose another seat, model, URL or filesystem path.
-        result = self.commit(token, report['player_id'], 0, url, analysis_id)
+        result = self.commit_mortal(row, report, report['player_id'], 0, url, analysis_id, created_at, item_ids)
         return result | {'source': own}
 
 
@@ -458,7 +449,7 @@ def main():
             else: result=inbox.status()
         elif action=='report_link': result=store.link_source(request.get('report'),request.get('analysis_id'))
         elif action=='phone_mortal_inspect': result=store.phone_mortal_inspect(request.get('data'),request.get('source'))
-        elif action=='phone_mortal_register': result=store.phone_mortal_register(request.get('token'),request.get('source'),request.get('analysis_id'))
+        elif action=='phone_mortal_register': result=store.phone_mortal_register(request.get('token'),request.get('source'),request.get('analysis_id'),request.get('created_at'),request.get('item_ids'))
         elif action=='analysis_add': result=store.analysis_add(request.get('url'))
         elif action=='analysis_bulk': result=store.analysis_bulk(request.get('data'))
         elif action=='analysis_sync': result=store.analysis_receive(request.get('entries'))

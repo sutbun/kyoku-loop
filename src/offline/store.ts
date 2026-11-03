@@ -21,7 +21,7 @@ function open(): Promise<IDBDatabase> {
 }
 function valid(s: PhoneState) {
   if (
-    s.schema !== 1 ||
+    ![1, 2].includes(s.schema) ||
     !s.device ||
     !Array.isArray(s.events) ||
     !Number.isSafeInteger(s.sequence)
@@ -54,7 +54,13 @@ export async function phoneTransaction<T>(
         if (
           request.action === "apply_sync" ||
           request.action === "analysis_ack" ||
-          request.action === "restore_phone"
+          request.action === "restore_phone" ||
+          [
+            "enable_local",
+            "register_local",
+            "import_ack",
+            "bind_source",
+          ].includes(String(request.action))
         )
           valid(reduced.state);
         result = reduced.data as T;

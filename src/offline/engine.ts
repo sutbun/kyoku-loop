@@ -1,3 +1,4 @@
+import type { LocalMaterial } from "./mortal-compiler";
 import type {
   HistoryEvent,
   ItemHistory,
@@ -55,8 +56,16 @@ export type Receipt = {
   after_state: ItemState;
   reason: string;
 };
+export type LocalImport = {
+  material: LocalMaterial;
+  item_ids: string[];
+  analysis_id: string | null;
+  synced_source?: string;
+};
 export type PhoneState = {
-  schema: 1;
+  schema: 1 | 2;
+  local_imports?: LocalImport[];
+  local_source?: string;
   device: string;
   pack: PhonePack | null;
   events: PhoneEvent[];
@@ -229,6 +238,61 @@ export function validatePack(value: unknown): asserts value is PhonePack {
     fail("invalid_pack");
   }
 }
+export function validateMaterial(
+  value: unknown,
+): asserts value is LocalMaterial {
+  const m = value as LocalMaterial;
+  try {
+    if (
+      !m ||
+      !/^[a-f0-9]{64}$/.test(m.id) ||
+      !/^[a-f0-9]{64}$/.test(m.game) ||
+      !int(m.seat, 0, 3) ||
+      typeof m.model !== "string" ||
+      !int(m.rounds, 1, 256) ||
+      !Number.isFinite(Date.parse(m.created)) ||
+      !Array.isArray(m.players) ||
+      m.players.length !== 4 ||
+      !m.players.every((n) => typeof n === "string" && n.length <= 100) ||
+      !Array.isArray(m.family_ids) ||
+      m.family_ids.length > 100000 ||
+      !m.family_ids.every((id) => /^[a-f0-9]{64}$/.test(id)) ||
+      !Array.isArray(m.items) ||
+      m.items.length > 3 ||
+      typeof m.payload !== "string" ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(m.payload)
+    )
+      fail("invalid_phone_backup");
+    const histories = Object.fromEntries(
+      m.items.map((i) => [i.id, { id: i.id, events: [] }]),
+    );
+    validatePack({
+      schema: 1,
+      policy: 2,
+      source: "material",
+      exported_at: m.created,
+      items: m.items,
+      histories,
+    });
+    for (const i of m.items)
+      if (
+        i.report !== m.id ||
+        !m.family_ids.includes(i.id) ||
+        i.scene.seat !== m.seat ||
+        i.revision !== 0 ||
+        i.status !== "未学習" ||
+        i.cycle !== "initial" ||
+        i.streak !== 0 ||
+        i.last_credit_day !== "" ||
+        i.automatic !== 1 ||
+        i.manual !== 0 ||
+        i.due !== addDays(jstDay(m.created), 1)
+      )
+        fail("invalid_phone_backup");
+  } catch {
+    fail("invalid_phone_backup");
+  }
+}
 const receiptFor = (state: PhoneState, id: string) =>
   state.receipts && Object.hasOwn(state.receipts, id)
     ? state.receipts[id]
@@ -257,13 +321,48 @@ export function validatePhoneBackup(
   try {
     if (
       !s ||
-      s.schema !== 1 ||
+      ![1, 2].includes(s.schema) ||
       typeof s.device !== "string" ||
       !s.device ||
       !Array.isArray(s.events) ||
       !int(s.sequence, 0)
     )
       fail("invalid_phone_backup");
+    if (new TextEncoder().encode(JSON.stringify(s)).length > 20 * 1024 * 1024)
+      fail("invalid_phone_backup");
+    if (s.schema === 1 && (s.local_imports || s.local_source))
+      fail("invalid_phone_backup");
+    if (s.schema === 2) {
+      if (!Array.isArray(s.local_imports) || s.local_imports.length > 1000)
+        fail("invalid_phone_backup");
+      if (
+        s.local_source !== undefined &&
+        (!s.local_source.startsWith("local:") ||
+          s.pack?.source !== s.local_source)
+      )
+        fail("invalid_phone_backup");
+      const reports = new Set<string>();
+      for (const entry of s.local_imports!) {
+        validateMaterial(entry.material);
+        if (
+          reports.has(entry.material.id) ||
+          !Array.isArray(entry.item_ids) ||
+          entry.item_ids.length > 3 ||
+          new Set(entry.item_ids).size !== entry.item_ids.length ||
+          entry.item_ids.some(
+            (id) =>
+              !entry.material.items.some((i) => i.id === id) ||
+              !s.pack?.items.some((i) => i.id === id),
+          ) ||
+          (entry.analysis_id !== null &&
+            typeof entry.analysis_id !== "string") ||
+          (entry.synced_source !== undefined &&
+            entry.synced_source !== s.pack?.source)
+        )
+          fail("invalid_phone_backup");
+        reports.add(entry.material.id);
+      }
+    }
     if (s.analysis_queue !== undefined) validateAnalysisQueue(s.analysis_queue);
     if (!s.pack) {
       if (s.events.length || s.session) fail("invalid_phone_backup");
@@ -382,7 +481,7 @@ export function phoneReduce(
   request: Request,
   at = new Date().toISOString(),
 ): { state: PhoneState; data: unknown } {
-  if (input.schema !== 1) fail("unsupported_storage");
+  if (![1, 2].includes(input.schema)) fail("unsupported_storage");
   const state = clone(input);
   const r = request;
   const day = jstDay(at);
@@ -520,6 +619,100 @@ export function phoneReduce(
     }
   }
   switch (r.action) {
+    case "enable_local": {
+      state.schema = 2;
+      state.local_imports ??= [];
+      data = { enabled: true };
+      break;
+    }
+    case "register_local": {
+      if (state.schema !== 2) fail("runtime_missing");
+      validateMaterial(r.material);
+      const material = r.material as LocalMaterial;
+      const existing = state.local_imports!.find(
+        (e) => e.material.id === material.id,
+      );
+      if (existing) {
+        if (r.analysis_id && r.analysis_id !== existing.analysis_id) {
+          if (existing.analysis_id) fail("source_conflict");
+          if (!state.analysis_queue?.some((e) => e.id === r.analysis_id))
+            fail("queue_not_found");
+          existing.analysis_id = r.analysis_id;
+          delete existing.synced_source;
+          data = { id: material.id, duplicate: true };
+          break;
+        }
+        return { state: input, data: { id: material.id, duplicate: true } };
+      }
+      if (
+        r.analysis_id !== null &&
+        !state.analysis_queue?.some((e) => e.id === r.analysis_id)
+      )
+        fail("queue_not_found");
+      if (!state.pack) {
+        state.local_source = "local:" + state.device;
+        state.pack = {
+          schema: 1,
+          policy: 2,
+          source: state.local_source,
+          exported_at: at,
+          items: [],
+          histories: {},
+        };
+      }
+      const ids: string[] = [];
+      let count = state.pack.items.filter(
+        (i) => i.automatic && material.family_ids.includes(i.id),
+      ).length;
+      for (const initial of material.items) {
+        if (state.pack.items.some((i) => i.id === initial.id)) {
+          ids.push(initial.id);
+          continue;
+        }
+        if (count >= 3) continue;
+        state.pack.items.push(clone(initial));
+        state.pack.histories[initial.id] = {
+          id: initial.id,
+          scene: clone(initial.scene),
+          events: [],
+          legacy_history: [],
+        };
+        ids.push(initial.id);
+        count++;
+      }
+      state.pack.policy = 2;
+      state.local_imports!.push({
+        material: clone(material),
+        item_ids: ids,
+        analysis_id: r.analysis_id,
+      });
+      validatePhoneBackup(state);
+      data = { id: material.id, duplicate: false };
+      break;
+    }
+    case "bind_source": {
+      if (
+        !state.local_source ||
+        state.pack?.source !== state.local_source ||
+        typeof r.source !== "string" ||
+        !r.source ||
+        r.source.startsWith("local:")
+      )
+        fail("different_source");
+      state.pack!.source = r.source;
+      delete state.local_source;
+      data = { bound: true };
+      break;
+    }
+    case "import_ack": {
+      const own = state.local_imports?.find((e) => e.material.id === r.id);
+      if (!own || state.local_source || r.source !== state.pack?.source)
+        fail("invalid_receipt");
+      if (own!.analysis_id !== r.analysis_id) fail("sync_changed");
+      own!.synced_source = r.source;
+      data = { saved: true };
+      break;
+    }
     case "install_pack": {
       validatePack(r.pack);
       if (
@@ -529,6 +722,8 @@ export function phoneReduce(
         fail("pending_records");
       if (state.pack && state.pack.source !== r.pack.source)
         fail("different_source");
+      if (state.schema === 2 && state.local_imports?.length)
+        fail("pending_records");
       state.pack = clone(r.pack);
       state.session = null;
       data = { saved: true };
@@ -564,7 +759,17 @@ export function phoneReduce(
           fail("invalid_receipt");
         receipts[receipt.id] = clone(receipt);
       }
-      state.pack = clone(reply.pack);
+      const next = clone(reply.pack) as PhonePack;
+      // Imports may be added while the server is preparing this reply.
+      for (const entry of state.local_imports ?? [])
+        for (const id of entry.item_ids) {
+          if (!next.items.some((i) => i.id === id)) {
+            if (entry.synced_source) fail("invalid_receipt");
+            next.items.push(clone(item(id)));
+            next.histories[id] = clone(state.pack!.histories[id]);
+          }
+        }
+      state.pack = next;
       state.receipts = receipts;
       state.last_sync = reply.pack.exported_at;
       data = { synced: true };
@@ -620,6 +825,7 @@ export function phoneReduce(
       validatePhoneBackup(r.backup);
       if (
         state.events.length ||
+        state.local_imports?.length ||
         (state.session && state.session.index < state.session.queue.length)
       )
         fail("phone_restore_exists");
@@ -631,6 +837,14 @@ export function phoneReduce(
         state.pack.source !== r.backup.pack.source
       )
         fail("different_source");
+      state.schema = r.backup.schema;
+      if (r.backup.schema === 2) {
+        state.local_imports = clone(r.backup.local_imports);
+        if (r.backup.local_source) state.local_source = r.backup.local_source;
+        else delete state.local_source;
+        // Reconfirm registration after restoration rather than trusting old ACKs.
+        for (const entry of state.local_imports!) delete entry.synced_source;
+      }
       if (r.backup.pack) state.pack = clone(r.backup.pack);
       state.events = clone(r.backup.events);
       state.session = clone(r.backup.session);

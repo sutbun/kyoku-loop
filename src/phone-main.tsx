@@ -11,6 +11,15 @@ import { synchronizeAnalysis } from "./offline/analysis-sync";
 import { SourceInput, AnalysisList } from "./analysis-ui";
 import type { AnalysisEntry } from "./analysis-queue";
 import { PhoneMortalImport } from "./phone-mortal-import";
+import {
+  synchronizeLocalImports,
+  SyncConnectionError,
+} from "./offline/import-sync";
+import {
+  compilerReady,
+  saveCompiler,
+  verifyLocalBackup,
+} from "./offline/mortal-compiler";
 import "./style.css";
 import "./phone.css";
 
@@ -25,6 +34,9 @@ function PhoneApp() {
   const [filter, setFilter] = useState("今日");
   const [busy, setBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
+  const [local, setLocal] = useState(false);
+  const [resultPending, setResultPending] = useState(0);
+  const [compilerSaved, setCompilerSaved] = useState(false);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -46,10 +58,15 @@ function PhoneApp() {
   const refresh = async () => {
     setWorkspace(await api<Workspace>({ action: "state" }));
     const state = await readPhone();
+    setLocal(state?.schema === 2);
+    setResultPending(
+      state?.local_imports?.filter((e) => !e.synced_source).length ?? 0,
+    );
     setAnalysisQueue(state?.analysis_queue ?? []);
     setPending(state ? pendingEvents(state).length : 0);
     setLastSync(state?.last_sync ?? "");
     setSaved(state?.pack?.exported_at ?? "");
+    setCompilerSaved(await compilerReady());
     try {
       await verifyShell();
       setReady(!!state?.pack?.items.length);
@@ -85,7 +102,7 @@ function PhoneApp() {
       setBusy(false);
     }
   };
-  const syncRecords = async (fresh = false): Promise<void> => {
+  const syncRecords = async (fresh = false, manual = false): Promise<void> => {
     if (syncRunning.current) {
       if (fresh) {
         await syncCompletion.current;
@@ -106,28 +123,21 @@ function PhoneApp() {
     setSyncing(true);
     setSyncError("");
     try {
-      const results = await Promise.allSettled([
-        synchronizePhone(),
-        synchronizeAnalysis(),
-      ]);
-      if (mounted.current) await refresh();
-      const failed = results.filter(
-        (r): r is PromiseRejectedResult => r.status === "rejected",
-      );
-      if (failed.length === 1) throw failed[0].reason;
-      if (failed.length)
-        throw new Error(
-          failed
-            .map((r) =>
-              r.reason instanceof DOMException &&
-              r.reason.name === "QuotaExceededError"
-                ? "空き容量不足で受信確認を保存できません。未送信の記録を保持しています。"
-                : r.reason instanceof Error
-                  ? (errors[r.reason.message] ?? r.reason.message)
-                  : "同期できませんでした。記録は端末に残っています。",
-            )
-            .join(" "),
+      const before = await readPhone();
+      if (before?.schema === 2) {
+        await synchronizeAnalysis();
+        await synchronizeLocalImports();
+        if (!(await readPhone())?.local_source) await synchronizePhone();
+      } else {
+        const results = await Promise.allSettled([
+          synchronizePhone(),
+          synchronizeAnalysis(),
+        ]);
+        const failed = results.find(
+          (r): r is PromiseRejectedResult => r.status === "rejected",
         );
+        if (failed) throw failed.reason;
+      }
       const savedState = await readPhone();
       if (
         !savedState?.pack &&
@@ -139,7 +149,17 @@ function PhoneApp() {
       delay.current = 1000;
       if (mounted.current) await refresh();
     } catch (e) {
-      if (mounted.current && !fresh)
+      const state = await readPhone();
+      const network =
+        e instanceof SyncConnectionError ||
+        e instanceof TypeError ||
+        (e instanceof DOMException && e.name === "AbortError") ||
+        (e instanceof Error && e.message.startsWith("Windowsに接続できません"));
+      if (
+        mounted.current &&
+        !fresh &&
+        !(state?.schema === 2 && network && !manual)
+      )
         setSyncError(
           e instanceof DOMException && e.name === "QuotaExceededError"
             ? "空き容量不足で受信確認を保存できません。未送信の記録を保持しています。"
@@ -164,6 +184,7 @@ function PhoneApp() {
       void readPhone()
         .then((s) => {
           if (
+            s?.local_imports?.length ||
             s?.analysis_queue?.length ||
             (s?.pack && (s.events.length || s.last_sync))
           )
@@ -173,10 +194,11 @@ function PhoneApp() {
     }
   }, [loaded, online]);
   useEffect(() => {
-    if (!loaded || !online || (!pending && !urlPending)) return;
+    if (!loaded || !online || (!pending && !urlPending && !resultPending))
+      return;
     const timer = setTimeout(() => void syncRecords(), 500);
     return () => clearTimeout(timer);
-  }, [loaded, online, pending, urlPending]);
+  }, [loaded, online, pending, urlPending, resultPending]);
   useEffect(() => {
     mounted.current = true;
     if (navigator.serviceWorker?.controller)
@@ -215,6 +237,12 @@ function PhoneApp() {
       setReady(false);
       await saveShell();
       const old = await readPhone();
+      if (old?.schema === 2) {
+        await saveCompiler();
+        await refresh();
+        if (navigator.onLine) void syncRecords();
+        return;
+      }
       if (
         (!old || !pendingEvents(old).length) &&
         !(old?.session && old.session.index < old.session.queue.length)
@@ -261,7 +289,11 @@ function PhoneApp() {
       </header>
       <main>
         <div className="content">
-          {(!online || syncing || pending > 0 || urlPending > 0) && (
+          {(!online ||
+            syncing ||
+            pending > 0 ||
+            urlPending > 0 ||
+            resultPending > 0) && (
             <div className="phone-status" role="status">
               {!online && <span>オフライン</span>}
               {syncing ? (
@@ -269,6 +301,7 @@ function PhoneApp() {
               ) : (
                 pending > 0 && <span>回答 未送信 {pending}件</span>
               )}
+              {!!resultPending && <span>結果 未同期 {resultPending}件</span>}
               {!!urlPending && <span>URL 未同期 {urlPending}件</span>}
             </div>
           )}
@@ -278,7 +311,7 @@ function PhoneApp() {
               <button
                 className="text-button"
                 disabled={syncing}
-                onClick={() => void syncRecords()}
+                onClick={() => void syncRecords(false, true)}
               >
                 同期を再試行
               </button>
@@ -316,11 +349,16 @@ function PhoneApp() {
                   }}
                 />
                 <PhoneMortalImport
-                  disabled={busy || syncing || !loaded}
+                  disabled={busy || (!local && syncing) || !loaded}
                   online={online}
+                  local={local}
                   entries={analysisQueue}
                   onBusy={setImportBusy}
-                  onRegistered={async () => {
+                  onRegistered={async (registeredLocal) => {
+                    if (registeredLocal) {
+                      await refresh();
+                      return;
+                    }
                     await syncRecords(true);
                     const state = await readPhone();
                     if (!state?.pack) {
@@ -347,6 +385,25 @@ function PhoneApp() {
                 </p>
                 <div className="phone-storage-actions">
                   <button
+                    className="button secondary"
+                    disabled={
+                      busy || syncing || importBusy || !loaded || !online
+                    }
+                    onClick={() =>
+                      void run(async () => {
+                        await saveShell();
+                        await saveCompiler();
+                        await api({ action: "enable_local" });
+                        await navigator.storage?.persist?.().catch(() => false);
+                        await refresh();
+                      })
+                    }
+                  >
+                    {compilerSaved
+                      ? "端末用の保存を確認"
+                      : "端末だけで使う準備"}
+                  </button>
+                  <button
                     className="button primary"
                     disabled={busy || importBusy || !loaded}
                     onClick={download}
@@ -368,11 +425,16 @@ function PhoneApp() {
                       (!workspace.items.length && !analysisQueue.length) ||
                       !online
                     }
-                    onClick={() => void syncRecords()}
+                    onClick={() => void syncRecords(false, true)}
                   >
                     {syncing ? "同期中…" : "今すぐ同期"}
                   </button>
                 </div>
+                {compilerSaved && (
+                  <small data-testid="compiler-ready">
+                    端末内の取り込み準備完了
+                  </small>
+                )}
                 {!matchMedia("(display-mode: standalone)").matches &&
                   !ready && (
                     <p className="install-hint">
@@ -394,6 +456,13 @@ function PhoneApp() {
                     </small>
                   )}
                   <small>{capacity}</small>
+                  <a
+                    href="/phone/licenses/NOTICE.txt"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    利用ライセンス
+                  </a>
                   <small>
                     {persistent
                       ? "保存の保護を要求済み"
@@ -423,6 +492,7 @@ function PhoneApp() {
                               "20MB以下の記録ファイルを選択してください。",
                             );
                           const backup = JSON.parse(await file.text());
+                          await verifyLocalBackup(backup);
                           await api({ action: "restore_phone", backup });
                           await refresh();
                           if (navigator.onLine) void syncRecords();
