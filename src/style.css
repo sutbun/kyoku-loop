@@ -790,6 +790,7 @@ footer > span:first-child {
 .river-discard {
   display: grid;
   place-items: center;
+  pointer-events: auto;
   flex: 0 0 var(--river-width);
   width: var(--river-width);
   height: var(--river-height);

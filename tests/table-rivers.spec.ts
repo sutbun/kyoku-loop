@@ -204,6 +204,19 @@ for (const [width, height] of [
     });
     expect(problems).toEqual([]);
     await expect(page.locator(".river .reach-tile")).toHaveCount(4);
+    for (const marker of await page.locator(".river .reach-tile").all()) {
+      await expect(marker).toHaveAttribute("title", "リーチ宣言牌");
+      expect(
+        await marker.evaluate((e) => {
+          const r = e.getBoundingClientRect();
+          return (
+            document
+              .elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+              ?.closest(".river-discard") === e
+          );
+        }),
+      ).toBe(true);
+    }
     await expect(page.locator(".river .called")).toHaveCSS("opacity", "0.35");
     await expect(page.getByTestId("study-comparison")).toHaveCount(0);
     await page.getByTestId("real-hand").locator("button").last().click();
