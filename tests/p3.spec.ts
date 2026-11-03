@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { test, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./static-app";
 
 const privateRoot = resolve("D:/dev-data/kyoku-loop/private");
 let folder: string;
@@ -86,12 +87,8 @@ test("real study five-question flow, durable answer concealment, undo and librar
       await page.getByTestId("real-hand").getByRole("button").first().click();
     }
     await page.getByRole("button", { name: "回答する", exact: true }).click();
-    await expect(page.getByTestId("study-comparison")).toContainText(
-      "今回の回答",
-    );
-    await expect(page.getByTestId("study-comparison")).toContainText(
-      "対局時の打牌",
-    );
+    await expect(page.getByTestId("study-comparison")).toContainText("今回");
+    await expect(page.getByTestId("study-comparison")).toContainText("対局時");
     if (n === 1) {
       await page.getByRole("button", { name: "回答を選び直す" }).click();
       await expect(page.getByTestId("study-comparison")).toHaveCount(0);

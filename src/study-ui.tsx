@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "./api";
+import { StudyOptions, useAnswerMode } from "./study-options";
 import { RealTable, RealTile, roundLabel, uiTile } from "./real-board";
 import { tileLabel } from "./demo";
 import type { ItemHistory, Scene, StudySession, Workspace } from "./real-types";
@@ -145,17 +146,18 @@ function Compare({
     <div className="comparison" data-testid="study-comparison">
       {answer && (
         <div>
-          <span>今回の回答</span>
+          <span>今回</span>
           <PolicyTile scene={scene} value={answer} />
         </div>
       )}
       <div>
-        <span>対局時の打牌</span>
+        <span>対局時</span>
         <PolicyTile scene={scene} value={scene.actual!} />
       </div>
       <div>
         <span>
-          {scene.engine ?? "NAGA"}推奨 · {scene.model_name}
+          {scene.engine ?? "NAGA"}
+          {scene.model_name}
         </span>
         <PolicyTile scene={scene} value={scene.suggested!} />
       </div>
@@ -497,7 +499,12 @@ export function StudyPanel({
   const [undoControl, setUndoControl] = useState<string | null>(null);
   const pending = useRef<{ key: string; id: string } | null>(null);
   const session = workspace.session;
+  const answerMode = useAnswerMode();
+  const inFlight = useRef(false);
+  const skipping = useRef("");
   const run = async (work: () => Promise<void>) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError("");
     try {
@@ -505,6 +512,7 @@ export function StudyPanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : "処理できませんでした。");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
@@ -521,6 +529,44 @@ export function StudyPanel({
       onSession(await api<StudySession>({ action: "study_start", mode }));
       onActive(true);
     });
+  useEffect(() => {
+    if (!active || !session?.stale || busy) return;
+    const key = `${session.id}:${session.index}`;
+    if (skipping.current === key) return;
+    skipping.current = key;
+    void run(async () =>
+      onSession(
+        await api<StudySession>({ action: "study_skip", session: session.id }),
+      ),
+    );
+  }, [active, session?.id, session?.index, session?.stale, busy]);
+  const selectTile = (answer: string) => {
+    if (!session || inFlight.current) return;
+    if (answerMode === "repeat" && session.selected === answer) {
+      choice("confirm");
+      return;
+    }
+    void run(async () => {
+      let next = await api<StudySession>({
+        action: "study_choice",
+        session: session.id,
+        choice: "choose",
+        answer,
+      });
+      if (
+        answerMode === "select" &&
+        !next.stale &&
+        next.selected === answer &&
+        !next.revealed
+      )
+        next = await api<StudySession>({
+          action: "study_choice",
+          session: next.id,
+          choice: "confirm",
+        });
+      onSession(next);
+    });
+  };
   const choice = (choice: string, answer?: string) =>
     void run(async () => {
       onSession(
@@ -571,7 +617,10 @@ export function StudyPanel({
           <button
             className="text-button"
             disabled={busy}
-            onClick={() => void run(onRefresh)}
+            onClick={() => {
+              skipping.current = "";
+              void run(onRefresh);
+            }}
           >
             最新の状態を確認
           </button>
@@ -610,23 +659,7 @@ export function StudyPanel({
             <>
               {session.stale || !session.scene ? (
                 <div className="panel">
-                  <p>この問題の学習状態が変更されました。</p>
-                  <button
-                    className="button primary"
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () =>
-                        onSession(
-                          await api<StudySession>({
-                            action: "study_skip",
-                            session: session.id,
-                          }),
-                        ),
-                      )
-                    }
-                  >
-                    この問題をスキップ
-                  </button>
+                  <p role="status">次の問題を準備しています…</p>
                 </div>
               ) : (
                 <div
@@ -642,7 +675,7 @@ export function StudyPanel({
                         scene={session.scene}
                         interactive={!session.revealed}
                         selected={session.selected}
-                        onSelect={(answer) => choice("choose", answer)}
+                        onSelect={selectTile}
                       />
                     </fieldset>
                   </section>
@@ -725,9 +758,11 @@ export function StudyPanel({
             <section className="panel complete">
               <span className="complete-icon">✓</span>
               <h2>
-                {session.total
-                  ? `${session.total}問、おつかれさまでした。`
-                  : "今日の復習対象はありません。"}
+                {session.answers.length
+                  ? `${session.answers.length}問、おつかれさまでした。`
+                  : session.total
+                    ? "この復習の対象は更新済みです。"
+                    : "今日の復習対象はありません。"}
               </h2>
               <div className="result-summary">
                 {session.answers.map((answer, i) => (
@@ -780,6 +815,7 @@ export function StudyPanel({
             )}
           </div>
           <PracticeCard workspace={workspace} disabled={busy} onBegin={begin} />
+          <StudyOptions />
           <div className="filters" aria-label="学習状態">
             {["今日", "未学習", "復習中", "習得済み", "保留", "すべて"].map(
               (s) => (
