@@ -44,7 +44,7 @@ test("exact policy stays hidden before confirming and old packs remain accepted"
   expect(() => validatePack(broken)).toThrow("invalid_pack");
 });
 for (const width of [320, 390, 768])
-  test(`three compact exact policy values at ${width}px`, async ({ page }) => {
+  test(`three compact exact policy values at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 1000 });
     // Fulfil every request from this build or generated data: no request reaches
     // the server or the user's API/database even if another suite owns port 1460.
@@ -114,7 +114,7 @@ for (const width of [320, 390, 768])
       expect(p!.x + p!.width).toBeLessThanOrEqual(c!.x + c!.width + 1);
     }
     await page.getByTestId("study-comparison").screenshot({
-      path: `D:/dev-data/kyoku-loop/private/comparison-policy-20261104/comparison-${width}.png`,
+      path: info.outputPath(`comparison-${width}.png`),
     });
     await page
       .getByRole("button", { name: "回答を選び直す", exact: true })

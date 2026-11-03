@@ -135,6 +135,7 @@ export async function retainedReveals(material: LocalMaterial) {
 // changing their questions, answers, due dates or stored assessment.
 const policies = new Map<string, Promise<Record<string, number[]>>>();
 export async function retainedPolicy(material: LocalMaterial, id: string) {
+  if (material.policies?.[id]) return material.policies[id];
   let pending = policies.get(material.id);
   if (!pending) {
     pending = execute(material.payload, material.created).then((actual) => {
