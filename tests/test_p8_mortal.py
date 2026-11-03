@@ -96,6 +96,19 @@ class MortalTests(unittest.TestCase):
         self.assertAlmostEqual(sum(s['weights_percent']),100.)
         self.assertNotIn('tehais',s)
 
+    def test_comparison_policy_keeps_red_separate_and_hidden_until_confirmed(self):
+        self.store.commit(self.stage(mortal_fixture(True))['token'],0,0,None)
+        session=self.store.study_start('practice')
+        self.assertNotIn('policy_percent',session['scene'])
+        self.store.study_choice(session['id'],'5pr','choose')
+        session=self.store.study_choice(session['id'],None,'confirm')
+        policy=session['scene']['policy_percent']
+        self.assertAlmostEqual(policy[13],45.)
+        self.assertAlmostEqual(policy[35],40.)
+        self.assertAlmostEqual(sum(policy),100.)
+        self.assertEqual(policy,self.store.phone_pack()['items'][0]['scene']['policy_percent'])
+        self.assertEqual(policy,self.store.item_history(session['item_id'])['scene']['policy_percent'])
+
     def test_reimport_keeps_answers_due_session_and_ids_then_backup_restores(self):
         first=self.store.commit(self.stage()['token'],0,0,None)
         detail=self.store.detail(first['id'])

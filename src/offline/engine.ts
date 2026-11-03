@@ -190,6 +190,17 @@ export function validatePack(value: unknown): asserts value is PhonePack {
         Math.abs(s.weights_percent.reduce((a, b) => a + b, 0) - 100) > 0.001
       )
         fail("invalid_pack");
+      if (
+        s.policy_percent !== undefined &&
+        (s.engine !== "Mortal" ||
+          !Array.isArray(s.policy_percent) ||
+          s.policy_percent.length !== 37 ||
+          !s.policy_percent.every(
+            (w) => Number.isFinite(w) && w >= 0 && w <= 100,
+          ) ||
+          Math.abs(s.policy_percent.reduce((a, b) => a + b, 0) - 100) > 0.001)
+      )
+        fail("invalid_pack");
       const visible = [...s.own_hand, ...s.dora_markers];
       for (const river of s.rivers)
         for (const r of river) {
@@ -489,6 +500,7 @@ const publicScene = (s: Scene): Scene => {
     suggested,
     gap,
     weights_percent,
+    policy_percent,
     model_name,
     ...publicValue
   } = s;

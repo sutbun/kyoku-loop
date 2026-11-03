@@ -32,6 +32,13 @@ def public_scene(scene):
     return {k:copy.deepcopy(scene[k]) for k in PUBLIC if k in scene} | {'is_decision':True}
 
 
+def assessment_scene(scene):
+    result = copy.deepcopy(scene)
+    if scene.get('engine') == 'Mortal':
+        result['policy_percent'] = [v * 100 / scene['weight_total'] for v in scene['raw_weights']]
+    return result
+
+
 class StudyMixin:
     def phone_sync(self,request):
         try:from .sync import receive
@@ -47,7 +54,7 @@ class StudyMixin:
             item=dict(row)
             scene=json.loads(item['scene'])
             safe=public_scene(scene)
-            safe.update({k:scene[k] for k in ('actual','suggested','gap','weights_percent','model_name')})
+            safe.update({k:v for k,v in assessment_scene(scene).items() if k in ('actual','suggested','gap','weights_percent','model_name','policy_percent')})
             item['scene']=safe
             item['history']=json.loads(item['history'])
             item['review_count']=self.db.execute("SELECT count(*) FROM review_events WHERE item=? AND kind='answer'",(item['id'],)).fetchone()[0]
@@ -175,7 +182,7 @@ class StudyMixin:
                 scene=json.loads(item['scene'])
                 result['scene']=public_scene(scene)
                 if s['revealed']:
-                    result['scene'].update({k:scene[k] for k in ('actual','suggested','gap','weights_percent','model_name') if k in scene})
+                    result['scene'].update({k:v for k,v in assessment_scene(scene).items() if k in ('actual','suggested','gap','weights_percent','model_name','policy_percent')})
                 result['item_id']=item['id']
             except StudyFailure:
                 result.update(stale=True,selected=None,revealed=False)
@@ -309,7 +316,7 @@ class StudyMixin:
             if request.get('_sync')==1:e['sync_reason']=request.get('reason','')
         undone={e['undo_of'] for e in events if e['undo_of']}
         for e in events: e['undone']=e['id'] in undone
-        return {'id':ident,'scene':json.loads(item['scene']),'events':events,'legacy_history':json.loads(item['history'])}
+        return {'id':ident,'scene':assessment_scene(json.loads(item['scene'])),'events':events,'legacy_history':json.loads(item['history'])}
 
     def _backup_dir(self):
         folder=self.path.parent/'backups'

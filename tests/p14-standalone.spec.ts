@@ -408,6 +408,18 @@ test("cached standalone Worker matches Windows material offline under the phone 
     await page.getByTestId("real-hand").getByRole("button").first().click();
     await page.getByRole("button", { name: "回答する", exact: true }).click();
     await expect(page.getByTestId("study-comparison")).toBeVisible();
+    await expect(page.locator(".comparison-policy")).toHaveCount(3);
+    await expect(page.locator(".comparison-policy")).toHaveText([
+      /^\d+\.\d%$/,
+      /^\d+\.\d%$/,
+      /^\d+\.\d%$/,
+    ]);
+    // Returning to the app refreshes the nested workspace session offline.
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.getByRole("button", { name: "理解した", exact: true })).toBeEnabled();
+    await expect(page.locator(".comparison-policy")).toHaveText([
+      /^\d+\.\d%$/, /^\d+\.\d%$/, /^\d+\.\d%$/,
+    ]);
     await page.getByRole("button", { name: "理解した", exact: true }).click();
     await page.reload();
     await page
@@ -432,7 +444,10 @@ test("cached standalone Worker matches Windows material offline under the phone 
     expect(saved.local_imports).toHaveLength(1);
     // A pre-reveal backup retains the original JSON but has no display cache.
     delete saved.pack.reveals;
-    for (const entry of saved.local_imports) delete entry.material.reveals;
+    for (const entry of saved.local_imports) {
+      delete entry.material.reveals;
+      delete entry.material.policies;
+    }
     // Empty generated device, with runtime cache retained. Real user data is never touched.
     await page.evaluate(
       () =>
