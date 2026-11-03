@@ -368,3 +368,29 @@ test("public melds and larger text stay reachable instead of being clipped", asy
     ),
   ).toBe(true);
 });
+
+test("completion restores navigation and keeps one accessible rating undo", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openStudy(page);
+  for (let index = 0; index < 5; index++) {
+    await page.getByTestId("real-hand").locator("button").first().click();
+    await page.getByRole("button", { name: "回答する", exact: true }).click();
+    await page.getByRole("button", { name: "理解した", exact: true }).click();
+  }
+  await expect(page.locator(".phone-app")).not.toHaveClass(/is-studying/);
+  await expect(page.locator(".phone-nav")).toBeVisible();
+  const undo = page.getByRole("button", {
+    name: "直前の評価を取り消す",
+    exact: true,
+  });
+  await expect(undo).toHaveCount(1);
+  await undo.click();
+  await expect(page.getByText("5 / 5 問", { exact: true })).toBeVisible();
+  await expect(page.locator(".phone-app")).toHaveClass(/is-studying/);
+  await actionVisible(
+    page,
+    page.getByRole("button", { name: "理解した", exact: true }),
+  );
+});

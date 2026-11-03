@@ -559,7 +559,7 @@ export function StudyPanel({
                 {session.index + 1} / {session.total} 問
               </span>
             )}
-            {portable && session.can_undo && (
+            {portable && !session.complete && session.can_undo && (
               <button
                 className="text-button study-undo"
                 aria-label="直前の評価を取り消す"
