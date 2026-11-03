@@ -69,8 +69,8 @@ def validate(report):
                 or len(kyoku['entries']) > 2000):
             raise ValueError('unsupported_format')
     if any(len(cell['log']) != 1 for cell in logs):
-        # iPad Shortcuts dictionary-to-text can repeat the entire game in each
-        # split log. Recover only identical, complete arrays in the same order.
+        # An observed iPad Shortcuts export repeats the game in each split log.
+        # Recover only identical, complete arrays in the same order.
         # project() still cross-checks every round, event and review snapshot.
         full = logs[0]['log']
         identity = json.dumps(full, sort_keys=True, allow_nan=False)
