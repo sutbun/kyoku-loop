@@ -5,7 +5,7 @@ import { useLayoutEffect, useRef } from "react";
 export function usePhoneStudyLayout(active: boolean, item?: string) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    if (active) window.scrollTo({ top: 0, behavior: "instant" });
+    if (active) window.scrollTo(0, 0);
   }, [active, item]);
   useLayoutEffect(() => {
     const app = ref.current;
