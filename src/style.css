@@ -675,11 +675,11 @@ footer > span:first-child {
   font-size: 3.2cqw;
 }
 .table-center .round-name {
-  font-size: 3cqw;
+  font-size: clamp(10px, 3.6cqw, 26px);
 }
 .table-center-content {
   position: absolute;
-  inset: 17%;
+  inset: 15%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -687,7 +687,7 @@ footer > span:first-child {
   gap: 0.4cqw;
 }
 .table-center .table-center-content > div {
-  font-size: 1.7cqw;
+  font-size: clamp(7px, 2.05cqw, 15px);
 }
 .center-seat {
   position: absolute;
@@ -809,14 +809,16 @@ footer > span:first-child {
 }
 .table-center .dora {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.6cqw;
   max-width: 100%;
   justify-content: center;
   align-items: center;
 }
 .dora .tile.small {
-  width: 3.4cqw;
-  height: 4.4cqw;
+  flex: 0 0 4.1cqw;
+  width: 4.1cqw;
+  height: 5.3cqw;
 }
 .dora .tile b {
   font-size: 2.4cqw;

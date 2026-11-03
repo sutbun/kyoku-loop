@@ -285,6 +285,12 @@ test("Windows demo uses the same rotated rivers on a square table", async ({
   expect(seats[0].rotation).toEqual([-1, 0, 0, -1]);
   expect(seats[1].rotation).toEqual([0, 1, -1, 0]);
   expect(seats[3].rotation).toEqual([0, -1, 1, 0]);
+  const hands = page.locator(".concealed-hand");
+  await hands.first().click();
+  for (const hand of await hands.all())
+    await expect(hand).toHaveAttribute("aria-pressed", "true");
+  await hands.last().click();
+  await expect(hands.locator(".tile-art")).toHaveCount(0);
   const proof = process.env.KYOKULOOP_UI_PROOF;
   if (proof && info.project.name === "desktop") {
     mkdirSync(proof, { recursive: true });

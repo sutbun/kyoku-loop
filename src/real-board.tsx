@@ -3,6 +3,7 @@ import { api } from "./api";
 import { tileLabel } from "./demo";
 import type { Scene, Meld } from "./real-types";
 import { TileArt } from "./tile-art";
+import { tileOrder, sortedTiles } from "./tile-order";
 export const uiTile = (value: string) => {
   const honor = ["E", "S", "W", "N", "P", "F", "C"].indexOf(value);
   return honor >= 0
@@ -78,10 +79,6 @@ export const eventLabels: Record<string, string> = {
 };
 
 const seatNames = ["対面", "上家", "自分", "下家"];
-const tileOrder = (value: string) => {
-  const tile = uiTile(value);
-  return "mpsz".indexOf(tile[1]) * 10 + (tile[0] === "0" ? 5 : Number(tile[0]));
-};
 function TileBack() {
   return <span className="tile tile-back" role="img" aria-label="裏向きの牌" />;
 }
@@ -165,6 +162,7 @@ export function TableSeat({
   loading?: boolean;
   disabled?: boolean;
 }) {
+  const displayTiles = openTiles && sortedTiles(openTiles);
   return (
     <>
       {position !== 2 && (
@@ -174,19 +172,21 @@ export function TableSeat({
             className="concealed-hand"
             onClick={onToggle}
             disabled={disabled || !onToggle}
-            aria-pressed={!!openTiles}
+            aria-pressed={!!displayTiles}
             aria-busy={loading}
-            aria-label={`${seatNames[position]}の手牌を${openTiles ? "伏せる" : "開く"}${openTiles ? `・${openTiles.map((t) => tileLabel(uiTile(t))).join(" ")}` : ""}`}
+            aria-label={`相手全員の手牌を${displayTiles ? "伏せる" : "開く"}・${seatNames[position]}${displayTiles ? `・${displayTiles.map((t) => tileLabel(uiTile(t))).join(" ")}` : ""}`}
             title={
-              openTiles ? "クリック／タップで伏せる" : "クリック／タップで開く"
+              displayTiles
+                ? "クリック／タップで相手全員を伏せる"
+                : "クリック／タップで相手全員を開く"
             }
           >
             {Array.from(
-              { length: openTiles?.length ?? Math.max(0, concealedCount) },
+              { length: displayTiles?.length ?? Math.max(0, concealedCount) },
               (_, i) => (
                 <span key={i} aria-hidden="true">
-                  {openTiles ? (
-                    <RealTile value={openTiles[i]} small />
+                  {displayTiles ? (
+                    <RealTile value={displayTiles[i]} small />
                   ) : (
                     <TileBack />
                   )}
@@ -265,13 +265,13 @@ export function RealTable({
   const key = `${report ?? ""}:${scene.id ?? ""}:${scene.round_index}:${scene.event_index}`;
   const epoch = useRef(0);
   const [hands, setHands] = useState<string[][] | null>(null);
-  const [opened, setOpened] = useState<Set<number>>(new Set());
+  const [opened, setOpened] = useState(false);
   const [loadingSeat, setLoadingSeat] = useState<number | null>(null);
   const [revealError, setRevealError] = useState("");
   useLayoutEffect(() => {
     epoch.current++;
     setHands(null);
-    setOpened(new Set());
+    setOpened(false);
     setLoadingSeat(null);
     setRevealError("");
     return () => {
@@ -279,12 +279,12 @@ export function RealTable({
     };
   }, [key]);
   const toggle = async (seat: number) => {
-    if (opened.has(seat)) {
-      setOpened(new Set([...opened].filter((s) => s !== seat)));
+    if (opened) {
+      setOpened(false);
       return;
     }
     if (hands) {
-      setOpened(new Set([...opened, seat]));
+      setOpened(true);
       return;
     }
     const generation = epoch.current;
@@ -306,7 +306,7 @@ export function RealTable({
       )
         throw Error("手牌を確認できませんでした。");
       setHands(result.hands);
-      setOpened(new Set([seat]));
+      setOpened(true);
     } catch (error) {
       if (generation === epoch.current)
         setRevealError(
@@ -335,7 +335,7 @@ export function RealTable({
                 hands?.[seat].length ??
                 13 - 3 * scene.melds[seat].length + Number(drawing)
               }
-              openTiles={opened.has(seat) ? hands?.[seat] : undefined}
+              openTiles={opened ? hands?.[seat] : undefined}
               onToggle={() => void toggle(seat)}
               loading={loadingSeat === seat}
               disabled={loadingSeat !== null || (!scene.id && !report)}
