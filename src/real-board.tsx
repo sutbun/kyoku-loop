@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { tileLabel } from "./demo";
-import type { Scene } from "./real-types";
+import type { Scene, Meld } from "./real-types";
 import { TileArt } from "./tile-art";
 export const uiTile = (value: string) => {
   const honor = ["E", "S", "W", "N", "P", "F", "C"].indexOf(value);
@@ -76,6 +76,139 @@ export const eventLabels: Record<string, string> = {
   dora: "ドラ追加",
 };
 
+const seatNames = ["対面", "上家", "自分", "下家"];
+const tileOrder = (value: string) => {
+  const tile = uiTile(value);
+  return "mpsz".indexOf(tile[1]) * 10 + (tile[0] === "0" ? 5 : Number(tile[0]));
+};
+function TileBack() {
+  return <span className="tile tile-back" role="img" aria-label="裏向きの牌" />;
+}
+
+export function MeldTiles({ meld, seat }: { meld: Meld; seat: number }) {
+  const concealed = meld.type === "ankan";
+  const values = [...meld.consumed].sort((a, b) => tileOrder(a) - tileOrder(b));
+  // Keep a red five visible when the two outside tiles of a concealed kan turn over.
+  if (concealed) {
+    const red = values.findIndex((t) => uiTile(t)[0] === "0");
+    if (red === 0 || red === values.length - 1)
+      values.splice(1, 0, values.splice(red, 1)[0]);
+  }
+  const relative = meld.target === undefined ? 0 : (meld.target - seat + 4) % 4;
+  const sideways = !concealed && relative !== 0 && !!meld.tile;
+  const calledIndex = sideways
+    ? relative === 3
+      ? 0
+      : relative === 2
+        ? 1
+        : values.length
+    : -1;
+  if (meld.tile)
+    values.splice(sideways ? calledIndex : values.length, 0, meld.tile);
+  if (meld.added && !sideways) values.push(meld.added);
+  const from =
+    relative === 3
+      ? "上家"
+      : relative === 2
+        ? "対面"
+        : relative === 1
+          ? "下家"
+          : "鳴き元不明";
+  return (
+    <div
+      className={`meld${concealed ? " concealed-kan" : ""}`}
+      data-kind={meld.type}
+      role="group"
+      aria-label={`${eventLabels[meld.type] ?? meld.type}${concealed ? "" : `・${from}`}`}
+      title={`${eventLabels[meld.type] ?? meld.type}${concealed ? "" : `・${from}`}`}
+    >
+      {values.map((value, index) => (
+        <span
+          key={index}
+          className={`meld-slot${index === calledIndex ? " meld-called" : ""}`}
+        >
+          {concealed && (index === 0 || index === values.length - 1) ? (
+            <TileBack />
+          ) : (
+            <RealTile value={value} small />
+          )}
+          {index === calledIndex && meld.added && (
+            <span className="meld-added">
+              <RealTile value={meld.added} small />
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function TableSeat({
+  position,
+  seat,
+  river,
+  melds = [],
+  concealedCount = 13 - 3 * melds.length,
+}: {
+  position: number;
+  seat: number;
+  river: Scene["rivers"][number];
+  melds?: Meld[];
+  concealedCount?: number;
+}) {
+  return (
+    <div className={`player player-${position}`} data-seat={seat}>
+      <DiscardRiver tiles={river} label={`${seatNames[position]}の河`} />
+      {position !== 2 && (
+        <div
+          className="concealed-hand"
+          role="img"
+          aria-label={`${seatNames[position]}の手牌（${concealedCount}枚・伏せ牌）`}
+        >
+          {Array.from({ length: Math.max(0, concealedCount) }, (_, i) => (
+            <span key={i} aria-hidden="true">
+              <TileBack />
+            </span>
+          ))}
+        </div>
+      )}
+      {melds.length > 0 && (
+        <div className="seat-melds" aria-label={`${seatNames[position]}の副露`}>
+          {melds.map((meld, index) => (
+            <MeldTiles key={index} meld={meld} seat={seat} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TableCenter({
+  seats,
+  children,
+}: {
+  seats: { wind: string; score: number; reach?: boolean }[];
+  children: ReactNode;
+}) {
+  return (
+    <div className="table-center" aria-label="局情報と点数">
+      {seats.map((seat, position) => (
+        <div className={`center-seat player-${position}`} key={position}>
+          <div
+            className="player-label"
+            aria-label={`${seatNames[position]} ${seat.wind} ${seat.score.toLocaleString()}点${seat.reach ? " リーチ" : ""}`}
+          >
+            <b>{seat.wind}</b>
+            <span>{seat.score.toLocaleString()}</span>
+            {seat.reach && <i className="reach-stick" aria-hidden="true" />}
+          </div>
+        </div>
+      ))}
+      <div className="table-center-content">{children}</div>
+    </div>
+  );
+}
+
 export function RealTable({
   scene,
   interactive = false,
@@ -90,11 +223,7 @@ export function RealTable({
   const [chosenIndex, setChosenIndex] = useState<number | null>(null);
   const hand = [...scene.own_hand];
   if (scene.drawn) hand.splice(hand.lastIndexOf(scene.drawn), 1);
-  const order = (t: string) => {
-    const v = uiTile(t);
-    return "mpsz".indexOf(v[1]) * 10 + (v[0] === "0" ? 5 : Number(v[0]));
-  };
-  hand.sort((a, b) => order(a) - order(b));
+  hand.sort((a, b) => tileOrder(a) - tileOrder(b));
   const tiles = [...hand, ...(scene.drawn ? [scene.drawn] : [])];
   const selectedIndex =
     chosenIndex !== null && tiles[chosenIndex] === selected
@@ -106,34 +235,35 @@ export function RealTable({
       <div className="table" aria-label={`${roundLabel(scene)}の卓`}>
         {[0, 1, 2, 3].map((position) => {
           const seat = (own + position - 2 + 4) % 4;
-          const label = ["対面", "上家", "あなた", "下家"][position];
-          const seatWind = ["東", "南", "西", "北"][
-            (seat - (scene.kyoku - 1) + 4) % 4
-          ];
+          const drawing =
+            scene.actor === seat &&
+            ["tsumo", "chi", "pon", "reach"].includes(scene.event_type ?? "");
           return (
-            <div
-              className={`player player-${position}`}
+            <TableSeat
               key={seat}
-              data-seat={seat}
-            >
-              <div className="player-label">
-                <b>
-                  {label} · {seatWind}
-                </b>
-                <span>
-                  {scene.scores[seat].toLocaleString()}
-                  {scene.reach_declared[seat] ? " · リーチ" : ""}
-                </span>
-              </div>
-              <DiscardRiver
-                tiles={scene.rivers[seat]}
-                label={`${position === 2 ? "自分" : label}の河`}
-              />
-            </div>
+              position={position}
+              seat={seat}
+              river={scene.rivers[seat]}
+              melds={scene.melds[seat]}
+              concealedCount={
+                13 - 3 * scene.melds[seat].length + Number(drawing)
+              }
+            />
           );
         })}
-        <div className="table-center">
-          <span>
+        <TableCenter
+          seats={[0, 1, 2, 3].map((position) => {
+            const seat = (own + position - 2 + 4) % 4;
+            return {
+              wind: ["東", "南", "西", "北"][
+                (seat - (scene.kyoku - 1) + 4) % 4
+              ],
+              score: scene.scores[seat],
+              reach: scene.reach_declared[seat],
+            };
+          })}
+        >
+          <span className="round-name">
             {wind(scene.bakaze)}
             {scene.kyoku}局
           </span>
@@ -151,51 +281,7 @@ export function RealTable({
               <RealTile value={t} small key={i} />
             ))}
           </div>
-        </div>
-      </div>
-      {scene.melds.some((m) => m.length > 0) && (
-        <div className="public-melds" aria-label="公開された副露">
-          {[0, 1, 2, 3].map((position) => {
-            const seat = (own + position - 2 + 4) % 4;
-            const label = ["対面", "上家", "あなた", "下家"][position];
-            return (
-              scene.melds[seat].length > 0 && (
-                <div className="public-meld-row" key={seat}>
-                  <b>{label}</b>
-                  <div className="melds" aria-label={`${label}の副露`}>
-                    {scene.melds[seat].map((m, i) => (
-                      <div className="meld" key={i}>
-                        <small>
-                          {eventLabels[m.type]}
-                          {m.target !== undefined
-                            ? `・${(m.target - seat + 4) % 4 === 1 ? "下家" : (m.target - seat + 4) % 4 === 2 ? "対面" : "上家"}から`
-                            : ""}
-                        </small>
-                        <span>
-                          {[
-                            ...m.consumed,
-                            ...(m.tile ? [m.tile] : []),
-                            ...(m.added ? [m.added] : []),
-                          ].map((t, n) => (
-                            <RealTile key={n} value={t} small />
-                          ))}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            );
-          })}
-        </div>
-      )}
-      <div className="hand-head">
-        <span>あなた · {wind(scene.own_wind)}家</span>
-        <span>
-          {scene.melds[own].length > 0 && `${scene.melds[own].length}副露`}
-          {scene.melds[own].length > 0 && scene.reach_declared[own] && " · "}
-          {scene.reach_declared[own] && "リーチ"}
-        </span>
+        </TableCenter>
       </div>
       <div
         className={`hand ${interactive ? "playable" : ""}`}

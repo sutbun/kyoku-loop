@@ -17,6 +17,28 @@
   justify-content: space-between;
   align-items: center;
   min-height: 44px;
+  gap: 12px;
+}
+.phone-header > b,
+.phone-header > .phone-version {
+  flex: 0 0 auto;
+}
+.phone-header .phone-connection {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 24px;
+  line-height: 24px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-connection > span + span::before {
+  content: " · ";
+}
+.phone-connection > span {
+  font-size: inherit;
+  opacity: 1;
 }
 .phone-header span {
   font-size: 10px;
@@ -49,14 +71,6 @@
 .phone-header .phone-version:disabled {
   opacity: 0.6;
   cursor: wait;
-}
-.phone-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 6px;
 }
 .phone-app .content {
   padding: 10px 12px;

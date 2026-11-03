@@ -305,6 +305,15 @@ function PhoneApp() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     });
+  const connectionDetail = [
+    !online && "オフライン",
+    syncing && "同期中…",
+    pending > 0 && `回答 未送信 ${pending}件`,
+    resultPending > 0 && `結果 未同期 ${resultPending}件`,
+    urlPending > 0 && `URL 未同期 ${urlPending}件`,
+  ]
+    .filter(Boolean)
+    .join(" / ");
   return (
     <div
       ref={studyRef}
@@ -312,6 +321,23 @@ function PhoneApp() {
     >
       <header className="phone-header">
         <b>KyokuLoop</b>
+        <span
+          className="phone-connection"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label={connectionDetail || undefined}
+          title={connectionDetail}
+        >
+          {!online && <span>オフライン</span>}
+          {syncing ? (
+            <span>同期中…</span>
+          ) : (
+            pending > 0 && <span>回答 未送信 {pending}件</span>
+          )}
+          {!!resultPending && <span>結果 未同期 {resultPending}件</span>}
+          {!!urlPending && <span>URL 未同期 {urlPending}件</span>}
+        </span>
         <VersionUpdate
           enabled={loaded}
           onLock={setUpdateLock}
@@ -332,22 +358,6 @@ function PhoneApp() {
       </header>
       <main inert={updateLock}>
         <div className="content">
-          {(!online ||
-            syncing ||
-            pending > 0 ||
-            urlPending > 0 ||
-            resultPending > 0) && (
-            <div className="phone-status" role="status">
-              {!online && <span>オフライン</span>}
-              {syncing ? (
-                <span>同期中…</span>
-              ) : (
-                pending > 0 && <span>回答 未送信 {pending}件</span>
-              )}
-              {!!resultPending && <span>結果 未同期 {resultPending}件</span>}
-              {!!urlPending && <span>URL 未同期 {urlPending}件</span>}
-            </div>
-          )}
           {syncError && studying ? (
             <details className="error phone-sync-notice" role="alert">
               <summary>同期の確認が必要です</summary>
@@ -489,7 +499,7 @@ function PhoneApp() {
                       void syncRecords(false, true);
                     }}
                   >
-                    {syncing ? "同期中…" : "今すぐ同期"}
+                    今すぐ同期
                   </button>
                 </div>
                 {compilerSaved && local && (

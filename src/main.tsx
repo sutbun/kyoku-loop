@@ -18,7 +18,7 @@ import {
 } from "./demo";
 import "./style.css";
 import { RealApp } from "./real-app";
-import { DiscardRiver, RealTile as Tile } from "./real-board";
+import { TableSeat, TableCenter, RealTile as Tile } from "./real-board";
 
 import { VERSION } from "./version";
 const KEY = "kyokuloop-fictional-prototype-v2";
@@ -51,28 +51,24 @@ function Table({
         aria-label={`${frame.round} ${frame.turn}巡目の卓`}
       >
         {positions.map((seat) => (
-          <div className={`player player-${seat}`} key={seat}>
-            <div className="player-label">
-              <b>
-                {seat === 2 ? "あなた" : ["対面", "上家", "", "下家"][seat]}
-              </b>
-              <span>
-                {winds[(seat - (2 - winds.indexOf(frame.ownWind)) + 4) % 4]}　
-                {frame.scores[seat].toLocaleString()}
-              </span>
-            </div>
-            <DiscardRiver
-              tiles={frame.rivers[seat].map((tile) => ({
-                tile,
-                called: false,
-                reach: false,
-              }))}
-              label={`${seat === 2 ? "自分" : ["対面", "上家", "", "下家"][seat]}の河`}
-            />
-          </div>
+          <TableSeat
+            key={seat}
+            position={seat}
+            seat={seat}
+            river={frame.rivers[seat].map((tile) => ({
+              tile,
+              called: false,
+              reach: false,
+            }))}
+          />
         ))}
-        <div className="table-center">
-          <span>{frame.round}</span>
+        <TableCenter
+          seats={positions.map((seat) => ({
+            wind: winds[(seat - (2 - winds.indexOf(frame.ownWind)) + 4) % 4],
+            score: frame.scores[seat],
+          }))}
+        >
+          <span className="round-name">{frame.round}</span>
           <strong>
             {frame.turn}
             <small>巡目</small>
@@ -81,12 +77,7 @@ function Table({
           <div className="dora">
             ドラ表示 <Tile value={frame.dora} small />
           </div>
-        </div>
-        <span className="table-mark">KYOKU LOOP</span>
-      </div>
-      <div className="hand-head">
-        <span>あなた · {frame.ownWind}家</span>
-        <span>副露なし · リーチなし</span>
+        </TableCenter>
       </div>
       <div
         className={`hand ${interactive ? "playable" : ""}`}

@@ -350,9 +350,7 @@ test("public melds and larger text stay reachable instead of being clipped", asy
   }
   await page.setViewportSize({ width: 820, height: 1180 });
   await openStudy(page, { fixture });
-  await expect(
-    page.getByLabel("公開された副露", { exact: true }),
-  ).toBeVisible();
+  await expect(page.locator(".table .seat-melds")).toBeVisible();
   await actionVisible(
     page,
     page.getByRole("button", { name: "回答する", exact: true }),
