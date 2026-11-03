@@ -131,7 +131,7 @@ function fixture(full: boolean | "quads" = false): PhonePack {
 async function open(page: Page, pack = fixture(), online = false) {
   let finish: (() => void) | undefined;
   let requests = 0;
-  const root = resolve("dist");
+  const root = resolve(process.env.KYOKULOOP_UI_DIST ?? "dist");
   await page.route("**/*", async (route) => {
     let path = new URL(route.request().url()).pathname;
     if (path === "/phone/api") {
@@ -279,6 +279,7 @@ for (const [width, height] of [
       mkdirSync(process.env.KYOKULOOP_UI_PROOF, { recursive: true });
       await page.screenshot({
         path: join(process.env.KYOKULOOP_UI_PROOF, `seats-${width}.png`),
+        scale: "css",
       });
     }
     await page.getByTestId("real-hand").locator("button").first().click();
@@ -343,10 +344,13 @@ test("four quads fit along the caller's right edge without covering hidden hands
     );
   });
   expect(collision).toBe(false);
-  if (process.env.KYOKULOOP_UI_PROOF && info.project.name === "phone")
+  if (process.env.KYOKULOOP_UI_PROOF && info.project.name === "phone") {
+    mkdirSync(process.env.KYOKULOOP_UI_PROOF, { recursive: true });
     await page.screenshot({
       path: join(process.env.KYOKULOOP_UI_PROOF, "four-quads.png"),
+      scale: "css",
     });
+  }
 });
 
 for (const [width, height] of [
