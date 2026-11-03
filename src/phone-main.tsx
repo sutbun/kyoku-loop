@@ -141,7 +141,6 @@ function PhoneApp() {
     if (retry.current) clearTimeout(retry.current);
     syncRunning.current = true;
     setSyncing(true);
-    setSyncError("");
     try {
       const before = await readPhone();
       if (before?.schema === 2) {
@@ -167,7 +166,10 @@ function PhoneApp() {
         await api({ action: "install_pack", pack: await downloadPhonePack() });
       }
       delay.current = 1000;
-      if (mounted.current) await refresh();
+      if (mounted.current) {
+        await refresh();
+        setSyncError("");
+      }
     } catch (e) {
       const state = await readPhone();
       const network =

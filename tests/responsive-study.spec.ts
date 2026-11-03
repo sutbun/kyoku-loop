@@ -19,10 +19,13 @@ async function openStudy(
   } = {},
 ) {
   const root = resolve("dist");
+  let syncRequests = 0;
   await page.route("**/*", async (route) => {
     let path = new URL(route.request().url()).pathname;
-    if (path === "/phone/api")
+    if (path === "/phone/api") {
+      syncRequests++;
       return route.fulfill({ json: { ok: false, error: "invalid_pack" } });
+    }
     if (path.startsWith("/phone/assets/")) path = path.slice("/phone".length);
     if (path === "/layout-fixture")
       return route.fulfill({
@@ -96,6 +99,7 @@ async function openStudy(
     })
     .click();
   await expect(page.locator(".phone-app")).toHaveClass(/is-studying/);
+  return { requestCount: () => syncRequests };
 }
 
 async function actionVisible(page: Page, control: Locator) {
@@ -290,7 +294,7 @@ test("sync integrity warning remains accessible without taking over each questio
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await openStudy(page, { warning: true });
+  const sync = await openStudy(page, { warning: true });
   const warning = page.locator(".phone-sync-notice");
   await expect(warning).toBeVisible();
   await expect(warning).toContainText("問題の整合性を確認できません");
@@ -304,10 +308,20 @@ test("sync integrity warning remains accessible without taking over each questio
     page.getByRole("button", { name: "理解した", exact: true }),
   );
   await warning.locator("summary").click();
+  const previousRequests = sync.requestCount();
+  await expect
+    .poll(sync.requestCount, { timeout: 15000 })
+    .toBeGreaterThan(previousRequests);
+  expect(await warning.evaluate((e) => (e as HTMLDetailsElement).open)).toBe(
+    true,
+  );
   await expect(
     page.getByRole("button", { name: "同期を再試行" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "同期を再試行" }).click();
+  await expect(
+    page.getByRole("button", { name: "同期を再試行" }),
+  ).toBeEnabled();
   await expect(warning).toContainText("現在の保存内容は保持しています");
   await warning.locator("summary").click();
   await page.getByRole("button", { name: "理解した", exact: true }).click();
