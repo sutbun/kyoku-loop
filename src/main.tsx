@@ -44,6 +44,8 @@ function Table({
   onSelect?: (n: number) => void;
 }) {
   const positions = [0, 1, 2, 3];
+  const [opened, setOpened] = useState<Set<number>>(new Set());
+  useEffect(() => setOpened(new Set()), [frame.id]);
   return (
     <div className="table-wrap">
       <div
@@ -55,6 +57,17 @@ function Table({
             key={seat}
             position={seat}
             seat={seat}
+            concealedCount={frame.revealedHands[seat].length}
+            openTiles={opened.has(seat) ? frame.revealedHands[seat] : undefined}
+            onToggle={() =>
+              setOpened(
+                new Set(
+                  opened.has(seat)
+                    ? [...opened].filter((s) => s !== seat)
+                    : [...opened, seat],
+                ),
+              )
+            }
             river={frame.rivers[seat].map((tile) => ({
               tile,
               called: false,
@@ -69,10 +82,6 @@ function Table({
           }))}
         >
           <span className="round-name">{frame.round}</span>
-          <strong>
-            {frame.turn}
-            <small>巡目</small>
-          </strong>
           <div>0本場 · 供託0</div>
           <div className="dora">
             ドラ表示 <Tile value={frame.dora} small />

@@ -13,6 +13,7 @@ export type LocalMaterial = {
   family_ids: string[];
   items: PhoneItem[];
   payload: string;
+  reveals?: Record<string, string[][]>;
 };
 async function matches(
   response: Response | undefined,
@@ -101,9 +102,28 @@ export async function verifyLocalBackup(state: PhoneState) {
       entry.material.payload,
       entry.material.created,
     );
-    const { payload: a, ...left } = actual;
-    const { payload: b, ...right } = entry.material;
+    const { payload: a, reveals: ar, ...left } = actual;
+    const { payload: b, reveals: br, ...right } = entry.material;
     if (JSON.stringify(left) !== JSON.stringify(right))
       throw Error("invalid_phone_backup");
+    if (br && JSON.stringify(br) !== JSON.stringify(ar))
+      throw Error("invalid_phone_backup");
+    for (const id of entry.item_ids)
+      if (
+        state.pack?.reveals &&
+        Object.hasOwn(state.pack.reveals, id) &&
+        ar?.[id] &&
+        JSON.stringify(state.pack.reveals[id]) !== JSON.stringify(ar[id])
+      )
+        throw Error("invalid_phone_backup");
   }
+}
+
+export async function retainedReveals(material: LocalMaterial) {
+  const actual = await execute(material.payload, material.created);
+  const { payload: a, reveals: ar, ...left } = actual;
+  const { payload: b, reveals: br, ...right } = material;
+  if (JSON.stringify(left) !== JSON.stringify(right))
+    throw Error("invalid_phone_backup");
+  return ar ?? {};
 }

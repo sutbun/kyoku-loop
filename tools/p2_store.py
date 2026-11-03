@@ -354,6 +354,36 @@ class Store(StudyMixin, AnalysisQueueMixin):
         content['manual']=[r['id'] for r in self.db.execute('SELECT id FROM study_items WHERE manual=1')]
         return content
 
+    def hand_reveals(self, items):
+        try:from .hand_reveal import replay_hands, scene_key
+        except ImportError:from hand_reveal import replay_hands, scene_key
+        result = {}
+        for ident in {item['report'] for item in items}:
+            row = self.db.execute('SELECT sources.payload FROM reports JOIN sources ON reports.source=sources.hash WHERE reports.id=?',(ident,)).fetchone()
+            if not row: continue
+            selected = [item for item in items if item['report'] == ident]
+            try:
+                projected = replay_hands(decode(row['payload']), [item['scene'] for item in selected])
+                result.update({item['id']:projected[scene_key(item['scene'])] for item in selected if scene_key(item['scene']) in projected})
+            except (ValueError,KeyError,IndexError,TypeError):
+                continue
+        return result
+
+    def open_hands(self, item=None, report=None, round_index=None, event_index=None):
+        if report:
+            detail = self.detail(report)
+            scene = next((s for s in [*detail['decisions'], *detail['timeline']]
+                          if s['round_index'] == round_index and s['event_index'] == event_index
+                          and (item is None or s.get('id') == item)), None)
+            if scene is None: raise StudyFailure('hand_data_missing')
+        else:
+            row = self._item(item)
+            report, scene = row['report'], json.loads(row['scene'])
+        ident = scene.get('id') or 'timeline'
+        hands = self.hand_reveals([{'id':ident,'report':report,'scene':scene}]).get(ident)
+        if hands is None: raise StudyFailure('hand_data_missing')
+        return {'hands':hands}
+
     def save(self, report_id, ident, saved):
         detail=self.detail(report_id)
         scene=next((s for s in detail['decisions'] if s['id']==ident),None)
@@ -457,6 +487,7 @@ def main():
         elif action=='analysis_setup': result=store.analysis_setup(request.get('seen'))
         elif action=='detail':
             result=store.detail(request.get('id'))
+        elif action=='open_hands': result=store.open_hands(request.get('item'),request.get('report'),request.get('round_index'),request.get('event_index'))
         elif action=='save':
             result=store.save(request.get('report'),request.get('id'),request.get('saved'))
         elif action=='study_start': result=store.study_start(request.get('mode'))

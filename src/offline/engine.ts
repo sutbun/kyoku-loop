@@ -29,6 +29,7 @@ export type PhonePack = {
   exported_at: string;
   items: PhoneItem[];
   histories: Record<string, ItemHistory>;
+  reveals?: Record<string, string[][]>;
 };
 type QueueEntry = { id: string; cycle: string; revision: number };
 type LocalSession = {
@@ -214,6 +215,23 @@ export function validatePack(value: unknown): asserts value is PhonePack {
           );
         }
       const counts: Record<string, number> = {};
+      if (p.reveals && Object.hasOwn(p.reveals, i.id)) {
+        const hands = p.reveals[i.id];
+        if (
+          !Array.isArray(hands) ||
+          hands.length !== 4 ||
+          hands.some(
+            (hand) =>
+              !Array.isArray(hand) || hand.length > 14 || !hand.every(tile),
+          ) ||
+          JSON.stringify([...hands[s.seat]].sort()) !==
+            JSON.stringify([...s.own_hand].sort())
+        )
+          fail("invalid_pack");
+        hands.forEach((hand, seat) => {
+          if (seat !== s.seat) visible.push(...hand);
+        });
+      }
       for (const t of visible) {
         const k = t.replace(/r$/, "");
         counts[k] = (counts[k] ?? 0) + 1;
@@ -229,6 +247,14 @@ export function validatePack(value: unknown): asserts value is PhonePack {
       )
         fail("invalid_pack");
     }
+    if (
+      p.reveals !== undefined &&
+      (!p.reveals ||
+        typeof p.reveals !== "object" ||
+        Array.isArray(p.reveals) ||
+        Object.keys(p.reveals).some((id) => !ids.has(id)))
+    )
+      fail("invalid_pack");
   } catch (e) {
     if (
       e instanceof Error &&
@@ -273,6 +299,7 @@ export function validateMaterial(
       exported_at: m.created,
       items: m.items,
       histories,
+      reveals: m.reveals,
     });
     for (const i of m.items)
       if (
@@ -681,6 +708,12 @@ export function phoneReduce(
         count++;
       }
       state.pack.policy = 2;
+      if (material.reveals)
+        for (const id of ids)
+          if (Object.hasOwn(material.reveals, id)) {
+            state.pack.reveals ??= {};
+            state.pack.reveals[id] = clone(material.reveals[id]);
+          }
       state.local_imports!.push({
         material: clone(material),
         item_ids: ids,
@@ -688,6 +721,22 @@ export function phoneReduce(
       });
       validatePhoneBackup(state);
       data = { id: material.id, duplicate: false };
+      break;
+    }
+    case "cache_reveals": {
+      if (!state.pack || state.pack.source !== r.source)
+        fail("different_source");
+      const entry = state.local_imports?.find(
+        (e) => e.material.id === r.material,
+      );
+      if (!entry) fail("hand_data_missing");
+      for (const id of entry!.item_ids)
+        if (r.reveals && Object.hasOwn(r.reveals, id)) {
+          state.pack!.reveals ??= {};
+          state.pack!.reveals[id] = clone(r.reveals[id]);
+        }
+      validatePhoneBackup(state);
+      data = { saved: true };
       break;
     }
     case "bind_source": {
@@ -769,6 +818,15 @@ export function phoneReduce(
             next.histories[id] = clone(state.pack!.histories[id]);
           }
         }
+      for (const id of Object.keys(state.pack!.reveals ?? {}))
+        if (
+          next.items.some((i) => i.id === id) &&
+          !Object.hasOwn(next.reveals ?? {}, id)
+        ) {
+          next.reveals ??= {};
+          next.reveals[id] = clone(state.pack!.reveals![id]);
+        }
+      validatePack(next);
       state.pack = next;
       state.receipts = receipts;
       state.last_sync = reply.pack.exported_at;

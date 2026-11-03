@@ -1,6 +1,7 @@
 import p0Code from "../../tools/p0_verify.py?raw";
 import mortalCode from "../../tools/mortal_report.py?raw";
 import materialCode from "../../tools/mortal_material.py?raw";
+import revealCode from "../../tools/hand_reveal.py?raw";
 import type { PyodideInterface } from "pyodide";
 
 let runtime: Promise<PyodideInterface> | undefined;
@@ -20,6 +21,7 @@ function initialize() {
       ["p0_verify.py", p0Code],
       ["mortal_report.py", mortalCode],
       ["mortal_material.py", materialCode],
+      ["hand_reveal.py", revealCode],
     ])
       py.FS.writeFile("/compiler/" + name, code);
     py.runPython(

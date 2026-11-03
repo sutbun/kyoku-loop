@@ -7,6 +7,7 @@ export type Frame = {
   actor: number;
   ownWind: string;
   hand: Tile[];
+  revealedHands: Tile[][];
   drawn: Tile;
   rivers: Tile[][];
   dora: Tile;
@@ -70,6 +71,7 @@ function generateFrames(): Frame[] {
         hand: (actor === 2 ? hands[2].slice(0, -1) : hands[2])
           .slice()
           .sort(sortHand),
+        revealedHands: hands.map((hand) => hand.slice()),
         drawn: actor === 2 ? drawn : "",
         rivers: rivers.map((r) => r.slice()),
         dora,

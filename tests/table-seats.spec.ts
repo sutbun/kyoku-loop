@@ -5,10 +5,13 @@ import { phoneFixture } from "./phone-fixture";
 import {
   freshPhoneState,
   phoneReduce,
+  validatePack,
   type PhonePack,
 } from "../src/offline/engine";
 import type { Meld } from "../src/real-types";
-const base = phoneFixture();
+const authentic = phoneFixture(true);
+const base = structuredClone(authentic);
+delete base.reveals;
 test.use({ serviceWorkers: "block" });
 
 function fixture(full: boolean | "quads" = false): PhonePack {
@@ -213,6 +216,101 @@ async function open(page: Page, pack = fixture(), online = false) {
   await page.getByRole("button", { name: "今日の復習を始める" }).click();
   return { requests: () => requests, finish: () => finish?.() };
 }
+
+for (const [width, height] of [
+  [390, 844],
+  [1180, 820],
+]) {
+  test(`tap opponent hands individually without moving the board at ${width}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height });
+    const pack = structuredClone(authentic);
+    await open(page, pack);
+    const rows = page.locator(".concealed-hand");
+    await expect(rows).toHaveCount(3);
+    await expect(page.locator(".table-center")).not.toContainText(
+      /打目|巡目|OPEN|CLOSE/,
+    );
+    const board = await page.locator(".table").boundingBox();
+    const own = await page.getByTestId("real-hand").boundingBox();
+    for (const row of await rows.all()) {
+      const box = (await row.boundingBox())!;
+      expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(43.9);
+      await expect(row).toHaveAttribute("aria-pressed", "false");
+    }
+    await rows.nth(0).click();
+    await expect(rows.nth(0)).toHaveAttribute("aria-pressed", "true");
+    await expect(rows.nth(0).locator(".tile-art")).toHaveCount(13);
+    await expect(rows.nth(1).locator(".tile-back")).toHaveCount(13);
+    await rows.nth(1).click();
+    await expect(rows.nth(0)).toHaveAttribute("aria-pressed", "true");
+    await expect(rows.nth(1)).toHaveAttribute("aria-pressed", "true");
+    expect(await page.locator(".table").boundingBox()).toEqual(board);
+    expect(await page.getByTestId("real-hand").boundingBox()).toEqual(own);
+    if (process.env.KYOKULOOP_UI_PROOF && info.project.name === "phone") {
+      mkdirSync(process.env.KYOKULOOP_UI_PROOF, { recursive: true });
+      await page.screenshot({
+        path: join(process.env.KYOKULOOP_UI_PROOF, `open-hands-${width}.png`),
+        scale: "css",
+      });
+    }
+    await rows.nth(0).click();
+    await expect(rows.nth(0).locator(".tile-back")).toHaveCount(13);
+    await page.getByTestId("real-hand").locator("button").first().click();
+    await page.getByRole("button", { name: "回答する", exact: true }).click();
+    await page.getByRole("button", { name: "理解した", exact: true }).click();
+    await expect(rows.nth(1)).toHaveAttribute("aria-pressed", "false");
+    await expect(rows.locator(".tile-art")).toHaveCount(0);
+  });
+}
+
+test("legacy pack without retained originals keeps hands closed and explains sync", async ({
+  page,
+}) => {
+  await open(page, structuredClone(base));
+  await page.locator(".concealed-hand").first().click();
+  await expect(page.getByRole("alert")).toContainText("今すぐ同期");
+  await expect(page.locator(".concealed-hand .tile-art")).toHaveCount(0);
+  await expect(page.locator(".concealed-hand").first()).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+});
+
+test("optional reveal maps validate faces and preserve session during sync", () => {
+  expect(() => validatePack(base)).not.toThrow();
+  expect(() => validatePack(authentic)).not.toThrow();
+  const id = authentic.items[0].id;
+  const wrong = structuredClone(authentic);
+  wrong.reveals![id][wrong.items[0].scene.seat] = [];
+  expect(() => validatePack(wrong)).toThrow();
+  const invalid = structuredClone(authentic);
+  invalid.reveals![id][1][0] = "invalid";
+  expect(() => validatePack(invalid)).toThrow();
+  let state = phoneReduce(freshPhoneState("reveal-sync"), {
+    action: "install_pack",
+    pack: authentic,
+  }).state;
+  state = phoneReduce(state, {
+    action: "study_start",
+    mode: "scheduled",
+  }).state;
+  const session = structuredClone(state.session);
+  const next = phoneReduce(state, {
+    action: "apply_sync",
+    snapshot: { source: state.pack!.source, device: state.device, events: [] },
+    reply: {
+      protocol: 1,
+      source: state.pack!.source,
+      device: state.device,
+      receipts: [],
+      pack: base,
+    },
+  }).state;
+  expect(next.session).toEqual(session);
+  expect(next.pack!.reveals).toEqual(authentic.reveals);
+});
 
 for (const [width, height] of [
   [320, 740],
