@@ -24,5 +24,6 @@
 
 `tests/table-rivers.spec.ts` は架空データを使い、built assetsを隔離Edgeへ供給する。
 専用の `npx playwright test --config=playwright.rivers.config.ts --workers=1` は1460のサーバーを起動/借用しない。
+出力先は `.local/rivers-results` に分離し、全体テストの記録を初期化しない。
 4方向の回転、6/7/12/13/18/19枚目、24枚時の3段構成、リーチ牌、牌同士/中央/席情報との重なり、卓外へのはみ出し、短い河の開始位置、回答前後の配置を検証する。
 端末実機の読みやすさや主観的UX合格とは区別する。

@@ -5,5 +5,6 @@ import config from "./playwright.config";
 export default defineConfig({
   ...config,
   testMatch: "table-rivers.spec.ts",
+  outputDir: ".local/rivers-results",
   webServer: undefined,
 });
