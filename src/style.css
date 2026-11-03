@@ -2345,3 +2345,17 @@ dialog::backdrop {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+.comparison-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.comparison-policy {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink);
+}

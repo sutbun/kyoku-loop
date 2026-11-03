@@ -99,9 +99,41 @@ export async function api<T>(request: object): Promise<T> {
         return (await (
           await import("./offline/hand-reveal")
         ).openPhoneHands(reveal.item)) as T;
-      return await (
-        await import("./offline/store")
-      ).phoneTransaction<T>(request as Record<string, unknown>);
+      const store = await import("./offline/store");
+      const result = await store.phoneTransaction<T>(
+        request as Record<string, unknown>,
+      );
+      type PolicySession = {
+        revealed?: boolean;
+        item_id?: string;
+        scene?: import("./real-types").Scene;
+      };
+      const response = result as PolicySession & {
+        session?: PolicySession | null;
+      };
+      const session = response?.session ?? response;
+      if (
+        session?.revealed &&
+        session.item_id &&
+        session.scene?.engine === "Mortal" &&
+        !session.scene.policy_percent
+      ) {
+        const state = await store.readPhone();
+        const entry = state?.local_imports?.find((e) =>
+          e.item_ids.includes(session.item_id!),
+        );
+        if (entry) {
+          try {
+            session.scene.policy_percent = await (
+              await import("./offline/mortal-compiler")
+            ).retainedPolicy(entry.material, session.item_id);
+          } catch {
+            // Confirmation is already saved; optional display data must not
+            // turn a successful answer into an apparent failed action.
+          }
+        }
+      }
+      return result;
     } catch (e) {
       if (e instanceof DOMException && e.name === "QuotaExceededError")
         throw new Error(

@@ -103,6 +103,33 @@ function Modal({
     </dialog>
   );
 }
+const policyTiles = [..."mps"]
+  .flatMap((s) => Array.from({ length: 9 }, (_, i) => `${i + 1}${s}`))
+  .concat(["E", "S", "W", "N", "P", "F", "C"]);
+export function policyLabel(scene: Scene, tile: string): string {
+  const index = policyTiles.indexOf(tile.replace(/r$/, ""));
+  const exact = tile.endsWith("r") ? 34 + "mps".indexOf(tile[1]) : index;
+  const value =
+    scene.engine === "Mortal"
+      ? scene.policy_percent?.[exact]
+      : scene.weights_percent?.[index];
+  return value !== undefined && Number.isFinite(value)
+    ? `${value.toFixed(1)}%`
+    : "—";
+}
+function PolicyTile({ scene, value }: { scene: Scene; value: string }) {
+  return (
+    <div className="comparison-choice">
+      <RealTile value={value} />
+      <b
+        className="comparison-policy"
+        aria-label={`AI推奨度 ${policyLabel(scene, value)}`}
+      >
+        {policyLabel(scene, value)}
+      </b>
+    </div>
+  );
+}
 function Compare({
   scene,
   answer,
@@ -119,18 +146,18 @@ function Compare({
       {answer && (
         <div>
           <span>今回の回答</span>
-          <RealTile value={answer} />
+          <PolicyTile scene={scene} value={answer} />
         </div>
       )}
       <div>
         <span>対局時の打牌</span>
-        <RealTile value={scene.actual!} />
+        <PolicyTile scene={scene} value={scene.actual!} />
       </div>
       <div>
         <span>
           {scene.engine ?? "NAGA"}推奨 · {scene.model_name}
         </span>
-        <RealTile value={scene.suggested!} />
+        <PolicyTile scene={scene} value={scene.suggested!} />
       </div>
       <div className="comparison-tools">
         <details className="comparison-weight">

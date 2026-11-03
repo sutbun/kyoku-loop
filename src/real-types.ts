@@ -31,6 +31,7 @@ export type Scene = {
   suggested?: string;
   gap?: number;
   weights_percent?: number[];
+  policy_percent?: number[];
   model_name?: string;
   is_decision?: boolean;
 };
