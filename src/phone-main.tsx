@@ -399,7 +399,7 @@ function PhoneApp() {
                       })
                     }
                   >
-                    {compilerSaved
+                    {compilerSaved && local
                       ? "端末用の保存を確認"
                       : "端末だけで使う準備"}
                   </button>
@@ -430,7 +430,7 @@ function PhoneApp() {
                     {syncing ? "同期中…" : "今すぐ同期"}
                   </button>
                 </div>
-                {compilerSaved && (
+                {compilerSaved && local && (
                   <small data-testid="compiler-ready">
                     端末内の取り込み準備完了
                   </small>

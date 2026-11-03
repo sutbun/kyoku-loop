@@ -236,6 +236,23 @@ test("cached standalone Worker matches Windows material offline under the phone 
     await expect(
       page.getByRole("button", { name: "この端末に登録", exact: true }),
     ).toBeVisible({ timeout: 90000 });
+    await page.evaluate(() => {
+      const original = IDBObjectStore.prototype.put;
+      let failed = false;
+      IDBObjectStore.prototype.put = function (value, ...args) {
+        if (!failed && value.local_imports?.length) {
+          failed = true;
+          throw new DOMException("fictional full disk", "QuotaExceededError");
+        }
+        return original.call(this, value, ...args);
+      };
+    });
+    await page
+      .getByRole("button", { name: "この端末に登録", exact: true })
+      .click();
+    await expect(page.getByRole("alert")).toContainText(
+      "空き容量が足りず保存できません",
+    );
     await page
       .getByRole("button", { name: "この端末に登録", exact: true })
       .click();
@@ -294,6 +311,10 @@ test("cached standalone Worker matches Windows material offline under the phone 
     );
     await page.reload();
     await page.getByText("端末の管理", { exact: true }).click();
+    await expect(page.getByTestId("compiler-ready")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "端末だけで使う準備", exact: true }),
+    ).toBeVisible();
     const tampered = structuredClone(saved);
     tampered.local_imports[0].material.items[0].scene.actual = "9s";
     await page

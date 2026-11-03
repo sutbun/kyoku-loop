@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { errors } from "./api";
+import { api, errors } from "./api";
 import { compileMortal, type LocalMaterial } from "./offline/mortal-compiler";
-import { phoneTransaction, readPhone } from "./offline/store";
+import { readPhone } from "./offline/store";
 import type { Stage } from "./real-types";
 import type { AnalysisEntry } from "./analysis-queue";
 
@@ -186,13 +186,11 @@ export function PhoneMortalImport({
             onClick={() =>
               void work(async () => {
                 if (material) {
-                  const result = await phoneTransaction<{ duplicate: boolean }>(
-                    {
-                      action: "register_local",
-                      material,
-                      analysis_id: entry || null,
-                    },
-                  );
+                  const result = await api<{ duplicate: boolean }>({
+                    action: "register_local",
+                    material,
+                    analysis_id: entry || null,
+                  });
                   setNotice(
                     result.duplicate
                       ? "この端末に登録済みの結果です"
