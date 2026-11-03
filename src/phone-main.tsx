@@ -1,3 +1,5 @@
+import { VersionUpdate } from "./version-update";
+import { updateLocked } from "./offline/update-lock";
 import { useEffect, useState, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { api, errors } from "./api";
@@ -23,8 +25,12 @@ import {
 import "./style.css";
 import "./phone.css";
 
-import { VERSION } from "./version";
 function PhoneApp() {
+  const [updateLock, setUpdateLock] = useState(false);
+  const [importPending, setImportPending] = useState(false);
+  const [sourcePending, setSourcePending] = useState(false);
+  const busyRef = useRef(0),
+    importBusyRef = useRef(false);
   const [workspace, setWorkspace] = useState<Workspace>({
     reports: [],
     items: [],
@@ -87,6 +93,8 @@ function PhoneApp() {
     setLoaded(true);
   };
   const run = async (work: () => Promise<void>) => {
+    if (updateLocked()) return;
+    busyRef.current++;
     setBusy(true);
     setError("");
     try {
@@ -99,10 +107,12 @@ function PhoneApp() {
           : "保存できませんでした。",
       );
     } finally {
-      setBusy(false);
+      busyRef.current--;
+      setBusy(busyRef.current > 0);
     }
   };
   const syncRecords = async (fresh = false, manual = false): Promise<void> => {
+    if (updateLocked()) return;
     if (syncRunning.current) {
       if (fresh) {
         await syncCompletion.current;
@@ -285,9 +295,25 @@ function PhoneApp() {
     <div className="phone-app">
       <header className="phone-header">
         <b>KyokuLoop</b>
-        <span>{VERSION}</span>
+        <VersionUpdate
+          enabled={loaded}
+          onLock={setUpdateLock}
+          guard={() => {
+            if (
+              !loaded ||
+              busyRef.current ||
+              importBusyRef.current ||
+              syncRunning.current ||
+              updateLocked()
+            )
+              return "処理後に再試行";
+            if (sourcePending || importPending) return "入力を完了";
+            if (screen !== "home") return "ホームで更新";
+            return null;
+          }}
+        />
       </header>
-      <main>
+      <main inert={updateLock}>
         <div className="content">
           {(!online ||
             syncing ||
@@ -336,6 +362,7 @@ function PhoneApp() {
                 <h2>牌譜を追加</h2>
                 <SourceInput
                   disabled={busy || importBusy || !loaded}
+                  onPendingChange={setSourcePending}
                   onSave={async (url) => {
                     await api({ action: "analysis_add", url });
                     await refresh();
@@ -353,7 +380,11 @@ function PhoneApp() {
                   online={online}
                   local={local}
                   entries={analysisQueue}
-                  onBusy={setImportBusy}
+                  onPendingChange={setImportPending}
+                  onBusy={(value) => {
+                    importBusyRef.current = value;
+                    setImportBusy(value);
+                  }}
                   onRegistered={async (registeredLocal) => {
                     if (registeredLocal) {
                       await refresh();
@@ -523,7 +554,7 @@ function PhoneApp() {
           )}
         </div>
       </main>
-      <nav className="phone-nav" aria-label="メイン">
+      <nav inert={updateLock} className="phone-nav" aria-label="メイン">
         <button
           disabled={importBusy}
           aria-current={screen === "home" ? "page" : undefined}

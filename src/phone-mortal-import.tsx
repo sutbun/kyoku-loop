@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, errors } from "./api";
 import { compileMortal, type LocalMaterial } from "./offline/mortal-compiler";
 import { readPhone } from "./offline/store";
@@ -50,6 +50,7 @@ export function PhoneMortalImport({
   local,
   entries,
   onBusy,
+  onPendingChange,
   onRegistered,
 }: {
   disabled: boolean;
@@ -57,6 +58,7 @@ export function PhoneMortalImport({
   local: boolean;
   entries: AnalysisEntry[];
   onBusy: (value: boolean) => void;
+  onPendingChange?: (pending: boolean) => void;
   onRegistered: (local?: boolean) => Promise<void>;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -67,6 +69,10 @@ export function PhoneMortalImport({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [updateError, setUpdateError] = useState("");
+  useEffect(() => {
+    onPendingChange?.(!!stage || busy);
+  }, [stage, busy, onPendingChange]);
+  useEffect(() => () => onPendingChange?.(false), [onPendingChange]);
   const work = async (operation: () => Promise<void>) => {
     setBusy(true);
     onBusy(true);

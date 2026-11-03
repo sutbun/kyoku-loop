@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   openMortal,
   MORTAL_COPIED,
@@ -15,15 +15,21 @@ export function SourceInput({
   disabled,
   onSave,
   mortal,
+  onPendingChange,
 }: {
   disabled: boolean;
   onSave: (url: string) => Promise<void>;
   mortal?: boolean;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [url, setURL] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false),
     [error, setError] = useState("");
+  useEffect(() => {
+    onPendingChange?.(!!url || saving);
+  }, [url, saving, onPendingChange]);
+  useEffect(() => () => onPendingChange?.(false), [onPendingChange]);
   const submit = (analyse: boolean) => {
     let canonical: string;
     try {

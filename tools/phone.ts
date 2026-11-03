@@ -374,15 +374,19 @@ export function phoneBuild(): Plugin {
         "/phone/licenses/PYODIDE-LICENSE.txt",
         "/phone/licenses/PYTHON-LICENSE.txt",
       ];
-      const worker = `const BUILD=__BUILD_JSON__, NAME='kyokuloop-shell-'+BUILD, URLS=${JSON.stringify(urls)}, RUNTIME=${JSON.stringify(runtimeManifest)};
-async function shellMatches(response){return !!response&&(await response.clone().text()).match(/name="phone-build" content="([^"]+)"/)?.[1]===BUILD;}
-async function complete(c){for(const u of URLS)if(!await c.match(u))return false;return shellMatches(await c.match('/phone/'));}
-async function repair(c){if(await complete(c))return;const responses=await Promise.all(URLS.map(u=>fetch(u,{cache:'no-store'})));if(responses.some(r=>!r.ok)||!await shellMatches(responses[0]))throw Error('mixed generation');await Promise.all(URLS.map((u,i)=>c.put(u,responses[i])));if(!await complete(c))throw Error('incomplete');}
-self.addEventListener('install',event=>event.waitUntil((async()=>{try{const c=await caches.open(NAME);await c.addAll(URLS);if(!await complete(c))throw Error('incomplete');}catch(e){await caches.delete(NAME);throw e;}})()));
-self.addEventListener('activate',event=>event.waitUntil((async()=>{const keys=(await caches.keys()).filter(k=>k.startsWith('kyokuloop-shell-'));for(const k of keys.slice(0,-2))if(k!==NAME)await caches.delete(k);await self.clients.claim();})()));
-self.addEventListener('message',event=>{if(['VERIFY','REPAIR'].includes(event.data?.type))event.waitUntil((async()=>{let ok=false;try{const c=await caches.open(NAME);if(event.data.type==='REPAIR')await repair(c);ok=event.data.build===BUILD&&await complete(c);}catch{}event.ports[0]?.postMessage({ok,build:BUILD});})());});
-self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==self.location.origin)return;if(RUNTIME.files.some(f=>f.url===u.pathname)){event.respondWith((async()=>{const c=await caches.open(RUNTIME.cache);return await c.match(u.pathname)||fetch(event.request);})());return;}const key=event.request.mode==='navigate'&&u.pathname.startsWith('/phone/')?'/phone/':u.pathname;if(URLS.includes(key))event.respondWith((async()=>{const c=await caches.open(NAME);const hit=await c.match(key);return hit||fetch(event.request);})());});
-`;
+      const sourceVersion = readFileSync(
+        resolve("src/version.ts"),
+        "utf8",
+      ).match(/DEVELOPMENT_VERSION = "(DEV-[0-9.]+-[0-9]+)"/)?.[1];
+      if (!sourceVersion) throw Error("Missing phone version");
+      const version =
+        process.env.VITE_KYOKULOOP_DAILY === "1"
+          ? sourceVersion.replace(/^DEV-/, "")
+          : sourceVersion;
+      const worker = readFileSync(resolve("tools/phone-worker.js"), "utf8")
+        .replace("__VERSION_JSON__", JSON.stringify(version))
+        .replace("__URLS_JSON__", JSON.stringify(urls))
+        .replace("__RUNTIME_JSON__", JSON.stringify(runtimeManifest));
       const hash = createHash("sha256").update(worker);
       for (const name of [
         "manifest.webmanifest",
