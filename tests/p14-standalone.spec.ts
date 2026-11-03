@@ -414,6 +414,12 @@ test("cached standalone Worker matches Windows material offline under the phone 
       /^\d+\.\d%$/,
       /^\d+\.\d%$/,
     ]);
+    // Returning to the app refreshes the nested workspace session offline.
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.getByRole("button", { name: "理解した", exact: true })).toBeEnabled();
+    await expect(page.locator(".comparison-policy")).toHaveText([
+      /^\d+\.\d%$/, /^\d+\.\d%$/, /^\d+\.\d%$/,
+    ]);
     await page.getByRole("button", { name: "理解した", exact: true }).click();
     await page.reload();
     await page

@@ -103,11 +103,15 @@ export async function api<T>(request: object): Promise<T> {
       const result = await store.phoneTransaction<T>(
         request as Record<string, unknown>,
       );
-      const session = result as {
+      type PolicySession = {
         revealed?: boolean;
         item_id?: string;
         scene?: import("./real-types").Scene;
       };
+      const response = result as PolicySession & {
+        session?: PolicySession | null;
+      };
+      const session = response?.session ?? response;
       if (
         session?.revealed &&
         session.item_id &&
