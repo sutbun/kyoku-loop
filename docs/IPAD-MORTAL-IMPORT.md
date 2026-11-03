@@ -2,6 +2,8 @@
 
 対象版: DEV-11.03-2（日常版11.03-2）。Mortalの結果JSON/JSON.gzをSafariなどで本人が取得済みであることを前提にする。新しい解析依頼やJSON取得の自動化、ショートカットは含めない。
 
+Macなしで共有ショートカットを初回設定する手順は [iPadでJSONを保存](IPAD-MORTAL-JSON-SAVE.md)。この保存経路の実iPad確認はまだ終わっていない。取得済みファイルの登録機能とは合格条件を分ける。
+
 ## 操作
 
 1. Windows側KyokuLoopを起動し、iPadを本人用Tailscaleに接続する。
