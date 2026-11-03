@@ -6,6 +6,7 @@ own draw/call, hand, and following discard. This is internal consistency, not
 independent proof of the original Mahjong Soul game or account ownership.
 """
 import copy
+import json
 import math
 import re
 from collections import Counter
@@ -62,11 +63,20 @@ def validate(report):
         raise ValueError('unsupported_format')
     for log, kyoku in zip(logs, kyokus):
         if (not isinstance(log, dict) or not isinstance(log.get('name'), list) or len(log['name']) != 4
-                or not isinstance(log.get('log'), list) or len(log['log']) != 1
-                or not isinstance(log['log'][0], list) or len(log['log'][0]) != 17
+                or not isinstance(log.get('log'), list) or len(log['log']) not in (1, len(logs))
+                or any(not isinstance(r, list) or len(r) != 17 for r in log['log'])
                 or not isinstance(kyoku, dict) or not isinstance(kyoku.get('entries'), list)
                 or len(kyoku['entries']) > 2000):
             raise ValueError('unsupported_format')
+    if any(len(cell['log']) != 1 for cell in logs):
+        # iPad Shortcuts dictionary-to-text can repeat the entire game in each
+        # split log. Recover only identical, complete arrays in the same order.
+        # project() still cross-checks every round, event and review snapshot.
+        full = logs[0]['log']
+        identity = json.dumps(full, sort_keys=True, allow_nan=False)
+        if len(full) != len(logs) or any(json.dumps(cell['log'], sort_keys=True, allow_nan=False) != identity for cell in logs):
+            raise ValueError('unsupported_format')
+        report = dict(report, split_logs=[dict(cell, log=[full[i]]) for i, cell in enumerate(logs)])
     return report
 
 
@@ -81,7 +91,7 @@ def _meld_signature(m, review=False):
 
 
 def project(report):
-    validate(report)
+    report = validate(report)
     seat = report['player_id']
     rounds, triggers, ends = [], {}, []
     current = None

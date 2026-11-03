@@ -326,6 +326,74 @@ test("first device retries only pack delivery after registration without registe
   }
 });
 
+test("shortcut JSON with identical repeated rounds registers once and opens a review", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const folder = mkdtempSync(
+    join(resolve("D:/dev-data/kyoku-loop/private"), "phone-shortcut-rounds-"),
+  );
+  const call = backend(folder);
+  const ordinary = execFileSync(
+    "python",
+    [
+      "-c",
+      "import sys,json;sys.path.insert(0,'tests');from test_p13_shortcut_json import two_rounds;print(json.dumps(two_rounds()))",
+    ],
+    { encoding: "utf8", windowsHide: true },
+  );
+  const repeated = JSON.parse(ordinary);
+  const rounds = repeated.split_logs.map(
+    (cell: { log: unknown[] }) => cell.log[0],
+  );
+  repeated.split_logs.forEach((cell: { log: unknown[] }) => {
+    cell.log = rounds;
+  });
+  try {
+    await routePhone(page, call);
+    await page.goto("/phone/");
+    await page.getByText("解析結果を追加", { exact: true }).click();
+    await page
+      .getByLabel("Mortal JSON / JSON.gz", { exact: true })
+      .setInputFiles({
+        name: "fictional-shortcut.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(repeated)),
+      });
+    await expect(page.getByText("2局 · Mortal fictional-model")).toBeVisible();
+    expect(call({ action: "state" }).data.reports).toHaveLength(0);
+    await page
+      .getByRole("button", { name: "Windowsに登録", exact: true })
+      .click();
+    await expect(
+      page.getByText("Windowsに登録しました", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("offline-status")).toHaveText(
+      "オフライン利用可能 · 2問",
+      { timeout: 45000 },
+    );
+    await page
+      .getByLabel("Mortal JSON / JSON.gz", { exact: true })
+      .setInputFiles({
+        name: "fictional-original.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(ordinary),
+      });
+    await page
+      .getByRole("button", { name: "Windowsに登録", exact: true })
+      .click();
+    await expect(
+      page.getByText("Windowsに登録済みの結果です", { exact: true }),
+    ).toBeVisible();
+    expect(call({ action: "state" }).data.reports).toHaveLength(1);
+    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await expect(page.getByTestId("real-hand")).toBeVisible();
+    await expect(page.getByTestId("study-comparison")).toHaveCount(0);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
 test.describe("tablet layout", () => {
   test.use({
     viewport: { width: 1024, height: 1366 },
