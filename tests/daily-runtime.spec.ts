@@ -201,6 +201,12 @@ test("runtime control never exposes its nonce and refuses cross-site or busy shu
     request("/api/runtime", { action: "stop", token: control.token }).status,
   ).toBe(409);
   active.response.emit("close");
+  const importing = request("/phone/mortal");
+  expect(importing.next).toBe(true);
+  expect(
+    request("/api/runtime", { action: "stop", token: control.token }).status,
+  ).toBe(409);
+  importing.response.emit("close");
   children = 1;
   expect(
     request("/api/runtime", { action: "stop", token: control.token }).status,

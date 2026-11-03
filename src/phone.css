@@ -227,3 +227,29 @@
     width: min(100%, clamp(240px, calc(100svh - 430px), 270px));
   }
 }
+.phone-result-import {
+  margin-top: 10px;
+  font-size: 14px;
+}
+.phone-result-import summary {
+  cursor: pointer;
+  color: var(--green);
+  padding: 8px 0;
+}
+.phone-result-import label {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0;
+}
+.phone-result-import select {
+  width: 100%;
+  min-width: 0;
+}
+.phone-result-import p,
+.import-file-name {
+  overflow-wrap: anywhere;
+}
+.phone-result-import .button {
+  margin: 6px 0;
+  width: 100%;
+}
