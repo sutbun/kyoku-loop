@@ -103,7 +103,17 @@ function Modal({
     </dialog>
   );
 }
-function Compare({ scene, answer }: { scene: Scene; answer?: string | null }) {
+function Compare({
+  scene,
+  answer,
+  onRechoose,
+  busy,
+}: {
+  scene: Scene;
+  answer?: string | null;
+  onRechoose?: () => void;
+  busy?: boolean;
+}) {
   return (
     <div className="comparison" data-testid="study-comparison">
       {answer && (
@@ -122,17 +132,24 @@ function Compare({ scene, answer }: { scene: Scene; answer?: string | null }) {
         </span>
         <RealTile value={scene.suggested!} />
       </div>
-      <details className="comparison-weight">
-        <summary>
-          候補重み差 <b>{scene.gap?.toFixed(2)}pt</b>
-        </summary>
-        <small>
-          {scene.engine === "Mortal"
-            ? "モデルの選択傾向"
-            : "分布合計を100に換算"}{" "}
-          · 勝率や損失ではありません
-        </small>
-      </details>
+      <div className="comparison-tools">
+        <details className="comparison-weight">
+          <summary>
+            候補重み差 <b>{scene.gap?.toFixed(2)}pt</b>
+          </summary>
+          <small>
+            {scene.engine === "Mortal"
+              ? "モデルの選択傾向"
+              : "分布合計を100に換算"}{" "}
+            · 勝率や損失ではありません
+          </small>
+        </details>
+        {onRechoose && (
+          <button className="text-button" disabled={busy} onClick={onRechoose}>
+            回答を選び直す
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -542,6 +559,17 @@ export function StudyPanel({
                 {session.index + 1} / {session.total} 問
               </span>
             )}
+            {portable && !session.complete && session.can_undo && (
+              <button
+                className="text-button study-undo"
+                aria-label="直前の評価を取り消す"
+                title="直前の評価を取り消す"
+                disabled={busy}
+                onClick={undo}
+              >
+                ↶
+              </button>
+            )}
             <button
               className="text-button"
               aria-label="中断してホームへ"
@@ -600,14 +628,9 @@ export function StudyPanel({
                         <Compare
                           scene={session.scene}
                           answer={session.selected}
+                          onRechoose={() => choice("rechoose")}
+                          busy={busy}
                         />
-                        <button
-                          className="text-button"
-                          disabled={busy}
-                          onClick={() => choice("rechoose")}
-                        >
-                          回答を選び直す
-                        </button>
                         <h3 className="rating-heading">今回の理解度</h3>
                         <div
                           className="ratings"
@@ -658,7 +681,7 @@ export function StudyPanel({
                         </button>
                       </>
                     )}
-                    {session.can_undo && (
+                    {!portable && session.can_undo && (
                       <button
                         className="text-button undo"
                         disabled={busy}

@@ -286,7 +286,9 @@ test("cached standalone Worker matches Windows material offline under the phone 
       .getByRole("button", { name: "復習を再開する", exact: false })
       .click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
-    await page.getByRole("button", { name: "ホーム", exact: true }).click();
+    await page
+      .getByRole("button", { name: "中断してホームへ", exact: true })
+      .click();
     await page.getByText("端末の管理", { exact: true }).click();
     const downloadEvent = page.waitForEvent("download");
     await page
@@ -343,7 +345,9 @@ test("cached standalone Worker matches Windows material offline under the phone 
       .getByRole("button", { name: "復習を再開する", exact: false })
       .click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
-    await page.getByRole("button", { name: "ホーム", exact: true }).click();
+    await page
+      .getByRole("button", { name: "中断してホームへ", exact: true })
+      .click();
     connected = true;
     await context.setOffline(false);
     await expect

@@ -11,7 +11,7 @@ for (const [width, height] of [
   [390, 844],
   [430, 932],
 ]) {
-  test(`compact phone ${width} keeps the hand usable and primary actions above navigation`, async ({
+  test(`compact phone ${width} keeps the hand usable and primary actions in the quiz viewport`, async ({
     page,
     context,
   }, info) => {
@@ -74,6 +74,7 @@ for (const [width, height] of [
     }
     await context.setOffline(true);
     await page.getByRole("button", { name: "今日の復習を始める" }).click();
+    await expect(page.locator(".phone-nav")).not.toBeVisible();
     const hand = page.getByTestId("real-hand");
     await expect(hand.locator("button")).toHaveCount(14);
     expect(
@@ -102,7 +103,7 @@ for (const [width, height] of [
     const bottom = await page
       .getByRole("button", { name: "回答する", exact: true })
       .evaluate((e) => e.getBoundingClientRect().bottom);
-    expect(bottom).toBeLessThanOrEqual(navTop + (height < 800 ? 130 : 0));
+    expect(bottom).toBeLessThanOrEqual(height);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -123,7 +124,7 @@ for (const [width, height] of [
       await page
         .getByRole("button", { name: "理解した", exact: true })
         .evaluate((e) => e.getBoundingClientRect().bottom),
-    ).toBeLessThanOrEqual(navTop + (height < 800 ? 160 : 0));
+    ).toBeLessThanOrEqual(height);
     if (proof && width === 390 && info.project.name === "phone")
       await page.screenshot({
         path: join(proof, "compact-comparison.png"),
