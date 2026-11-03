@@ -245,6 +245,18 @@ test("cached standalone Worker matches Windows material offline under the phone 
     await expect(page.getByTestId("offline-status")).toHaveText(
       "オフライン利用可能 · 2問",
     );
+    await input.setInputFiles({
+      name: "wrong.json",
+      mimeType: "application/json",
+      buffer: Buffer.from("<html>not a result</html>"),
+    });
+    await expect(page.getByRole("alert")).toContainText(
+      "JSONを読み取れません",
+      { timeout: 90000 },
+    );
+    await expect(page.getByTestId("offline-status")).toHaveText(
+      "オフライン利用可能 · 2問",
+    );
     await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
     await expect(page.getByTestId("study-comparison")).toHaveCount(0);
@@ -282,6 +294,19 @@ test("cached standalone Worker matches Windows material offline under the phone 
     );
     await page.reload();
     await page.getByText("端末の管理", { exact: true }).click();
+    const tampered = structuredClone(saved);
+    tampered.local_imports[0].material.items[0].scene.actual = "9s";
+    await page
+      .getByLabel("記録ファイルから復旧", { exact: true })
+      .setInputFiles({
+        name: "changed.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(tampered)),
+      });
+    await expect(page.getByRole("alert")).toContainText(
+      "この端末記録ファイルは読み取れません",
+      { timeout: 90000 },
+    );
     await page
       .getByLabel("記録ファイルから復旧", { exact: true })
       .setInputFiles({
@@ -327,6 +352,66 @@ test("cached standalone Worker matches Windows material offline under the phone 
 });
 
 test("a concurrent import survives pack replacement while a changed answer rejects an old reply", () => {
+  // Upgrade a legacy Windows pack with a pending answer and an active session.
+  const oldItem = structuredClone(expected.items[0]);
+  let legacy = phoneReduce(freshPhoneState("legacy"), {
+    action: "install_pack",
+    pack: {
+      schema: 1,
+      policy: 2,
+      source: "existing-windows",
+      exported_at: created,
+      items: [oldItem],
+      histories: {
+        [oldItem.id]: {
+          id: oldItem.id,
+          scene: oldItem.scene,
+          events: [],
+          legacy_history: [],
+        },
+      },
+    },
+  }).state;
+  let oldSession = phoneReduce(legacy, {
+    action: "study_start",
+    mode: "practice",
+  });
+  const oldQuestion = oldSession.data as any;
+  legacy = phoneReduce(oldSession.state, {
+    action: "study_choice",
+    session: oldQuestion.id,
+    choice: "choose",
+    answer: oldQuestion.scene.own_hand[0],
+  }).state;
+  legacy = phoneReduce(legacy, {
+    action: "study_choice",
+    session: oldQuestion.id,
+    choice: "confirm",
+  }).state;
+  legacy = phoneReduce(legacy, {
+    action: "study_rate",
+    session: oldQuestion.id,
+    item: oldQuestion.item_id,
+    rating: "理解した",
+    event: "legacy-answer",
+  }).state;
+  legacy = phoneReduce(legacy, {
+    action: "study_start",
+    mode: "practice",
+  }).state;
+  const original = structuredClone(legacy);
+  legacy = phoneReduce(legacy, { action: "enable_local" }).state;
+  legacy = phoneReduce(legacy, {
+    action: "register_local",
+    material: expected,
+    analysis_id: null,
+  }).state;
+  expect(legacy.events).toEqual(original.events);
+  expect(legacy.session).toEqual(original.session);
+  expect(legacy.pack!.items[0]).toEqual(original.pack!.items[0]);
+  expect(legacy.pack!.source).toBe("existing-windows");
+  expect(legacy.pack!.items).toHaveLength(2);
+  validatePhoneBackup(legacy);
   let state = phoneReduce(freshPhoneState("fictional-concurrent"), {
     action: "enable_local",
   }).state;
