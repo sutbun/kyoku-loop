@@ -16,4 +16,4 @@
 
 静的配信と生成pack/private DBだけで検証した。検証サーバー/ユーザーAPI/実端末の保存へ要求を送らない。実SafariのUX合格と区別する。私的根拠は D:/dev-data/kyoku-loop/private/study-controls-20261104 のedge-final（26+1）、edge-focused（3）、placement-final（4）、integration（9+1）、integration-retry（1）。同一コード/未変更領域に有効な証拠は再利用する。
 
-先行#28をmainへ統合した後、当変更もmainへ統合し、確認済みmain SHAで専用配備する。配備/データ保持/実HTTPSの根拠は共有Taskとprivate evidenceへ記録する。
+先行#28/main 3dc87c59b5c5876cab76ef73004d812f5e38c0d5を取り込んだ。75d72acとの違いは先行検証記録のみで、製品コード差分はない。全232件とPython136件の先行証拠を未変更領域へ再利用する。当変更もmainへ統合し、確認済みmain SHAで専用配備する。配備/データ保持/実HTTPSの根拠は共有Taskとprivate evidenceへ記録する。
