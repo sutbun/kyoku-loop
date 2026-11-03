@@ -118,43 +118,6 @@ select {
 .real-board .called {
   opacity: 0.35;
 }
-.real-board .melds {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.public-melds {
-  display: grid;
-  gap: 8px;
-  padding-top: 14px;
-}
-.public-meld-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 11px;
-}
-.public-meld-row > b {
-  min-width: 38px;
-}
-.public-meld-row .melds {
-  gap: 12px;
-}
-.real-board .meld {
-  display: grid;
-  gap: 2px;
-}
-.real-board .meld > span {
-  display: flex;
-}
-.real-board .meld .tile.small {
-  width: 15px;
-  height: 22px;
-  font-size: 11px;
-}
-.real-board .meld .tile.small small {
-  font-size: 7px;
-}
 .real-board .dora {
   flex-wrap: wrap;
 }
@@ -689,7 +652,7 @@ footer > span:first-child {
   aspect-ratio: 1;
   background: #245e50;
   border-radius: 7px;
-  box-shadow: inset 0 0 0 8px #1b5043;
+  box-shadow: inset 0 0 0 clamp(3px, 1.25cqw, 8px) #1b5043;
   max-width: 640px;
   margin: 0 auto;
   color: #f8f4df;
@@ -710,6 +673,109 @@ footer > span:first-child {
 }
 .table-center > span {
   font-size: 3.2cqw;
+}
+.table-center .round-name {
+  font-size: 3cqw;
+}
+.table-center-content {
+  position: absolute;
+  inset: 17%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4cqw;
+}
+.table-center .table-center-content > div {
+  font-size: 1.7cqw;
+}
+.center-seat {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.table-center .player-label {
+  top: auto;
+  bottom: 0.8cqw;
+  left: 12%;
+  width: 76%;
+  font-size: clamp(7px, 2.2cqw, 15px);
+  line-height: 1.15;
+  gap: 0.8cqw;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.reach-stick {
+  width: 2.6cqw;
+  height: 0.6cqw;
+  background: #f1d4a1;
+  border-radius: 2px;
+}
+.concealed-hand,
+.seat-melds {
+  --edge-width: 4cqw;
+  --edge-height: 5.4cqw;
+  position: absolute;
+  bottom: 2.5%;
+  display: flex;
+  align-items: flex-end;
+}
+.concealed-hand {
+  left: 12%;
+  gap: 0.2cqw;
+}
+.concealed-hand > span {
+  display: flex;
+}
+.seat-melds {
+  right: 4%;
+  flex-direction: row-reverse;
+  gap: 0.8cqw;
+  pointer-events: auto;
+}
+.table .seat-melds .meld {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.15cqw;
+}
+.table .concealed-hand .tile,
+.table .seat-melds .tile {
+  width: var(--edge-width);
+  height: var(--edge-height);
+  min-width: 0;
+  border-radius: 2px;
+  box-shadow: 0 1px 0 #c7bfa4;
+}
+.tile.tile-back {
+  background: #7b3035;
+  border-color: #cab9a6;
+  box-shadow:
+    inset 0 0 0 1px #99535a,
+    0 1px 0 #b7a88e;
+}
+.meld-slot {
+  display: inline-flex;
+  position: relative;
+  width: var(--edge-width);
+  height: var(--edge-height);
+}
+.meld-slot.meld-called {
+  width: var(--edge-height);
+  height: var(--edge-width);
+}
+.meld-called > .tile,
+.meld-added > .tile {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+.meld-added {
+  position: absolute;
+  bottom: calc(var(--edge-width) + 0.15cqw);
+  left: 0;
+  width: var(--edge-height);
+  height: var(--edge-width);
 }
 .table-center strong {
   font-size: 4.5cqw;
@@ -772,8 +838,8 @@ footer > span:first-child {
   transform: rotate(-90deg);
 }
 .river {
-  --river-width: 4.7cqw;
-  --river-height: 6.3cqw;
+  --river-width: 4.4cqw;
+  --river-height: 5.9cqw;
   --river-gap: 0.25cqw;
   position: absolute;
   top: 67%;

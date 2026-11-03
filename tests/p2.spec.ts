@@ -70,7 +70,7 @@ test("real import confirms player, opens top scene, persists registration and av
   await expect(page.getByTestId("real-hand").getByLabel("赤5筒")).toBeVisible();
   await expect(page.getByTestId("real-comparison")).toContainText("40.04pt");
   await expect(page.locator(".player-2 .player-label")).toContainText(
-    "あなた · 東",
+    "東",
   );
   await page.getByRole("button", { name: "収録手順", exact: true }).click();
   await expect(
