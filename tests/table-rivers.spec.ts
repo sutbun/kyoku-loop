@@ -57,7 +57,7 @@ async function openStudy(page: Page, count: number) {
     if (path.startsWith("/phone/assets/")) path = path.slice(6);
     const file = resolve(
       root,
-      `.${path === "/phone/" ? "/phone/index.html" : path}`,
+      `.${path === "/phone/" ? "/phone/index.html" : path === "/" ? "/index.html" : path}`,
     );
     if (!file.startsWith(root + sep))
       throw new Error("Unexpected fixture path");
@@ -250,4 +250,33 @@ test("short rivers start at the same fixed anchors as later rounds", async ({
       .screenshot({ path: join(proof, "rivers-opening.png") });
   }
   await other.close();
+});
+
+test("Windows demo uses the same rotated rivers on a square table", async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openStudy(page, 2);
+  await page.goto("/?demo=1");
+  await page
+    .getByRole("button", { name: "新しい牌譜を確認", exact: true })
+    .click();
+  await expect(page.locator(".river-row")).toHaveCount(12);
+  expect(
+    await page.locator(".table").evaluate((e) => {
+      const r = e.getBoundingClientRect();
+      return Math.abs(r.width - r.height);
+    }),
+  ).toBeLessThan(1);
+  const seats = await geometry(page);
+  expect(seats[0].rotation).toEqual([-1, 0, 0, -1]);
+  expect(seats[1].rotation).toEqual([0, 1, -1, 0]);
+  expect(seats[3].rotation).toEqual([0, -1, 1, 0]);
+  const proof = process.env.KYOKULOOP_UI_PROOF;
+  if (proof && info.project.name === "desktop") {
+    mkdirSync(proof, { recursive: true });
+    await page
+      .locator(".table")
+      .screenshot({ path: join(proof, "rivers-desktop-demo.png") });
+  }
 });
