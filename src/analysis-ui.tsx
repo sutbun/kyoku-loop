@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  openMortal,
-  MORTAL_COPIED,
-  MORTAL_COPY_FAILED,
-  MORTAL_PAGE,
-} from "./mortal-handoff";
+import { openMortal, MORTAL_READY, mortalLink } from "./mortal-handoff";
 import {
   analysisStatus,
   sourceURL,
@@ -23,6 +18,7 @@ export function SourceInput({
   onPendingChange?: (pending: boolean) => void;
 }) {
   const [url, setURL] = useState("");
+  const [openedURL, setOpenedURL] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false),
     [error, setError] = useState("");
@@ -41,24 +37,21 @@ export function SourceInput({
     setSaving(true);
     setError("");
     setNotice("");
-    let handoff: Promise<boolean | null>;
+    setOpenedURL(analyse ? canonical : "");
     try {
-      handoff = analyse ? openMortal(canonical) : Promise.resolve(null);
+      if (analyse) {
+        openMortal(canonical);
+      }
     } catch {
       setSaving(false);
       setError("Mortal画面を開けませんでした。もう一度操作してください。");
       return;
     }
-    const saved = Promise.resolve().then(() => onSave(canonical));
-    void Promise.all([saved, handoff])
-      .then(([, copied]) => {
-        if (copied === false) {
-          setNotice("解析待ちに追加しました");
-          setError(MORTAL_COPY_FAILED);
-        } else {
-          setURL("");
-          setNotice(copied ? MORTAL_COPIED : "解析待ちに追加しました");
-        }
+    void Promise.resolve()
+      .then(() => onSave(canonical))
+      .then(() => {
+        setURL("");
+        setNotice(analyse ? MORTAL_READY : "解析待ちに追加しました");
       })
       .catch((e) =>
         setError(
@@ -112,14 +105,18 @@ export function SourceInput({
           className="button primary"
           disabled={disabled || saving || !url.trim()}
         >
-          コピーしてMortalへ
+          Mortalへ
         </button>
       )}
       {notice && (
         <span role="status">
           {notice}
-          {mortal && (
-            <a href={MORTAL_PAGE} target="_blank" rel="noopener noreferrer">
+          {mortal && openedURL && (
+            <a
+              href={mortalLink(openedURL)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Mortalを開く
             </a>
           )}
@@ -199,9 +196,18 @@ export function AnalysisList({
           </div>
           <span className="badge">{analysisStatus(e)}</span>
           {portable ? (
-            <small>
-              {e.received ? "Windows受信済み" : "この端末に保存済み・未同期"}
-            </small>
+            <div className="analysis-actions">
+              <small>
+                {e.received ? "Windows受信済み" : "この端末に保存済み・未同期"}
+              </small>
+              <button
+                className="button secondary"
+                disabled={disabled}
+                onClick={() => openMortal(e.url)}
+              >
+                Mortalへ
+              </button>
+            </div>
           ) : (
             <div className="analysis-actions">
               <button
@@ -250,7 +256,7 @@ export function AnalysisGuide({ onClose }: { onClose: () => void }) {
     <section className="panel analysis-guide" aria-label="解析の手順">
       <h2>解析の手順</h2>
       <ol>
-        <li>雀魂の共有URLを貼り、「コピーしてMortalへ」を押します。</li>
+        <li>雀魂の共有URLを貼り、「Mortalへ」を押します。</li>
         <li>
           <a
             href="https://mjai.ekyu.moe/ja.html"
@@ -259,7 +265,7 @@ export function AnalysisGuide({ onClose }: { onClose: () => void }) {
           >
             Mortal
           </a>
-          の牌譜URL欄に貼り付け、使用するAIがMortalであることを確認して「送信」。雀魂へのログイン・拡張は不要です。四麻半荘が対象です。
+          の入力済みURLと対象プレイヤー、使用するAIがMortalであることを確認して「送信」。雀魂へのログイン・拡張は不要です。四麻半荘が対象です。
         </li>
         <li>
           解析後、この牌譜の「結果を登録」へ結果URLまたは取得済みJSONを渡します。URL取得が拒否された場合はJSONを使います。
