@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./static-app";
 import {
   freshPhoneState,
   phoneReduce,
@@ -87,7 +88,7 @@ test("Mortal result import fixes its analysed player, preserves exact red tile a
     await page.getByTestId("real-hand").getByRole("button").last().click();
     await page.getByRole("button", { name: "回答する", exact: true }).click();
     await expect(page.getByTestId("study-comparison")).toContainText(
-      "Mortal推奨",
+      "Mortalfictional-model",
     );
     await page.getByRole("button", { name: "理解した", exact: true }).click();
     expect(request({ action: "state" }).data.items[0].review_count).toBe(1);
