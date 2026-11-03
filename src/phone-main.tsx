@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { api, errors } from "./api";
 import { PracticeCard, StudyPanel } from "./study-ui";
+import { StudyOptions } from "./study-options";
 import type { StudySession, Workspace } from "./real-types";
 import { readPhone } from "./offline/store";
 import { saveShell, verifyShell } from "./offline/shell";
@@ -63,6 +64,7 @@ function PhoneApp() {
   const [persistent, setPersistent] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const [saved, setSaved] = useState("");
+  const [syncNoticeOpen, setSyncNoticeOpen] = useState(false);
   const [syncing, setSyncing] = useState(false),
     [syncError, setSyncError] = useState(""),
     [lastSync, setLastSync] = useState("");
@@ -321,23 +323,68 @@ function PhoneApp() {
     >
       <header className="phone-header">
         <b>KyokuLoop</b>
-        <span
+        <div
           className="phone-connection"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          aria-label={connectionDetail || undefined}
-          title={connectionDetail}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setSyncNoticeOpen(false);
+          }}
         >
-          {!online && <span>オフライン</span>}
-          {syncing ? (
-            <span>同期中…</span>
-          ) : (
-            pending > 0 && <span>回答 未送信 {pending}件</span>
+          <button
+            className={`phone-sync-button${syncError ? " has-warning" : ""}`}
+            aria-label="同期の状態を確認"
+            aria-expanded={syncNoticeOpen}
+            onClick={() => setSyncNoticeOpen(!syncNoticeOpen)}
+          >
+            <span
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              title={syncError || connectionDetail}
+            >
+              {syncError ? (
+                <span>同期を確認</span>
+              ) : (
+                <>
+                  {!online && <span>オフライン</span>}
+                  {syncing ? (
+                    <span>同期中…</span>
+                  ) : (
+                    pending > 0 && <span>回答 未送信 {pending}件</span>
+                  )}
+                  {!!resultPending && (
+                    <span>結果 未同期 {resultPending}件</span>
+                  )}
+                  {!!urlPending && <span>URL 未同期 {urlPending}件</span>}
+                </>
+              )}
+            </span>
+          </button>
+          {syncNoticeOpen && (
+            <div
+              className="phone-sync-popover"
+              role="dialog"
+              aria-label="同期の状態"
+            >
+              <button
+                className="text-button"
+                aria-label="同期の詳細を閉じる"
+                onClick={() => setSyncNoticeOpen(false)}
+              >
+                閉じる
+              </button>
+              <p>
+                {syncError || connectionDetail || "同期の問題はありません。"}
+              </p>
+              <button
+                className="button secondary"
+                disabled={syncing || !online}
+                onClick={() => void syncRecords(false, true)}
+              >
+                同期を再試行
+              </button>
+            </div>
           )}
-          {!!resultPending && <span>結果 未同期 {resultPending}件</span>}
-          {!!urlPending && <span>URL 未同期 {urlPending}件</span>}
-        </span>
+        </div>
         <VersionUpdate
           enabled={loaded}
           onLock={setUpdateLock}
@@ -358,34 +405,6 @@ function PhoneApp() {
       </header>
       <main inert={updateLock}>
         <div className="content">
-          {syncError && studying ? (
-            <details className="error phone-sync-notice" role="alert">
-              <summary>同期の確認が必要です</summary>
-              <div>
-                {syncError}
-                <button
-                  className="text-button"
-                  disabled={syncing}
-                  onClick={() => void syncRecords(false, true)}
-                >
-                  同期を再試行
-                </button>
-              </div>
-            </details>
-          ) : (
-            syncError && (
-              <div className="error" role="alert">
-                {syncError}
-                <button
-                  className="text-button"
-                  disabled={syncing}
-                  onClick={() => void syncRecords(false, true)}
-                >
-                  同期を再試行
-                </button>
-              </div>
-            )
-          )}
           {error && (
             <div className="error" role="alert">
               {error}
@@ -518,6 +537,7 @@ function PhoneApp() {
               <details className="panel phone-tools">
                 <summary>端末の管理</summary>
                 <div className="phone-tools-content">
+                  <StudyOptions />
                   <small>
                     {lastSync
                       ? `最終同期：${new Date(lastSync).toLocaleString("ja-JP")}`

@@ -2359,3 +2359,47 @@ dialog::backdrop {
   white-space: nowrap;
   color: var(--ink);
 }
+
+/* Shared comparison rows stay aligned even in the narrow answer column. */
+.comparison-choice {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+[data-testid="study-comparison"] > div > span:first-child {
+  min-height: 1.5em;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.study-options {
+  margin: 10px 0;
+}
+.study-options > summary {
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+}
+.study-options fieldset {
+  border: 0;
+  padding: 6px 0;
+  margin: 0;
+}
+.study-options label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+.study-options input {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+}
+@media (min-width: 900px) {
+  .quiz-layout > .quiz-answer {
+    align-self: end;
+  }
+}

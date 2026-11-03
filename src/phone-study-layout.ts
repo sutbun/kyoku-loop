@@ -49,17 +49,9 @@ export function usePhoneStudyLayout(active: boolean, item?: string) {
         parseFloat(getComputedStyle(answer).minHeight) || 0,
       );
       const overhead = board.offsetHeight - table.offsetHeight;
-      const notice = app.querySelector<HTMLDetailsElement>(
-        ".phone-sync-notice[open]",
-      );
-      const noticeExtra = notice
-        ? notice.offsetHeight -
-          (notice.querySelector("summary")?.offsetHeight ?? 0)
-        : 0;
       const available =
         bottom -
-        (quiz.getBoundingClientRect().top + window.scrollY) +
-        noticeExtra -
+        (quiz.getBoundingClientRect().top + window.scrollY) -
         overhead -
         4 -
         (sideBySide

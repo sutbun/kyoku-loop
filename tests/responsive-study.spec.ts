@@ -88,9 +88,9 @@ async function openStudy(
   if (options.styles) await page.addStyleTag({ content: options.styles });
   if (options.warning) {
     await page.getByRole("button", { name: "今すぐ同期", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText(
-      "問題の整合性を確認できません",
-    );
+    await expect(
+      page.getByRole("button", { name: "同期の状態を確認", exact: true }),
+    ).toContainText("同期を確認");
   }
   await page
     .getByRole("button", {
@@ -254,10 +254,12 @@ test("safe areas, practice, optional detail and rotation retain usable actions",
   await expect(
     page.getByText("分布合計を100に換算", { exact: false }),
   ).toBeVisible();
-  expect((await page.locator(".table").boundingBox())!.width).toBeCloseTo(
-    before,
-    0,
-  );
+  // Use the same two-CSS-pixel rounding tolerance as the other fit checks.
+  await expect
+    .poll(async () =>
+      Math.abs((await page.locator(".table").boundingBox())!.width - before),
+    )
+    .toBeLessThanOrEqual(2);
   await page.getByRole("button", { name: "理解した", exact: true }).click();
   await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => scrollY)).toBe(0);
@@ -295,26 +297,26 @@ test("sync integrity warning remains accessible without taking over each questio
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const sync = await openStudy(page, { warning: true });
-  const warning = page.locator(".phone-sync-notice");
-  await expect(warning).toBeVisible();
-  await expect(warning).toContainText("問題の整合性を確認できません");
-  expect(await warning.evaluate((e) => (e as HTMLDetailsElement).open)).toBe(
-    false,
-  );
+  const status = page.getByRole("button", {
+    name: "同期の状態を確認",
+    exact: true,
+  });
+  const warning = page.getByRole("dialog", { name: "同期の状態", exact: true });
+  await expect(status).toContainText("同期を確認");
+  await expect(warning).toHaveCount(0);
   await page.getByTestId("real-hand").locator("button").first().click();
   await page.getByRole("button", { name: "回答する", exact: true }).click();
   await actionVisible(
     page,
     page.getByRole("button", { name: "理解した", exact: true }),
   );
-  await warning.locator("summary").click();
+  await status.click();
   const previousRequests = sync.requestCount();
   await expect
     .poll(sync.requestCount, { timeout: 15000 })
     .toBeGreaterThan(previousRequests);
-  expect(await warning.evaluate((e) => (e as HTMLDetailsElement).open)).toBe(
-    true,
-  );
+  await expect(warning).toBeVisible();
+  await expect(warning).toContainText("問題の整合性を確認できません");
   await expect(
     page.getByRole("button", { name: "同期を再試行" }),
   ).toBeVisible();
@@ -323,7 +325,7 @@ test("sync integrity warning remains accessible without taking over each questio
     page.getByRole("button", { name: "同期を再試行" }),
   ).toBeEnabled();
   await expect(warning).toContainText("現在の保存内容は保持しています");
-  await warning.locator("summary").click();
+  await page.getByRole("button", { name: "同期の詳細を閉じる" }).click();
   await page.getByRole("button", { name: "理解した", exact: true }).click();
   await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => scrollY)).toBe(0);
