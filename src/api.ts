@@ -1,4 +1,5 @@
 export const errors: Record<string, string> = {
+  update_in_progress: "アプリを更新中です。記録は保持しています。",
   runtime_missing:
     "端末内の取り込みに必要な保存を確認できません。Windowsへ接続して「端末だけで使う準備」を行ってください。記録は保持しています。",
   runtime_unavailable:

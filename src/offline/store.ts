@@ -1,3 +1,4 @@
+import { beginStorageOperation } from "./update-lock";
 import {
   freshPhoneState,
   phoneReduce,
@@ -35,6 +36,14 @@ function valid(s: PhoneState) {
 export async function phoneTransaction<T>(
   request: Record<string, unknown>,
 ): Promise<T> {
+  const end = beginStorageOperation();
+  try {
+    return await transact<T>(request);
+  } finally {
+    end();
+  }
+}
+async function transact<T>(request: Record<string, unknown>): Promise<T> {
   const db = await open();
   return new Promise((resolve, reject) => {
     let tx: IDBTransaction;
