@@ -131,6 +131,10 @@ test("practice, undo and pack replacement preserve unsubmitted history", () => {
 test("JST day boundary, repeat rating, pause/resume and a new graduation cycle match Windows rules", () => {
   const one = structuredClone(pack);
   one.items = one.items.slice(0, 1);
+  if (one.reveals)
+    one.reveals = Object.fromEntries(
+      one.items.map((item) => [item.id, one.reveals![item.id]]),
+    );
   const i = one.items[0];
   i.status = "復習中";
   i.streak = 4;

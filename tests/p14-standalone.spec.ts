@@ -594,7 +594,12 @@ test("a concurrent import survives pack replacement while a changed answer rejec
     source: snapshot.source,
     device: snapshot.device,
     receipts: [],
-    pack: { ...structuredClone(state.pack!), items: [], histories: {} },
+    pack: {
+      ...structuredClone(state.pack!),
+      items: [],
+      histories: {},
+      reveals: {},
+    },
   };
   const next = phoneReduce(state, {
     action: "apply_sync",
