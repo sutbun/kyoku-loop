@@ -1,4 +1,11 @@
 export const errors: Record<string, string> = {
+  runtime_missing:
+    "端末内の取り込みに必要な保存を確認できません。Windowsへ接続して「端末だけで使う準備」を行ってください。記録は保持しています。",
+  runtime_unavailable:
+    "端末用の検証機能を起動できませんでした。アプリを開き直して再試行してください。",
+  runtime_timeout:
+    "JSONの検証が時間内に終わりませんでした。現在の記録は保持しています。",
+  invalid_import_time: "端末の日時を確認してください。登録は完了していません。",
   invalid_inbox_folder:
     "D:/dev-data/kyoku-loop/private 内の専用フォルダを指定してください。アプリの保存先は使用できません。",
   inbox_unavailable: "取り込みフォルダを開けません。保存先を確認してください。",

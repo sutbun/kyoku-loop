@@ -1,3 +1,4 @@
+import { SyncConnectionError } from "./import-sync";
 import { readPhone, phoneTransaction } from "./store";
 import { errors } from "../api";
 
@@ -19,10 +20,13 @@ export async function synchronizeAnalysis(): Promise<void> {
       cache: "no-store",
       signal: controller.signal,
     });
-    if (!response.ok)
-      throw new Error(
-        "Windowsに接続できません。URLを端末に残して再試行します。",
-      );
+    if (!response.ok) {
+      if (response.status === 403)
+        throw Error(
+          "接続が拒否されました。本人用の接続先を確認してください。記録は保持しています。",
+        );
+      throw new SyncConnectionError();
+    }
     const body = await response.json();
     if (!body.ok)
       throw new Error(

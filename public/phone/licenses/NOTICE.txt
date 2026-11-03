@@ -1,0 +1,18 @@
+KyokuLoop local JSON compiler runtime
+
+Pyodide 314.0.7 (MPL-2.0), used without modifications to runtime assets.
+License: PYODIDE-LICENSE.txt
+Corresponding tagged source and build/CPython patches:
+https://github.com/pyodide/pyodide/tree/314.0.7
+https://github.com/pyodide/pyodide/releases/tag/314.0.7
+
+CPython 3.14.2, built by Pyodide with its upstream WebAssembly patches.
+Copyright (c) 2001 Python Software Foundation; All Rights Reserved.
+License and historical notices: PYTHON-LICENSE.txt
+Corresponding CPython source: https://github.com/python/cpython/tree/v3.14.2
+Additional standard-library acknowledgements:
+https://docs.python.org/3.14/license.html
+
+The five pinned core runtime files are obtained from npm pyodide@314.0.7.
+No additional Python wheels or AI models are bundled or fetched by KyokuLoop.
+KyokuLoop's own validation modules are provided separately to the Worker.

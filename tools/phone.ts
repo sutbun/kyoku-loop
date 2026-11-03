@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { trackChild } from "./runtime.ts";
+import { runtimeManifest } from "./phone-runtime.ts";
 
 type Access = { origin: string; login: string };
 export function phoneAllowed(
@@ -199,7 +200,12 @@ export function phoneSite(): Plugin {
         }
         if (
           body.action === "register" &&
-          keys === "action,analysis_id,source,token" &&
+          (keys === "action,analysis_id,source,token" ||
+            (keys === "action,analysis_id,created_at,item_ids,source,token" &&
+              typeof body.created_at === "string" &&
+              Array.isArray(body.item_ids) &&
+              body.item_ids.length <= 3 &&
+              body.item_ids.every((id) => typeof id === "string"))) &&
           typeof body.token === "string" &&
           typeof body.source === "string" &&
           (body.analysis_id === null || typeof body.analysis_id === "string")
@@ -209,6 +215,9 @@ export function phoneSite(): Plugin {
             token: body.token,
             source: body.source,
             analysis_id: body.analysis_id,
+            ...(body.created_at === undefined
+              ? {}
+              : { created_at: body.created_at, item_ids: body.item_ids }),
           });
           return;
         }
@@ -297,7 +306,7 @@ export function phoneSite(): Plugin {
     if (
       !file.startsWith(root + sep) ||
       !existsSync(file) ||
-      !/^phone\/(?:index\.html|sw\.js|manifest\.webmanifest|icon-(?:192|512)\.png)$|^assets\/[\w.-]+$/.test(
+      !/^phone\/(?:index\.html|sw\.js|manifest\.webmanifest|icon-(?:192|512)\.png|licenses\/(?:NOTICE|PYODIDE-LICENSE|PYTHON-LICENSE)\.txt|runtime\/(?:pyodide\.mjs|pyodide\.asm\.mjs|pyodide\.asm\.wasm|python_stdlib\.zip|pyodide-lock\.json))$|^assets\/[\w.-]+$/.test(
         relative,
       )
     ) {
@@ -312,6 +321,9 @@ export function phoneSite(): Plugin {
         {
           html: "text/html; charset=utf-8",
           js: "text/javascript",
+          mjs: "text/javascript",
+          txt: "text/plain; charset=utf-8",
+          wasm: "application/wasm",
           css: "text/css",
           webmanifest: "application/manifest+json",
           png: "image/png",
@@ -320,7 +332,7 @@ export function phoneSite(): Plugin {
     );
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+      "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
     );
     if (relative.startsWith("assets/"))
       res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
@@ -358,21 +370,27 @@ export function phoneBuild(): Plugin {
         "/phone/manifest.webmanifest",
         "/phone/icon-192.png",
         "/phone/icon-512.png",
+        "/phone/licenses/NOTICE.txt",
+        "/phone/licenses/PYODIDE-LICENSE.txt",
+        "/phone/licenses/PYTHON-LICENSE.txt",
       ];
-      const worker = `const BUILD=__BUILD_JSON__, NAME='kyokuloop-shell-'+BUILD, URLS=${JSON.stringify(urls)};
+      const worker = `const BUILD=__BUILD_JSON__, NAME='kyokuloop-shell-'+BUILD, URLS=${JSON.stringify(urls)}, RUNTIME=${JSON.stringify(runtimeManifest)};
 async function shellMatches(response){return !!response&&(await response.clone().text()).match(/name="phone-build" content="([^"]+)"/)?.[1]===BUILD;}
 async function complete(c){for(const u of URLS)if(!await c.match(u))return false;return shellMatches(await c.match('/phone/'));}
 async function repair(c){if(await complete(c))return;const responses=await Promise.all(URLS.map(u=>fetch(u,{cache:'no-store'})));if(responses.some(r=>!r.ok)||!await shellMatches(responses[0]))throw Error('mixed generation');await Promise.all(URLS.map((u,i)=>c.put(u,responses[i])));if(!await complete(c))throw Error('incomplete');}
 self.addEventListener('install',event=>event.waitUntil((async()=>{try{const c=await caches.open(NAME);await c.addAll(URLS);if(!await complete(c))throw Error('incomplete');}catch(e){await caches.delete(NAME);throw e;}})()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{const keys=(await caches.keys()).filter(k=>k.startsWith('kyokuloop-shell-'));for(const k of keys.slice(0,-2))if(k!==NAME)await caches.delete(k);await self.clients.claim();})()));
 self.addEventListener('message',event=>{if(['VERIFY','REPAIR'].includes(event.data?.type))event.waitUntil((async()=>{let ok=false;try{const c=await caches.open(NAME);if(event.data.type==='REPAIR')await repair(c);ok=event.data.build===BUILD&&await complete(c);}catch{}event.ports[0]?.postMessage({ok,build:BUILD});})());});
-self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==self.location.origin)return;const key=event.request.mode==='navigate'&&u.pathname.startsWith('/phone/')?'/phone/':u.pathname;if(URLS.includes(key))event.respondWith((async()=>{const c=await caches.open(NAME);const hit=await c.match(key);return hit||fetch(event.request);})());});
+self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==self.location.origin)return;if(RUNTIME.files.some(f=>f.url===u.pathname)){event.respondWith((async()=>{const c=await caches.open(RUNTIME.cache);return await c.match(u.pathname)||fetch(event.request);})());return;}const key=event.request.mode==='navigate'&&u.pathname.startsWith('/phone/')?'/phone/':u.pathname;if(URLS.includes(key))event.respondWith((async()=>{const c=await caches.open(NAME);const hit=await c.match(key);return hit||fetch(event.request);})());});
 `;
       const hash = createHash("sha256").update(worker);
       for (const name of [
         "manifest.webmanifest",
         "icon-192.png",
         "icon-512.png",
+        "licenses/NOTICE.txt",
+        "licenses/PYODIDE-LICENSE.txt",
+        "licenses/PYTHON-LICENSE.txt",
       ])
         hash.update(readFileSync(resolve("public/phone", name)));
       const build = hash

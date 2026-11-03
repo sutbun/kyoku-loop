@@ -20,6 +20,15 @@ except ImportError:
 EXACT_TILES = TILES + ['5mr', '5pr', '5sr']
 
 
+def sequential_sum(values):
+    # Preserve the established Python 3.10 calculation on newer/Wasm Python,
+    # whose built-in float sum uses a different accumulation algorithm.
+    total = 0
+    for value in values:
+        total += value
+    return total
+
+
 def canonical_url(value):
     try:
         u = urlsplit(value.strip())
@@ -207,7 +216,7 @@ def project(report):
                 exact[EXACT_TILES.index(tile)] = prob
                 qvalues.append(q)
                 probabilities.append(prob)
-            total = sum(probabilities)
+            total = sequential_sum(probabilities)
             if (actual['actor'] != seat or expected != details[0]['action'] or expected['pai'] not in seen
                     or actual['pai'] not in seen or not 0.9999 <= total <= 1.0001
                     or exact[EXACT_TILES.index(expected['pai'])] != max(exact)
@@ -218,7 +227,7 @@ def project(report):
             # Verify the reported policy against Q and the recorded temperature;
             # these are model preferences, not win probabilities or point loss.
             softmax = [math.exp((q-max(qvalues))/report['review']['temperature']) for q in qvalues]
-            if any(abs(p/total-v/sum(softmax)) > 0.0001 for p,v in zip(probabilities,softmax)):
+            if any(abs(p/total-v/sequential_sum(softmax)) > 0.0001 for p,v in zip(probabilities,softmax)):
                 raise ValueError('reconstruction_failed')
             weights = [0.] * 34
             for tile, prob in zip(EXACT_TILES, exact): weights[tile_index(tile)] += prob*100/total

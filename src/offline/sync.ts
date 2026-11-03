@@ -1,3 +1,4 @@
+import { SyncConnectionError } from "./import-sync";
 import { readPhone, phoneTransaction } from "./store";
 import { syncPayload, validateSyncReply } from "./protocol";
 import { errors } from "../api";
@@ -42,12 +43,17 @@ export async function synchronizePhone(): Promise<void> {
       cache: "no-store",
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error("sync_network");
+    if (!response.ok) {
+      if (response.status === 403) throw Error("phone_access_denied");
+      throw new SyncConnectionError();
+    }
     body = await response.json();
-  } catch {
-    throw new Error(
-      "Windowsに接続できません。記録を端末に残して再試行します。",
-    );
+  } catch (error) {
+    if (error instanceof Error && error.message === "phone_access_denied")
+      throw Error(
+        "接続が拒否されました。本人用の接続先を確認してください。記録は保持しています。",
+      );
+    throw new SyncConnectionError();
   } finally {
     clearTimeout(timer);
   }

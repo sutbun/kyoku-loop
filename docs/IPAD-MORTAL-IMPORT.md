@@ -1,8 +1,9 @@
 # iPad/iPhoneから取得済みMortal結果を登録
 
+11.03-4では端末内登録にも対応する。初回の「端末だけで使う準備」後の操作は [IPAD-STANDALONE.md](IPAD-STANDALONE.md) が正本。以下は準備前に使うWindows登録経路の仕様。11.03-3のiPad JSON選択→Windows登録は本人の「成功（登録できた）」で受入済み。
 対象版: DEV-11.03-2（日常版11.03-2）。Mortalの結果JSON/JSON.gzをSafariなどで本人が取得済みであることを前提にする。新しい解析依頼やJSON取得の自動化、ショートカットは含めない。
 
-Macなしで共有ショートカットを初回設定する手順は [iPadでJSONを保存](IPAD-MORTAL-JSON-SAVE.md)。本人のiPadで取得・保存したJSONを受領し、11.03-3では辞書変換後の同一全局log配列の重複を限定して正規化する。実iPadでの登録合格は別途確認する。
+Macなしで共有ショートカットを初回設定する手順は [iPadでJSONを保存](IPAD-MORTAL-JSON-SAVE.md)。本人のiPadで取得・保存したJSONを受領し、11.03-3では辞書変換後の同一全局log配列の重複を限定して正規化する。11.03-3の実iPadでのWindows登録は本人確認済み。端末内登録は別の実機確認として扱う。
 
 ## 操作
 
