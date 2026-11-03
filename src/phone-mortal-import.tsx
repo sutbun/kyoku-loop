@@ -76,6 +76,14 @@ export function PhoneMortalImport({
       onBusy(false);
     }
   };
+  const updatePack = async () => {
+    setUpdateError("");
+    try {
+      await onRegistered();
+    } catch {
+      setUpdateError("Windows登録済みです。端末の問題を更新できませんでした。");
+    }
+  };
   const inspect = (selected: File) =>
     void work(async () => {
       setStage(null);
@@ -171,13 +179,7 @@ export function PhoneMortalImport({
                 );
                 setStage(null);
                 // The registration acknowledgement is durable even if pack refresh fails.
-                try {
-                  await onRegistered();
-                } catch {
-                  setUpdateError(
-                    "Windows登録済みです。端末の問題を更新できませんでした。「今すぐ同期」で再試行してください。",
-                  );
-                }
+                await updatePack();
               })
             }
           >
@@ -220,9 +222,16 @@ export function PhoneMortalImport({
       )}
       {notice && <p role="status">{notice}</p>}
       {updateError && (
-        <p className="error" role="alert">
+        <div className="error" role="alert">
           {updateError}
-        </p>
+          <button
+            className="button secondary"
+            disabled={disabled || busy || !online}
+            onClick={() => void work(updatePack)}
+          >
+            問題の更新を再試行
+          </button>
+        </div>
       )}
     </details>
   );

@@ -3,6 +3,7 @@ import base64
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from tools.p2_store import Store, ImportFailure
 from tools.study import StudyFailure
@@ -85,6 +86,27 @@ class PhoneImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ImportFailure,'size_limit'):
             self.store.phone_mortal_inspect('A' * (((20*1024*1024+2)//3)*4+1),None)
         self.assertEqual(self.store.db.execute('SELECT count(*) FROM staging').fetchone()[0],0)
+
+    def test_concurrent_first_registration_keeps_the_committed_source_and_creation_metadata(self):
+        from tools import p2_store
+        stage=self.upload()
+        url='https://game.mahjongsoul.com/?paipu=fictional-concurrent-result'
+        original=p2_store.datetime
+        committed={}
+        def interleave(tz):
+            other=Store(self.store.path)
+            try:
+                with patch.object(p2_store,'datetime',original):
+                    token=other.stage(json.dumps(mortal_fixture()).encode(),None)['token']
+                    first=other.commit(token,0,0,url)
+                    committed['row']=tuple(other.db.execute('SELECT * FROM reports WHERE id=?',(first['id'],)).fetchone())
+            finally:other.close()
+            return original.now(tz)
+        with patch.object(p2_store,'datetime') as clock:
+            clock.now.side_effect=interleave
+            result=self.store.phone_mortal_register(stage['token'],stage['source'],None)
+        self.assertTrue(result['duplicate'])
+        self.assertEqual(committed['row'],tuple(self.store.db.execute('SELECT * FROM reports WHERE id=?',(result['id'],)).fetchone()))
 
 
 if __name__=='__main__':unittest.main()

@@ -55,11 +55,19 @@ async function phoneState(page: Page) {
 async function routePhone(
   page: Page,
   call: ReturnType<typeof backend>,
-  options = { blockSync: false, loseRegistration: false },
+  options: {
+    blockSync: boolean;
+    loseRegistration: boolean;
+    failDownloadOnce?: boolean;
+  } = { blockSync: false, loseRegistration: false },
 ) {
   await page.route("**/phone/api", async (route) => {
     const r = route.request().postDataJSON();
     if (r.action === "sync" && options.blockSync) return route.abort();
+    if (r.action === "download" && options.failDownloadOnce) {
+      options.failDownloadOnce = false;
+      return route.abort();
+    }
     const input =
       r.action === "download"
         ? { action: "offline_pack" }
@@ -264,6 +272,60 @@ test("dedicated phone import endpoint rejects cross-site access and arbitrary UR
   ).toBe(403);
 });
 
+test("first device retries only pack delivery after registration without registering the result again", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const folder = mkdtempSync(
+    join(resolve("D:/dev-data/kyoku-loop/private"), "phone-import-delivery-"),
+  );
+  const base = backend(folder);
+  let registrations = 0;
+  const call = (r: object) => {
+    if ((r as { action: string }).action === "phone_mortal_register")
+      registrations++;
+    return base(r);
+  };
+  try {
+    await routePhone(page, call, {
+      blockSync: false,
+      loseRegistration: false,
+      failDownloadOnce: true,
+    });
+    await page.goto("/phone/");
+    await page.getByText("解析結果を追加", { exact: true }).click();
+    await page
+      .getByLabel("Mortal JSON / JSON.gz", { exact: true })
+      .setInputFiles({
+        name: "fictional.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(raw),
+      });
+    await page
+      .getByRole("button", { name: "Windowsに登録", exact: true })
+      .click();
+    await expect(
+      page.getByText("Windowsに登録しました", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "問題の更新を再試行", exact: true }),
+    ).toBeEnabled();
+    expect(registrations).toBe(1);
+    expect(call({ action: "state" }).data.reports).toHaveLength(1);
+    await page
+      .getByRole("button", { name: "問題の更新を再試行", exact: true })
+      .click();
+    await expect(page.getByTestId("offline-status")).toHaveText(
+      "オフライン利用可能 · 1問",
+      { timeout: 45000 },
+    );
+    expect(registrations).toBe(1);
+    expect(call({ action: "state" }).data.items).toHaveLength(1);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
 test.describe("tablet layout", () => {
   test.use({
     viewport: { width: 1024, height: 1366 },
@@ -284,5 +346,11 @@ test.describe("tablet layout", () => {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+    await page.screenshot({
+      path: resolve(
+        "D:/dev-data/kyoku-loop/private/ipad-import-20261103/tablet-entry.png",
+      ),
+      fullPage: true,
+    });
   });
 });

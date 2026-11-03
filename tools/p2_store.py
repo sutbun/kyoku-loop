@@ -303,20 +303,22 @@ class Store(StudyMixin, AnalysisQueueMixin):
             # importing another engine never replaces an existing assessment.
             s['id'] = digest([game,seat,s['round_index'],s['source_discard_index'],'discard','Mortal'])
         important = rank_decisions(valid)
-        existing = self.db.execute('SELECT content FROM reports WHERE id=?',(report_id,)).fetchone()
         content = {'id':report_id,'seat':seat,'model':model,'engine':'Mortal',
                    'model_name':report['review']['model_tag'],'model_version':report['version'],
                    'rounds':summary['rounds'],'decisions':valid,'timeline':timeline,
                    'important':[s['id'] for s in important],'excluded':summary['excluded'],
                    'rule':'mortal-policy-gap-v1-diverse10-positive','unknown_weights':0,
-                   'created':json.loads(existing['content'])['created'] if existing else datetime.now(timezone.utc).isoformat(),
+                   'created':datetime.now(timezone.utc).isoformat(),
                    'source_link_kind':'manual' if source_game_url else 'unlinked'}
         tomorrow = (self.moment().astimezone(timezone(timedelta(hours=9)))+timedelta(days=1)).date().isoformat()
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
-            linked = self.db.execute('SELECT source_game_url FROM reports WHERE id=?',(report_id,)).fetchone()
+            linked = self.db.execute('SELECT source_game_url,content FROM reports WHERE id=?',(report_id,)).fetchone()
             if linked and source_game_url and linked[0] not in (None, source_game_url):
                 raise ImportFailure('source_conflict')
+            if linked:
+                content['created'] = json.loads(linked['content'])['created']
+                if linked['source_game_url']: content['source_link_kind'] = 'manual'
             self.db.execute('INSERT OR IGNORE INTO sources VALUES(?,?,?,?)',(source,row['payload'],row['url'],content['created']))
             self.db.execute('''INSERT INTO reports VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
                 content=excluded.content,source_game_url=COALESCE(reports.source_game_url,excluded.source_game_url)''',
@@ -332,7 +334,7 @@ class Store(StudyMixin, AnalysisQueueMixin):
                 entry = self.analysis_entry(analysis_id)
                 if report_id not in entry['reports']: entry['reports'].append(report_id)
                 self._put_analysis(entry)
-        return {'id':report_id,'duplicate':bool(existing)}
+        return {'id':report_id,'duplicate':bool(linked)}
 
     def state(self):
         reports=[]
