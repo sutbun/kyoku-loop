@@ -423,6 +423,7 @@ function PhoneApp() {
               <section className="panel">
                 <h2>牌譜を追加</h2>
                 <SourceInput
+                  mortal
                   disabled={busy || importBusy || !loaded}
                   onPendingChange={setSourcePending}
                   onSave={async (url) => {
