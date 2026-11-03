@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import type { PhonePack } from "../src/offline/engine";
-export function phoneFixture(): PhonePack {
-  return JSON.parse(
+export function phoneFixture(reveals = false): PhonePack {
+  const pack: PhonePack = JSON.parse(
     execFileSync(
       "python",
       [
@@ -25,4 +25,6 @@ with tempfile.TemporaryDirectory(dir='D:/dev-data/kyoku-loop/private') as temp:
       { encoding: "utf8", windowsHide: true },
     ),
   );
+  if (!reveals) delete pack.reveals;
+  return pack;
 }

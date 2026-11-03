@@ -9,8 +9,10 @@ from datetime import datetime, timedelta, timezone
 
 try:
     from . import mortal_report
+    from .hand_reveal import replay_hands, scene_key
 except ImportError:
     import mortal_report
+    from hand_reveal import replay_hands, scene_key
 
 LIMIT = 20 * 1024 * 1024
 PUBLIC = ('id','engine','round_index','event_index','seat','bakaze','kyoku','honba','own_wind',
@@ -93,8 +95,10 @@ def compile_upload(encoded, created_at):
         items.append({'id':ident,'report':content['id'],'scene':scene,'automatic':1,'manual':0,
                       'status':'未学習','history':[],'due':due,'streak':0,'cycle':'initial',
                       'last_credit_day':'','revision':0,'review_count':0})
+    hands = replay_hands(report, [byid[item['id']] for item in items])
+    reveals = {item['id']:hands[scene_key(byid[item['id']])] for item in items if scene_key(byid[item['id']]) in hands}
     return {'id':content['id'],'game':material['game'],'seat':content['seat'],
             'model':content['model_name'],'rounds':content['rounds'],'created':created_at,
             'players':[str(v)[:100] for v in report['split_logs'][0]['name']],
             'important_count':len(content['important']),'family_ids':material['family_ids'],
-            'items':items,'payload':base64.b64encode(gzip.compress(raw,mtime=0)).decode()}
+            'items':items,'payload':base64.b64encode(gzip.compress(raw,mtime=0)).decode(), 'reveals':reveals}

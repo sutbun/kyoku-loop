@@ -723,6 +723,24 @@ footer > span:first-child {
 .concealed-hand {
   left: 12%;
   gap: 0.2cqw;
+  min-height: 44px;
+  min-width: 44px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.concealed-hand:focus-visible {
+  outline: 2px solid #e5dcc5;
+  outline-offset: 2px;
+}
+.concealed-hand[aria-busy="true"] {
+  cursor: wait;
+}
+.hand-reveal-error {
+  font-size: 12px;
+  margin: 6px 0;
 }
 .concealed-hand > span {
   display: flex;
@@ -806,11 +824,18 @@ footer > span:first-child {
 .dora .tile small {
   font-size: 1.3cqw;
 }
-.player {
+.player,
+.hand-layer {
   position: absolute;
   inset: 0;
   text-align: center;
   pointer-events: none;
+}
+.player {
+  z-index: 1;
+}
+.hand-layer {
+  z-index: 0;
 }
 .player-label {
   position: absolute;

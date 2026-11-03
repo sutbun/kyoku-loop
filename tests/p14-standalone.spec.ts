@@ -399,6 +399,12 @@ test("cached standalone Worker matches Windows material offline under the phone 
     await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
     await expect(page.getByTestId("study-comparison")).toHaveCount(0);
+    await page.locator(".concealed-hand").first().click();
+    await expect(page.locator(".concealed-hand").first()).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.locator(".concealed-hand").first().click();
     await page.getByTestId("real-hand").getByRole("button").first().click();
     await page.getByRole("button", { name: "回答する", exact: true }).click();
     await expect(page.getByTestId("study-comparison")).toBeVisible();
@@ -424,6 +430,9 @@ test("cached standalone Worker matches Windows material offline under the phone 
     expect(saved.events).toHaveLength(1);
     expect(saved.session.index).toBe(1);
     expect(saved.local_imports).toHaveLength(1);
+    // A pre-reveal backup retains the original JSON but has no display cache.
+    delete saved.pack.reveals;
+    for (const entry of saved.local_imports) delete entry.material.reveals;
     // Empty generated device, with runtime cache retained. Real user data is never touched.
     await page.evaluate(
       () =>
@@ -457,7 +466,7 @@ test("cached standalone Worker matches Windows material offline under the phone 
       .setInputFiles({
         name: "records.json",
         mimeType: "application/json",
-        buffer: backup,
+        buffer: Buffer.from(JSON.stringify(saved)),
       });
     await expect(page.getByTestId("offline-status")).toHaveText(
       "オフライン利用可能 · 2問",
@@ -467,6 +476,14 @@ test("cached standalone Worker matches Windows material offline under the phone 
       .getByRole("button", { name: "復習を再開する", exact: false })
       .click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
+    // Recompile retained originals through the cached Worker while offline.
+    await page.locator(".concealed-hand").first().click();
+    await expect(page.locator(".concealed-hand").first()).toHaveAttribute(
+      "aria-pressed",
+      "true",
+      { timeout: 90000 },
+    );
+    await expect(page.locator(".concealed-hand .tile-art")).not.toHaveCount(0);
     await page
       .getByRole("button", { name: "中断してホームへ", exact: true })
       .click();

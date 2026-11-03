@@ -1,4 +1,6 @@
 export const errors: Record<string, string> = {
+  hand_data_missing:
+    "手牌を開くデータがありません。Windowsに接続して「今すぐ同期」を押してください。",
   update_in_progress: "アプリを更新中です。記録は保持しています。",
   runtime_missing:
     "端末内の取り込みに必要な保存を確認できません。Windowsへ接続して「端末だけで使う準備」を行ってください。記録は保持しています。",
@@ -92,6 +94,11 @@ export const errors: Record<string, string> = {
 export async function api<T>(request: object): Promise<T> {
   if (location.pathname.startsWith("/phone/")) {
     try {
+      const reveal = request as { action?: string; item?: unknown };
+      if (reveal.action === "open_hands")
+        return (await (
+          await import("./offline/hand-reveal")
+        ).openPhoneHands(reveal.item)) as T;
       return await (
         await import("./offline/store")
       ).phoneTransaction<T>(request as Record<string, unknown>);

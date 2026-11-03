@@ -541,7 +541,7 @@ export function RealApp() {
                               : ""}
                           </span>
                         </div>
-                        <RealTable scene={scene} />
+                        <RealTable scene={scene} report={detail.id} />
                         <div className="playback">
                           <button
                             className="button secondary"

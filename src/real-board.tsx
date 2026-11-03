@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useState, useRef, useLayoutEffect, type ReactNode } from "react";
+import { api } from "./api";
 import { tileLabel } from "./demo";
 import type { Scene, Meld } from "./real-types";
 import { TileArt } from "./tile-art";
@@ -149,37 +150,66 @@ export function TableSeat({
   river,
   melds = [],
   concealedCount = 13 - 3 * melds.length,
+  openTiles,
+  onToggle,
+  loading = false,
+  disabled = false,
 }: {
   position: number;
   seat: number;
   river: Scene["rivers"][number];
   melds?: Meld[];
   concealedCount?: number;
+  openTiles?: string[];
+  onToggle?: () => void;
+  loading?: boolean;
+  disabled?: boolean;
 }) {
   return (
-    <div className={`player player-${position}`} data-seat={seat}>
-      <DiscardRiver tiles={river} label={`${seatNames[position]}の河`} />
+    <>
       {position !== 2 && (
-        <div
-          className="concealed-hand"
-          role="img"
-          aria-label={`${seatNames[position]}の手牌（${concealedCount}枚・伏せ牌）`}
-        >
-          {Array.from({ length: Math.max(0, concealedCount) }, (_, i) => (
-            <span key={i} aria-hidden="true">
-              <TileBack />
-            </span>
-          ))}
+        <div className={`hand-layer player-${position}`}>
+          <button
+            type="button"
+            className="concealed-hand"
+            onClick={onToggle}
+            disabled={disabled || !onToggle}
+            aria-pressed={!!openTiles}
+            aria-busy={loading}
+            aria-label={`${seatNames[position]}の手牌を${openTiles ? "伏せる" : "開く"}${openTiles ? `・${openTiles.map((t) => tileLabel(uiTile(t))).join(" ")}` : ""}`}
+            title={
+              openTiles ? "クリック／タップで伏せる" : "クリック／タップで開く"
+            }
+          >
+            {Array.from(
+              { length: openTiles?.length ?? Math.max(0, concealedCount) },
+              (_, i) => (
+                <span key={i} aria-hidden="true">
+                  {openTiles ? (
+                    <RealTile value={openTiles[i]} small />
+                  ) : (
+                    <TileBack />
+                  )}
+                </span>
+              ),
+            )}
+          </button>
         </div>
       )}
-      {melds.length > 0 && (
-        <div className="seat-melds" aria-label={`${seatNames[position]}の副露`}>
-          {melds.map((meld, index) => (
-            <MeldTiles key={index} meld={meld} seat={seat} />
-          ))}
-        </div>
-      )}
-    </div>
+      <div className={`player player-${position}`} data-seat={seat}>
+        <DiscardRiver tiles={river} label={`${seatNames[position]}の河`} />
+        {melds.length > 0 && (
+          <div
+            className="seat-melds"
+            aria-label={`${seatNames[position]}の副露`}
+          >
+            {melds.map((meld, index) => (
+              <MeldTiles key={index} meld={meld} seat={seat} />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -214,11 +244,13 @@ export function RealTable({
   interactive = false,
   selected = null,
   onSelect,
+  report,
 }: {
   scene: Scene;
   interactive?: boolean;
   selected?: string | null;
   onSelect?: (value: string) => void;
+  report?: string;
 }) {
   const [chosenIndex, setChosenIndex] = useState<number | null>(null);
   const hand = [...scene.own_hand];
@@ -230,6 +262,60 @@ export function RealTable({
       ? chosenIndex
       : tiles.indexOf(selected ?? "");
   const own = scene.seat;
+  const key = `${report ?? ""}:${scene.id ?? ""}:${scene.round_index}:${scene.event_index}`;
+  const epoch = useRef(0);
+  const [hands, setHands] = useState<string[][] | null>(null);
+  const [opened, setOpened] = useState<Set<number>>(new Set());
+  const [loadingSeat, setLoadingSeat] = useState<number | null>(null);
+  const [revealError, setRevealError] = useState("");
+  useLayoutEffect(() => {
+    epoch.current++;
+    setHands(null);
+    setOpened(new Set());
+    setLoadingSeat(null);
+    setRevealError("");
+    return () => {
+      epoch.current++;
+    };
+  }, [key]);
+  const toggle = async (seat: number) => {
+    if (opened.has(seat)) {
+      setOpened(new Set([...opened].filter((s) => s !== seat)));
+      return;
+    }
+    if (hands) {
+      setOpened(new Set([...opened, seat]));
+      return;
+    }
+    const generation = epoch.current;
+    setLoadingSeat(seat);
+    setRevealError("");
+    try {
+      const result = await api<{ hands: string[][] }>({
+        action: "open_hands",
+        item: scene.id,
+        report,
+        round_index: scene.round_index,
+        event_index: scene.event_index,
+      });
+      if (generation !== epoch.current) return;
+      if (
+        !Array.isArray(result.hands) ||
+        result.hands.length !== 4 ||
+        result.hands.some((h) => !Array.isArray(h) || h.length > 14)
+      )
+        throw Error("手牌を確認できませんでした。");
+      setHands(result.hands);
+      setOpened(new Set([seat]));
+    } catch (error) {
+      if (generation === epoch.current)
+        setRevealError(
+          error instanceof Error ? error.message : "手牌を開けませんでした。",
+        );
+    } finally {
+      if (generation === epoch.current) setLoadingSeat(null);
+    }
+  };
   return (
     <div className="table-wrap real-board">
       <div className="table" aria-label={`${roundLabel(scene)}の卓`}>
@@ -246,8 +332,13 @@ export function RealTable({
               river={scene.rivers[seat]}
               melds={scene.melds[seat]}
               concealedCount={
+                hands?.[seat].length ??
                 13 - 3 * scene.melds[seat].length + Number(drawing)
               }
+              openTiles={opened.has(seat) ? hands?.[seat] : undefined}
+              onToggle={() => void toggle(seat)}
+              loading={loadingSeat === seat}
+              disabled={loadingSeat !== null || (!scene.id && !report)}
             />
           );
         })}
@@ -267,11 +358,6 @@ export function RealTable({
             {wind(scene.bakaze)}
             {scene.kyoku}局
           </span>
-          <strong>
-            {scene.source_discard_index +
-              (scene.actual || scene.is_decision ? 1 : 0)}
-            <small>打目</small>
-          </strong>
           <div>
             {scene.honba}本場 · 供託{scene.kyotaku}
           </div>
@@ -283,6 +369,11 @@ export function RealTable({
           </div>
         </TableCenter>
       </div>
+      {revealError && (
+        <p className="error hand-reveal-error" role="alert">
+          {revealError}
+        </p>
+      )}
       <div
         className={`hand ${interactive ? "playable" : ""}`}
         data-testid="real-hand"

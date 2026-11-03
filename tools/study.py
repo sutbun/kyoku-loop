@@ -59,7 +59,7 @@ class StudyMixin:
         # bundle instead of displaying another engine's evaluations as NAGA.
         policy = 2 if any(i['scene'].get('engine') == 'Mortal' for i in items) else 1
         return {'schema':1,'policy':policy,'source':source,'exported_at':self.moment().isoformat(),
-                'items':items,'histories':histories}
+                'items':items,'histories':histories,'reveals':self.hand_reveals(items)}
 
     def moment(self):
         value = self.clock() if self.clock else datetime.now(timezone.utc)
