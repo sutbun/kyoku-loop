@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   decisions,
@@ -44,8 +44,8 @@ function Table({
   onSelect?: (n: number) => void;
 }) {
   const positions = [0, 1, 2, 3];
-  const [opened, setOpened] = useState<Set<number>>(new Set());
-  useEffect(() => setOpened(new Set()), [frame.id]);
+  const [opened, setOpened] = useState(false);
+  useLayoutEffect(() => setOpened(false), [frame.id]);
   return (
     <div className="table-wrap">
       <div
@@ -58,16 +58,8 @@ function Table({
             position={seat}
             seat={seat}
             concealedCount={frame.revealedHands[seat].length}
-            openTiles={opened.has(seat) ? frame.revealedHands[seat] : undefined}
-            onToggle={() =>
-              setOpened(
-                new Set(
-                  opened.has(seat)
-                    ? [...opened].filter((s) => s !== seat)
-                    : [...opened, seat],
-                ),
-              )
-            }
+            openTiles={opened ? frame.revealedHands[seat] : undefined}
+            onToggle={() => setOpened((value) => !value)}
             river={frame.rivers[seat].map((tile) => ({
               tile,
               called: false,

@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { readFileSync, mkdirSync } from "node:fs";
 import { resolve, extname, sep, join } from "node:path";
 import { phoneFixture } from "./phone-fixture";
+import { sortedTiles } from "../src/tile-order";
 import {
   freshPhoneState,
   phoneReduce,
@@ -218,14 +219,18 @@ async function open(page: Page, pack = fixture(), online = false) {
 }
 
 for (const [width, height] of [
+  [320, 740],
   [390, 844],
+  [820, 1180],
   [1180, 820],
 ]) {
-  test(`tap opponent hands individually without moving the board at ${width}`, async ({
+  test(`tap any opponent hand to toggle all sorted hands without moving the board at ${width}`, async ({
     page,
   }, info) => {
     await page.setViewportSize({ width, height });
     const pack = structuredClone(authentic);
+    for (const hands of Object.values(pack.reveals!))
+      for (const hand of hands) hand.reverse();
     await open(page, pack);
     const rows = page.locator(".concealed-hand");
     await expect(rows).toHaveCount(3);
@@ -240,12 +245,57 @@ for (const [width, height] of [
       await expect(row).toHaveAttribute("aria-pressed", "false");
     }
     await rows.nth(0).click();
-    await expect(rows.nth(0)).toHaveAttribute("aria-pressed", "true");
-    await expect(rows.nth(0).locator(".tile-art")).toHaveCount(13);
-    await expect(rows.nth(1).locator(".tile-back")).toHaveCount(13);
-    await rows.nth(1).click();
-    await expect(rows.nth(0)).toHaveAttribute("aria-pressed", "true");
-    await expect(rows.nth(1)).toHaveAttribute("aria-pressed", "true");
+    for (const row of await rows.all()) {
+      await expect(row).toHaveAttribute("aria-pressed", "true");
+      await expect(row.locator(".tile-art")).toHaveCount(13);
+      const values = await row
+        .locator(".tile")
+        .evaluateAll((tiles) =>
+          tiles.map((tile) => tile.getAttribute("aria-label")!),
+        );
+      const ordered = [
+        "1萬",
+        "2萬",
+        "3萬",
+        "4萬",
+        "赤5萬",
+        "5萬",
+        "6萬",
+        "7萬",
+        "8萬",
+        "9萬",
+        "1筒",
+        "2筒",
+        "3筒",
+        "4筒",
+        "赤5筒",
+        "5筒",
+        "6筒",
+        "7筒",
+        "8筒",
+        "9筒",
+        "1索",
+        "2索",
+        "3索",
+        "4索",
+        "赤5索",
+        "5索",
+        "6索",
+        "7索",
+        "8索",
+        "9索",
+        "東",
+        "南",
+        "西",
+        "北",
+        "白",
+        "發",
+        "中",
+      ];
+      expect(values.map((v) => ordered.indexOf(v))).toEqual(
+        values.map((v) => ordered.indexOf(v)).sort((a, b) => a - b),
+      );
+    }
     expect(await page.locator(".table").boundingBox()).toEqual(board);
     expect(await page.getByTestId("real-hand").boundingBox()).toEqual(own);
     if (process.env.KYOKULOOP_UI_PROOF && info.project.name === "phone") {
@@ -255,13 +305,115 @@ for (const [width, height] of [
         scale: "css",
       });
     }
-    await rows.nth(0).click();
-    await expect(rows.nth(0).locator(".tile-back")).toHaveCount(13);
+    for (const index of [1, 2, 0]) {
+      await rows.nth(index).click();
+      await expect(rows.locator(".tile-art")).toHaveCount(0);
+      await rows.nth(index).click();
+      await expect(rows.locator(".tile-art")).toHaveCount(39);
+    }
     await page.getByTestId("real-hand").locator("button").first().click();
     await page.getByRole("button", { name: "回答する", exact: true }).click();
     await page.getByRole("button", { name: "理解した", exact: true }).click();
     await expect(rows.nth(1)).toHaveAttribute("aria-pressed", "false");
     await expect(rows.locator(".tile-art")).toHaveCount(0);
+  });
+}
+
+test("opponent sorting groups red fives and honours without changing original arrays", () => {
+  const hand = [
+    "N",
+    "9s",
+    "5mr",
+    "2p",
+    "1m",
+    "5m",
+    "E",
+    "1p",
+    "1s",
+    "C",
+    "P",
+    "F",
+    "S",
+    "W",
+  ];
+  const original = [...hand];
+  expect(sortedTiles(hand)).toEqual([
+    "1m",
+    "5mr",
+    "5m",
+    "1p",
+    "2p",
+    "1s",
+    "9s",
+    "E",
+    "S",
+    "W",
+    "N",
+    "P",
+    "F",
+    "C",
+  ]);
+  expect(sortedTiles(["6m", "0m", "1m", "5m"])).toEqual([
+    "1m",
+    "0m",
+    "5m",
+    "6m",
+  ]);
+  expect(hand).toEqual(original);
+});
+
+for (const width of [320, 390, 820, 1180]) {
+  test(`larger centre information and five dora markers fit clear of scores at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 1180 ? 820 : 1180 });
+    const pack = structuredClone(authentic);
+    for (const item of pack.items) {
+      item.scene.dora_markers = ["9s", "8s", "7s", "6s", "5sr"];
+      pack.histories[item.id].scene = structuredClone(item.scene);
+    }
+    await open(page, pack);
+    const result = await page.locator(".table-center").evaluate((center) => {
+      const inner = center
+        .querySelector(".table-center-content")!
+        .getBoundingClientRect();
+      const labels = [...center.querySelectorAll(".player-label")].map((e) =>
+        e.getBoundingClientRect(),
+      );
+      const elements = [
+        ...center.querySelectorAll(
+          ".round-name,.table-center-content > div:not(.dora),.dora .tile",
+        ),
+      ];
+      const overlap = (a: DOMRect, b: DOMRect) =>
+        Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.8 &&
+        Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.8;
+      return {
+        errors: elements.flatMap((e) => {
+          const r = e.getBoundingClientRect();
+          return [
+            ...(r.left < inner.left - 1 ||
+            r.right > inner.right + 1 ||
+            r.top < inner.top - 1 ||
+            r.bottom > inner.bottom + 1
+              ? ["outside"]
+              : []),
+            ...(labels.some((l) => overlap(r, l)) ? ["score overlap"] : []),
+          ];
+        }),
+        board: center.closest(".table")!.getBoundingClientRect().width,
+        round: parseFloat(
+          getComputedStyle(center.querySelector(".round-name")!).fontSize,
+        ),
+        dora: center.querySelector(".dora .tile")!.getBoundingClientRect()
+          .width,
+      };
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.round).toBeGreaterThanOrEqual(
+      Math.min(26, result.board * 0.036) - 0.1,
+    );
+    expect(result.dora).toBeCloseTo(result.board * 0.041, 0);
   });
 }
 
