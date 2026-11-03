@@ -18,7 +18,7 @@ import {
 } from "./demo";
 import "./style.css";
 import { RealApp } from "./real-app";
-import { RealTile as Tile } from "./real-board";
+import { DiscardRiver, RealTile as Tile } from "./real-board";
 
 import { VERSION } from "./version";
 const KEY = "kyokuloop-fictional-prototype-v2";
@@ -61,14 +61,14 @@ function Table({
                 {frame.scores[seat].toLocaleString()}
               </span>
             </div>
-            <div
-              className="river"
-              aria-label={`${seat === 2 ? "自分" : ["対面", "上家", "", "下家"][seat]}の河`}
-            >
-              {frame.rivers[seat].map((tile, i) => (
-                <Tile value={tile} key={i} small />
-              ))}
-            </div>
+            <DiscardRiver
+              tiles={frame.rivers[seat].map((tile) => ({
+                tile,
+                called: false,
+                reach: false,
+              }))}
+              label={`${seat === 2 ? "自分" : ["対面", "上家", "", "下家"][seat]}の河`}
+            />
           </div>
         ))}
         <div className="table-center">

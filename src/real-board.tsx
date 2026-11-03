@@ -32,6 +32,36 @@ export function RealTile({
     </span>
   );
 }
+
+export function DiscardRiver({
+  tiles,
+  label,
+}: {
+  tiles: Scene["rivers"][number];
+  label: string;
+}) {
+  // Each seat's local coordinates: six across twice, then extend row three.
+  const rows = [tiles.slice(0, 6), tiles.slice(6, 12), tiles.slice(12)];
+  return (
+    <div className="river" aria-label={label}>
+      {rows.map((row, index) => (
+        <div className="river-row" key={index}>
+          {row.map((r, i) => (
+            <span
+              key={i}
+              className={`river-discard${r.called ? " called" : ""}${r.reach ? " reach-tile" : ""}`}
+              title={
+                r.called ? "副露された牌" : r.reach ? "リーチ宣言牌" : undefined
+              }
+            >
+              <RealTile value={r.tile} small />
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 export const eventLabels: Record<string, string> = {
   start_kyoku: "配牌",
   tsumo: "ツモ",
@@ -95,26 +125,10 @@ export function RealTable({
                   {scene.reach_declared[seat] ? " · リーチ" : ""}
                 </span>
               </div>
-              <div
-                className="river"
-                aria-label={`${position === 2 ? "自分" : label}の河`}
-              >
-                {scene.rivers[seat].map((r, i) => (
-                  <span
-                    key={i}
-                    className={`${r.called ? "called" : ""} ${r.reach ? "reach-tile" : ""}`}
-                    title={
-                      r.called
-                        ? "副露された牌"
-                        : r.reach
-                          ? "リーチ宣言牌"
-                          : undefined
-                    }
-                  >
-                    <RealTile value={r.tile} small />
-                  </span>
-                ))}
-              </div>
+              <DiscardRiver
+                tiles={scene.rivers[seat]}
+                label={`${position === 2 ? "自分" : label}の河`}
+              />
             </div>
           );
         })}
