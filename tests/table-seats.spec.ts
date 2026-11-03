@@ -301,6 +301,11 @@ test("calls retain their relative source, kan stacking, concealed edges and red 
     page.locator('.meld[data-kind="daiminkan"] .meld-slot').last(),
   ).toHaveClass(/meld-called/);
   await expect(page.locator(".meld-added .tile")).toHaveCount(1);
+  await expect(
+    page
+      .getByRole("group", { name: "加槓・対面", exact: true })
+      .getByRole("img", { name: "赤5筒", exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".concealed-kan .tile-back")).toHaveCount(2);
   await expect(page.locator(".concealed-kan .red")).toHaveCount(1);
   for (const [position, count] of [

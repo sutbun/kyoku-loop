@@ -118,7 +118,7 @@ export function MeldTiles({ meld, seat }: { meld: Meld; seat: number }) {
     <div
       className={`meld${concealed ? " concealed-kan" : ""}`}
       data-kind={meld.type}
-      role="img"
+      role="group"
       aria-label={`${eventLabels[meld.type] ?? meld.type}${concealed ? "" : `・${from}`}`}
       title={`${eventLabels[meld.type] ?? meld.type}${concealed ? "" : `・${from}`}`}
     >
@@ -126,7 +126,6 @@ export function MeldTiles({ meld, seat }: { meld: Meld; seat: number }) {
         <span
           key={index}
           className={`meld-slot${index === calledIndex ? " meld-called" : ""}`}
-          aria-hidden="true"
         >
           {concealed && (index === 0 || index === values.length - 1) ? (
             <TileBack />
