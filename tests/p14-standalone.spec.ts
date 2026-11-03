@@ -10,6 +10,128 @@ import {
   type PhoneState,
 } from "../src/offline/engine";
 import { syncPayload, validateSyncReply } from "../src/offline/protocol";
+import { phoneFixture } from "./phone-fixture";
+
+for (const scenario of ["save", "sync", "retry", "empty"] as const) {
+  test(`standalone preparation before first pack can receive Windows questions: ${scenario}`, async ({
+    page,
+  }) => {
+    test.setTimeout(180000);
+    const pack = phoneFixture();
+    let downloads = 0;
+    let unavailable = scenario === "retry";
+    await page.route("**/phone/api", async (route) => {
+      const request = route.request().postDataJSON();
+      if (request.action === "download") {
+        downloads++;
+        if (unavailable) return route.fulfill({ status: 503, body: "" });
+        return route.fulfill({
+          json: {
+            ok: true,
+            data:
+              scenario === "empty"
+                ? { ...pack, items: [], histories: {} }
+                : pack,
+          },
+        });
+      }
+      if (scenario === "empty" && request.action === "sync") {
+        expect(request.payload.source).toBe(pack.source);
+        expect(request.payload.events).toEqual([]);
+        return route.fulfill({
+          json: {
+            ok: true,
+            data: {
+              protocol: 1,
+              source: pack.source,
+              device: request.payload.device,
+              receipts: [],
+              pack,
+            },
+          },
+        });
+      }
+      throw Error("Unexpected initial-pack request");
+    });
+    await page.goto("/phone/");
+    if (scenario === "empty") {
+      await page
+        .getByRole("button", { name: "問題を端末に保存", exact: true })
+        .click();
+      await expect(
+        page.getByRole("button", { name: "端末だけで使う準備", exact: true }),
+      ).toBeEnabled({ timeout: 30000 });
+    }
+    await page
+      .getByRole("button", { name: "端末だけで使う準備", exact: true })
+      .click();
+    await expect(page.getByTestId("compiler-ready")).toBeVisible({
+      timeout: 120000,
+    });
+    await page
+      .getByRole("button", {
+        name:
+          scenario === "save" || scenario === "retry"
+            ? "問題を端末に保存"
+            : "今すぐ同期",
+        exact: true,
+      })
+      .click({ timeout: 5000 });
+    if (scenario === "retry") {
+      await expect(page.getByRole("alert")).toContainText(
+        "Windowsに接続できません",
+        { timeout: 120000 },
+      );
+      await expect(page.getByTestId("offline-status")).not.toContainText(
+        "オフライン利用可能",
+      );
+      unavailable = false;
+      await page
+        .getByRole("button", { name: "今すぐ同期", exact: true })
+        .click();
+    }
+    await expect(page.getByTestId("offline-status")).toHaveText(
+      `オフライン利用可能 · ${pack.items.length}問`,
+      { timeout: 120000 },
+    );
+    expect(downloads).toBe(scenario === "retry" ? 2 : 1);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    const state = await page.evaluate(
+      () =>
+        new Promise<PhoneState>((resolve, reject) => {
+          const request = indexedDB.open("kyokuloop-phone-v1", 1);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result;
+            const read = db
+              .transaction("local")
+              .objectStore("local")
+              .get("state");
+            read.onsuccess = () => {
+              db.close();
+              resolve(read.result);
+            };
+            read.onerror = () => {
+              db.close();
+              reject(read.error);
+            };
+          };
+        }),
+    );
+    expect(state.schema).toBe(2);
+    expect(state.local_imports).toEqual([]);
+    expect(state.pack).toEqual(pack);
+    await page.context().setOffline(true);
+    await page.reload();
+    await expect(page.getByTestId("offline-status")).toHaveText(
+      `オフライン利用可能 · ${pack.items.length}問`,
+    );
+    await page
+      .getByRole("button", { name: "今日の復習を始める", exact: false })
+      .click();
+    await expect(page.getByTestId("real-hand")).toBeVisible();
+  });
+}
 
 const created = "2026-11-03T01:00:00.000Z";
 const raw = execFileSync(
