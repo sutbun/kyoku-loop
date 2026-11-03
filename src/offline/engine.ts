@@ -542,6 +542,14 @@ export function phoneReduce(
     const raw = state.events.find((e) => e.id === id) ?? fail("cannot_undo");
     return { ...raw, ...receiptFor(state, id) };
   };
+  const reviewCount = (i: PhoneItem) =>
+    (i.review_count ?? 0) +
+    state.events.filter(
+      (e) =>
+        e.item === i.id &&
+        e.kind === "answer" &&
+        !state.pack!.histories[i.id]?.events.some((h) => h.id === e.id),
+    ).length;
   const queue = (mode: string) =>
     [...(state.pack?.items ?? [])]
       .filter(
@@ -552,6 +560,7 @@ export function phoneReduce(
       )
       .sort(
         (a, b) =>
+          (mode === "practice" ? reviewCount(a) - reviewCount(b) : 0) ||
           (a.status === "復習中" ? 0 : a.manual ? 1 : 2) -
             (b.status === "復習中" ? 0 : b.manual ? 1 : 2) ||
           a.due.localeCompare(b.due) ||
@@ -938,14 +947,7 @@ export function phoneReduce(
       const items = (state.pack?.items ?? []).map((i) => ({
         ...i,
         scene: publicScene(i.scene),
-        review_count:
-          (i.review_count ?? 0) +
-          state.events.filter(
-            (e) =>
-              e.item === i.id &&
-              e.kind === "answer" &&
-              !state.pack!.histories[i.id]?.events.some((h) => h.id === e.id),
-          ).length,
+        review_count: reviewCount(i),
       }));
       data = {
         reports: [],
