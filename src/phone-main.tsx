@@ -10,6 +10,7 @@ import { synchronizePhone, downloadPhonePack } from "./offline/sync";
 import { synchronizeAnalysis } from "./offline/analysis-sync";
 import { SourceInput, AnalysisList } from "./analysis-ui";
 import type { AnalysisEntry } from "./analysis-queue";
+import { PhoneMortalImport } from "./phone-mortal-import";
 import "./style.css";
 import "./phone.css";
 
@@ -23,6 +24,7 @@ function PhoneApp() {
   const [active, setActive] = useState(false);
   const [filter, setFilter] = useState("今日");
   const [busy, setBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -37,6 +39,7 @@ function PhoneApp() {
     [syncError, setSyncError] = useState(""),
     [lastSync, setLastSync] = useState("");
   const syncRunning = useRef(false),
+    syncCompletion = useRef<Promise<void> | null>(null),
     retry = useRef<ReturnType<typeof setTimeout> | null>(null),
     delay = useRef(1000),
     mounted = useRef(true);
@@ -82,8 +85,22 @@ function PhoneApp() {
       setBusy(false);
     }
   };
-  const syncRecords = async () => {
-    if (syncRunning.current || !navigator.onLine) return;
+  const syncRecords = async (fresh = false): Promise<void> => {
+    if (syncRunning.current) {
+      if (fresh) {
+        await syncCompletion.current;
+        await syncRecords(true);
+      }
+      return;
+    }
+    if (!navigator.onLine) {
+      if (fresh) throw new Error("offline");
+      return;
+    }
+    let finishSync: () => void = () => {};
+    syncCompletion.current = new Promise<void>((resolve) => {
+      finishSync = resolve;
+    });
     if (retry.current) clearTimeout(retry.current);
     syncRunning.current = true;
     setSyncing(true);
@@ -122,7 +139,7 @@ function PhoneApp() {
       delay.current = 1000;
       if (mounted.current) await refresh();
     } catch (e) {
-      if (mounted.current)
+      if (mounted.current && !fresh)
         setSyncError(
           e instanceof DOMException && e.name === "QuotaExceededError"
             ? "空き容量不足で受信確認を保存できません。未送信の記録を保持しています。"
@@ -134,8 +151,11 @@ function PhoneApp() {
         retry.current = setTimeout(() => void syncRecords(), delay.current);
         delay.current = Math.min(delay.current * 3, 60000);
       }
+      if (fresh) throw e;
     } finally {
       syncRunning.current = false;
+      syncCompletion.current = null;
+      finishSync();
       if (mounted.current) setSyncing(false);
     }
   };
@@ -276,13 +296,13 @@ function PhoneApp() {
             <>
               <PracticeCard
                 workspace={workspace}
-                disabled={busy || !loaded}
+                disabled={busy || importBusy || !loaded}
                 onBegin={begin}
               />
               <section className="panel">
                 <h2>牌譜を追加</h2>
                 <SourceInput
-                  disabled={busy || !loaded}
+                  disabled={busy || importBusy || !loaded}
                   onSave={async (url) => {
                     await api({ action: "analysis_add", url });
                     await refresh();
@@ -295,10 +315,28 @@ function PhoneApp() {
                     if (navigator.onLine) void syncRecords();
                   }}
                 />
+                <PhoneMortalImport
+                  disabled={busy || syncing || !loaded}
+                  online={online}
+                  entries={analysisQueue}
+                  onBusy={setImportBusy}
+                  onRegistered={async () => {
+                    await syncRecords(true);
+                    const state = await readPhone();
+                    if (!state?.pack) {
+                      await saveShell();
+                      await api({
+                        action: "install_pack",
+                        pack: await downloadPhonePack(),
+                      });
+                    }
+                    await refresh();
+                  }}
+                />
                 <AnalysisList
                   entries={analysisQueue}
                   portable
-                  disabled={busy}
+                  disabled={busy || importBusy}
                 />
               </section>
               <section className="panel phone-download" aria-label="保存と同期">
@@ -310,7 +348,7 @@ function PhoneApp() {
                 <div className="phone-storage-actions">
                   <button
                     className="button primary"
-                    disabled={busy || !loaded}
+                    disabled={busy || importBusy || !loaded}
                     onClick={download}
                   >
                     {busy
@@ -324,6 +362,7 @@ function PhoneApp() {
                     className="button secondary"
                     disabled={
                       busy ||
+                      importBusy ||
                       syncing ||
                       !loaded ||
                       (!workspace.items.length && !analysisQueue.length) ||
@@ -416,6 +455,7 @@ function PhoneApp() {
       </main>
       <nav className="phone-nav" aria-label="メイン">
         <button
+          disabled={importBusy}
           aria-current={screen === "home" ? "page" : undefined}
           onClick={() => {
             setScreen("home");
@@ -426,6 +466,7 @@ function PhoneApp() {
           ホーム
         </button>
         <button
+          disabled={importBusy}
           aria-current={screen === "study" ? "page" : undefined}
           onClick={() => {
             setScreen("study");

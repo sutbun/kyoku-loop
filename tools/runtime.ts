@@ -119,7 +119,11 @@ export function createRuntimeControl(
       res.end("Stopping");
       return;
     }
-    if (path === "/api/local" || path === "/phone/api") {
+    if (
+      path === "/api/local" ||
+      path === "/phone/api" ||
+      path === "/phone/mortal"
+    ) {
       active++;
       let done = false;
       const finish = () => {

@@ -153,6 +153,69 @@ export function phoneSite(): Plugin {
       res.end("Private access denied");
       return;
     }
+    if (path === "/phone/mortal") {
+      res.setHeader("Content-Type", "application/json");
+      if (
+        req.method !== "POST" ||
+        !req.headers["content-type"]?.startsWith("application/json")
+      ) {
+        res.statusCode = 403;
+        res.end("{}");
+        return;
+      }
+      const chunks: Buffer[] = [];
+      let length = 0;
+      req.on("data", (chunk: Buffer) => {
+        length += chunk.length;
+        if (length <= 29 * 1024 * 1024) chunks.push(chunk);
+      });
+      req.on("end", () => {
+        const deny = (code: number, error: string) => {
+          res.statusCode = code;
+          res.end(JSON.stringify({ ok: false, error }));
+        };
+        if (length > 29 * 1024 * 1024) return deny(413, "size_limit");
+        let body: Record<string, unknown>;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        } catch {
+          return deny(400, "invalid_json");
+        }
+        if (!body || Array.isArray(body) || typeof body !== "object")
+          return deny(400, "invalid_request");
+        const keys = Object.keys(body).sort().join(",");
+        if (
+          body.action === "inspect" &&
+          keys === "action,data,source" &&
+          typeof body.data === "string" &&
+          (body.source === null || typeof body.source === "string")
+        ) {
+          callPhone(res, {
+            action: "phone_mortal_inspect",
+            data: body.data,
+            source: body.source,
+          });
+          return;
+        }
+        if (
+          body.action === "register" &&
+          keys === "action,analysis_id,source,token" &&
+          typeof body.token === "string" &&
+          typeof body.source === "string" &&
+          (body.analysis_id === null || typeof body.analysis_id === "string")
+        ) {
+          callPhone(res, {
+            action: "phone_mortal_register",
+            token: body.token,
+            source: body.source,
+            analysis_id: body.analysis_id,
+          });
+          return;
+        }
+        deny(403, "invalid_request");
+      });
+      return;
+    }
     if (path === "/phone/api") {
       res.setHeader("Content-Type", "application/json");
       if (

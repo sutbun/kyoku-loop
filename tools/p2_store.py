@@ -394,6 +394,42 @@ class Store(StudyMixin, AnalysisQueueMixin):
             self._put_analysis(entry)
         return self.state()
 
+    def phone_mortal_source(self, source, initial=False):
+        own = self.db.execute("SELECT value FROM study_settings WHERE key='device'").fetchone()[0]
+        if not (initial and source is None) and source != own:
+            raise StudyFailure('different_source')
+        return own
+
+    def phone_mortal_inspect(self, data, source):
+        own = self.phone_mortal_source(source, initial=True)
+        if not isinstance(data, str) or len(data) > ((LIMIT+2)//3)*4:
+            raise ImportFailure('size_limit')
+        try:
+            payload = base64.b64decode(data, validate=True)
+        except ValueError:
+            raise ImportFailure('invalid_json') from None
+        if len(payload) > LIMIT: raise ImportFailure('size_limit')
+        report = decode(payload)
+        if report.get('engine') != 'Mortal': raise ImportFailure('inbox_mortal_only')
+        return self.stage(payload, None) | {'source': own}
+
+    def phone_mortal_register(self, token, source, analysis_id):
+        own = self.phone_mortal_source(source)
+        row = self.db.execute('SELECT payload FROM staging WHERE token=? AND created>?',
+                              (token, time.time()-1800)).fetchone()
+        if not row: raise ImportFailure('stage_expired')
+        report = decode(row['payload'])
+        if report.get('engine') != 'Mortal': raise ImportFailure('inbox_mortal_only')
+        if analysis_id is None:
+            try:from .mortal_inbox import MortalInbox
+            except ImportError:from mortal_inbox import MortalInbox
+            url, analysis_id = MortalInbox(self).known_source(report)
+        else:
+            url = self.analysis_entry(analysis_id)['url']
+        # The client cannot choose another seat, model, URL or filesystem path.
+        result = self.commit(token, report['player_id'], 0, url, analysis_id)
+        return result | {'source': own}
+
 
 def main():
     store=None
@@ -419,6 +455,8 @@ def main():
             elif action=='inbox_scan': result=inbox.scan()
             else: result=inbox.status()
         elif action=='report_link': result=store.link_source(request.get('report'),request.get('analysis_id'))
+        elif action=='phone_mortal_inspect': result=store.phone_mortal_inspect(request.get('data'),request.get('source'))
+        elif action=='phone_mortal_register': result=store.phone_mortal_register(request.get('token'),request.get('source'),request.get('analysis_id'))
         elif action=='analysis_add': result=store.analysis_add(request.get('url'))
         elif action=='analysis_bulk': result=store.analysis_bulk(request.get('data'))
         elif action=='analysis_sync': result=store.analysis_receive(request.get('entries'))
