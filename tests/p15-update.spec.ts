@@ -169,8 +169,23 @@ test("existing version label updates the real waiting worker once and keeps reco
   await page.getByRole("button", { name: "取り消す", exact: true }).click();
   publish();
   await waiting(page);
+  // Even a newly fetched document matching the waiting generation must
+  // activate its worker rather than mistaking the document for a completed update.
+  await page.evaluate((next) => {
+    document.querySelector<HTMLMetaElement>(
+      'meta[name="phone-build"]',
+    )!.content = next;
+  }, nextBuild);
+  const reloaded = page.waitForEvent("framenavigated", {
+    predicate: (frame) => frame === page.mainFrame(),
+    timeout: 45000,
+  });
   await page.getByTestId("version-update").click();
-  await expect.poll(() => build(page), { timeout: 45000 }).toBe(nextBuild);
+  await reloaded;
+  await expect(page.locator('meta[name="phone-build"]')).toHaveAttribute(
+    "content",
+    nextBuild,
+  );
   await expect(page.getByTestId("version-update")).toBeEnabled();
   const after = await state(page);
   expect(after).toEqual(before);
@@ -181,8 +196,19 @@ test("existing version label updates the real waiting worker once and keeps reco
       'meta[name="phone-build"]',
     )!.content = old;
   }, initialBuild);
+  await expect(
+    page.getByRole("button", { name: "今すぐ同期", exact: true }),
+  ).toBeEnabled();
+  const activeReloaded = page.waitForEvent("framenavigated", {
+    predicate: (frame) => frame === page.mainFrame(),
+    timeout: 45000,
+  });
   await page.getByTestId("version-update").click();
-  await expect.poll(() => build(page), { timeout: 45000 }).toBe(nextBuild);
+  await activeReloaded;
+  await expect(page.locator('meta[name="phone-build"]')).toHaveAttribute(
+    "content",
+    nextBuild,
+  );
   await expect(page.getByTestId("version-update")).toBeEnabled();
   expect(await state(page)).toEqual(before);
   expect((await page.locator(".phone-header").boundingBox())!.height).toBe(
@@ -208,7 +234,12 @@ test("existing version label updates the real waiting worker once and keeps reco
   await expect(page.getByTestId("version-update")).toContainText(
     "ホームで更新",
   );
-  expect(await state(page)).toEqual(before);
+  // Explicitly resuming a session advances the existing storage epoch once;
+  // the original material, answers and session content remain identical.
+  expect(await state(page)).toEqual({
+    ...before,
+    sequence: before.sequence + 1,
+  });
 });
 
 test("unsubmitted URL and another editing window defer activation then both windows update", async ({
@@ -320,4 +351,20 @@ test("an older window without the update protocol cannot be forced to reload", a
   await other.close();
   await page.getByTestId("version-update").click();
   await expect.poll(() => build(page), { timeout: 45000 }).toBe(nextBuild);
+});
+
+test("the version button can prepare a fresh device without a previous worker", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  await page.route("**/phone/api", (r) => r.abort());
+  await page.goto("/phone/");
+  await expect(page.getByTestId("version-update")).toBeEnabled();
+  await page.getByTestId("version-update").click();
+  await expect(page.getByTestId("version-update")).toContainText("最新版", {
+    timeout: 45000,
+  });
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBe(true);
 });

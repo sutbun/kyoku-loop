@@ -42,14 +42,14 @@ function ask(
   });
 }
 async function installed(worker: ServiceWorker) {
-  if (worker.state === "installed") return;
+  if (["installed", "activating", "activated"].includes(worker.state)) return;
   await new Promise<void>((resolve, reject) => {
     const finish = () => {
       clearTimeout(timer);
       worker.removeEventListener("statechange", changed);
     };
     const changed = () => {
-      if (worker.state === "installed") {
+      if (["installed", "activating", "activated"].includes(worker.state)) {
         finish();
         resolve();
       } else if (worker.state === "redundant") {
@@ -108,24 +108,33 @@ export function VersionUpdate({
     flight.current = (async () => {
       if (!navigator.serviceWorker) throw Error("update_unavailable");
       const registration =
-        await navigator.serviceWorker.getRegistration("/phone/");
+        (await navigator.serviceWorker.getRegistration("/phone/")) ??
+        (navigator.onLine
+          ? await navigator.serviceWorker.register("/phone/sw.js", {
+              scope: "/phone/",
+              updateViaCache: "none",
+            })
+          : null);
       if (!registration) throw Error("update_unavailable");
       if (navigator.onLine) {
         lastCheck.current = Date.now();
         try {
-          await registration.update();
+          if (!registration.installing) await registration.update();
         } catch {
           if (!registration.waiting) throw Error("update_unavailable");
         }
       }
       if (registration.installing) await installed(registration.installing);
-      const worker = registration.waiting ?? navigator.serviceWorker.controller;
+      const worker =
+        registration.waiting ??
+        navigator.serviceWorker.controller ??
+        registration.active;
       if (!worker) {
         if (!navigator.onLine) throw Error("update_unavailable");
         return null;
       }
       const info = await ask(worker, "UPDATE_INFO");
-      if (info.build === currentBuild()) {
+      if (info.build === currentBuild() && registration.waiting !== worker) {
         if (!navigator.onLine) throw Error("update_unavailable");
         return null;
       }
