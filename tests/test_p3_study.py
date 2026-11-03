@@ -271,4 +271,30 @@ class StudyTests(unittest.TestCase):
         self.assertFalse(self.store.study_current()['stale'])
 
 
+class PracticeRotationTests(unittest.TestCase):
+    def test_completed_practice_rotates_to_unanswered_and_resume_is_preserved(self):
+        with tempfile.TemporaryDirectory(dir='D:/dev-data/kyoku-loop/private') as temp:
+            store=Store(Path(temp)/'practice.sqlite3')
+            try:
+                r=store.commit(store.stage(json.dumps(five_fixture(8)).encode(),None)['token'],0,0,None)
+                for scene in store.detail(r['id'])['decisions']: store.save(r['id'],scene['id'],True)
+                store.db.execute("UPDATE study_items SET due='2000-01-01'");store.db.commit()
+                scheduled=[i['id'] for i in store._queue('scheduled')]
+                self.assertEqual(len(scheduled),5)
+                first=[i['id'] for i in store._queue('practice')]
+                self.assertEqual(len(first),5)
+                q=store.study_start('practice')
+                self.assertEqual(store.study_start('practice')['id'],q['id'])
+                for n in range(5):
+                    store.study_choice(q['id'],q['scene']['own_hand'][0],'choose')
+                    store.study_choice(q['id'],None,'confirm')
+                    q=store.study_rate(q['id'],q['item_id'],'理解した',f'rotation-{n}')
+                self.assertTrue(q['complete'])
+                second=[i['id'] for i in store._queue('practice')]
+                self.assertEqual(len(set(second)-set(first)),3)
+                self.assertEqual([i['id'] for i in store._queue('scheduled')],scheduled)
+                self.assertEqual(len(store.phone_pack()['items']),8)
+            finally: store.close()
+
+
 if __name__=='__main__': unittest.main()

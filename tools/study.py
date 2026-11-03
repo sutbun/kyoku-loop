@@ -144,7 +144,8 @@ class StudyMixin:
         items=[dict(r) for r in self.db.execute("SELECT * FROM study_items WHERE status IN ('未学習','復習中')")]
         if mode=='scheduled':
             items=[i for i in items if i['due'] and i['due']<=today and i['last_credit_day']!=today]
-        return sorted(items,key=lambda i:(0 if i['status']=='復習中' else 1 if i['manual'] else 2,i['due'],i['id']))[:5]
+        counts = dict(self.db.execute("SELECT item,COUNT(*) FROM review_events WHERE kind='answer' GROUP BY item")) if mode=='practice' else {}
+        return sorted(items,key=lambda i:((counts.get(i['id'],0) if mode=='practice' else 0),0 if i['status']=='復習中' else 1 if i['manual'] else 2,i['due'],i['id']))[:5]
 
     def study_start(self, mode):
         if mode not in ('scheduled','practice'): raise StudyFailure('invalid_mode')
