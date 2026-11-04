@@ -71,7 +71,10 @@ export function MortalSourceSelect({
   // Known conflicting scores must not be elevated by identical/anonymized names.
   const matched = options.filter((o) => !o.scoreMatches && o.matches && !hint),
     other = options.filter((o) => !scored.includes(o) && !matched.includes(o));
-  const selected = options.find((o) => o.entry.id === value);
+  // Empty value retains automatic registration and its existing conflict guards.
+  // Show the unique automatic target as selected without turning it into a manual override.
+  const automatic = !value && scored.length === 1 ? scored[0] : undefined;
+  const selected = options.find((o) => o.entry.id === value) ?? automatic;
   const render = (list: typeof options) =>
     list.map((o) => (
       <option key={o.entry.id} value={o.entry.id}>
@@ -94,7 +97,7 @@ export function MortalSourceSelect({
       <label>
         元牌譜（任意）
         <select
-          value={value}
+          value={selected?.entry.id ?? value}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
           style={{ maxWidth: "100%", minWidth: 0 }}
@@ -117,13 +120,30 @@ export function MortalSourceSelect({
           )}
         </select>
       </label>
+      {!value && scored.length > 0 && (
+        <p className="source-context" role="status">
+          <strong>
+            {scored.length === 1
+              ? "紐付け先（自動選択）"
+              : `自動紐付けの候補（${scored.length}件）`}
+          </strong>
+          {scored.map((o) => (
+            <span key={o.entry.id} style={{ display: "block" }}>
+              {o.label}
+            </span>
+          ))}
+          {scored.length > 1 && (
+            <span>候補が複数あるため、元牌譜を選んでください。</span>
+          )}
+        </p>
+      )}
       {hint && scored.length === 0 && (
         <small>点数・順位が一致する候補はありません。</small>
       )}
       {stage.final_scores === null && (
         <small>このJSONは最終点数を照合できません。</small>
       )}
-      {selected && (
+      {value && selected && (
         <small style={{ display: "block", overflowWrap: "anywhere" }}>
           選択した牌譜：{selected.label}
         </small>

@@ -4,7 +4,11 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
-import { freshPhoneState, phoneReduce, type PhoneState } from "../src/offline/engine";
+import {
+  freshPhoneState,
+  phoneReduce,
+  type PhoneState,
+} from "../src/offline/engine";
 import { phoneFixture } from "./phone-fixture";
 
 test.use({ serviceWorkers: "block" });
@@ -35,17 +39,118 @@ const history = JSON.stringify({
   ],
 });
 async function seedPhone(page: Page, state: PhoneState) {
-  await page.evaluate(state => new Promise<void>((done, fail) => {
-    const r = indexedDB.open("kyokuloop-phone-v1", 1);
-    r.onupgradeneeded = () => r.result.createObjectStore("local");
-    r.onsuccess = () => {
-      const db = r.result, tx = db.transaction("local", "readwrite");
-      tx.objectStore("local").put(state, "state");
-      tx.oncomplete = () => { db.close(); done(); };
-      tx.onerror = () => fail(tx.error);
-    };
-  }), state);
+  await page.evaluate(
+    (state) =>
+      new Promise<void>((done, fail) => {
+        const r = indexedDB.open("kyokuloop-phone-v1", 1);
+        r.onupgradeneeded = () => r.result.createObjectStore("local");
+        r.onsuccess = () => {
+          const db = r.result,
+            tx = db.transaction("local", "readwrite");
+          tx.objectStore("local").put(state, "state");
+          tx.oncomplete = () => {
+            db.close();
+            done();
+          };
+          tx.onerror = () => fail(tx.error);
+        };
+      }),
+    state,
+  );
 }
+
+test("unique preview default registers and links the replay without manually choosing a source", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const folder = mkdtempSync(
+    join(resolve("D:/dev-data/kyoku-loop/private"), "default-source-ui-"),
+  );
+  const env = { ...process.env, KYOKULOOP_DB: join(folder, "test.sqlite3") };
+  const call = (value: object) =>
+    JSON.parse(
+      execFileSync("python", ["tools/p2_store.py"], {
+        input: JSON.stringify(value),
+        encoding: "utf8",
+        env,
+        windowsHide: true,
+        timeout: 60000,
+      }),
+    );
+  let registeredAutomatically = false;
+  try {
+    expect(call({ action: "analysis_bulk", data: history }).ok).toBe(true);
+    await page.route("**/phone/api", (route) => {
+      const body = route.request().postDataJSON();
+      return route.fulfill({
+        json:
+          body.action === "analysis_sync"
+            ? call(body)
+            : body.action === "sync"
+              ? call({ action: "phone_sync", payload: body.payload })
+              : call({ action: "offline_pack" }),
+      });
+    });
+    await page.route("**/phone/mortal", (route) => {
+      const body = route.request().postDataJSON();
+      if (body.action === "register") {
+        // Preserve automatic conflict protection instead of silently turning a default into a manual override.
+        expect(body.analysis_id).toBeNull();
+        registeredAutomatically = true;
+      }
+      return route.fulfill({
+        json: call({
+          ...body,
+          action:
+            body.action === "inspect"
+              ? "phone_mortal_inspect"
+              : "phone_mortal_register",
+        }),
+      });
+    });
+    await page.goto("/phone/");
+    const state = phoneReduce(freshPhoneState("default-source-ui"), {
+      action: "install_pack",
+      pack: call({ action: "offline_pack" }).data,
+    }).state;
+    state.analysis_queue = call({ action: "state" }).data.analysis_queue.map(
+      (e: object) => ({ ...e, received: "2026-11-04T00:00:00Z" }),
+    );
+    await seedPhone(page, state);
+    await page.reload();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "牌譜", exact: true })
+      .click();
+    await page.getByText("解析結果を追加", { exact: true }).click();
+    await page
+      .getByLabel("Mortal JSON / JSON.gz", { exact: true })
+      .setInputFiles({
+        name: "fictional-default.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(raw),
+      });
+    await expect(
+      page.getByRole("combobox", { name: "元牌譜（任意）", exact: true }),
+    ).toHaveValue(url.split("paipu=")[1]);
+    await expect(
+      page.getByRole("status").filter({ hasText: "紐付け先（自動選択）" }),
+    ).toContainText("25,000点");
+    await page
+      .getByRole("button", { name: "Windowsに登録", exact: true })
+      .click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Windowsに登録しました" }),
+    ).toContainText("元牌譜に紐付け済み");
+    expect(registeredAutomatically).toBe(true);
+    const saved = call({ action: "state" }).data;
+    expect(saved.reports).toHaveLength(1);
+    expect(saved.analysis_queue[0].reports).toEqual([saved.reports[0].id]);
+    expect(saved.reports[0].source_linked).toBe(true);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
 
 for (const surface of ["desktop", "phone"])
   test(`${surface}: multiple JSONs auto-link, keep successes across retry and delete selection only`, async ({
@@ -82,8 +187,11 @@ for (const surface of ["desktop", "phone"])
         const body = route.request().postDataJSON();
         return route.fulfill({
           json:
-            body.action === "analysis_sync" ? call(body) :
-            body.action === "sync" ? call({ action: "phone_sync", payload: body.payload }) : call({ action: "offline_pack" }),
+            body.action === "analysis_sync"
+              ? call(body)
+              : body.action === "sync"
+                ? call({ action: "phone_sync", payload: body.payload })
+                : call({ action: "offline_pack" }),
         });
       });
       await page.route("**/phone/mortal", (route) => {
@@ -100,7 +208,13 @@ for (const surface of ["desktop", "phone"])
       });
       await page.goto(surface === "desktop" ? "/" : "/phone/");
       if (surface === "phone") {
-        await seedPhone(page, phoneReduce(freshPhoneState("remote-batch"), { action: "install_pack", pack: call({ action: "offline_pack" }).data }).state);
+        await seedPhone(
+          page,
+          phoneReduce(freshPhoneState("remote-batch"), {
+            action: "install_pack",
+            pack: call({ action: "offline_pack" }).data,
+          }).state,
+        );
         await page.reload();
         await page
           .getByRole("navigation", { name: "メイン" })

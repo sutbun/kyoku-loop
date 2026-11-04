@@ -209,7 +209,7 @@ test("one score candidate keeps automatic mode; conflicting scores do not get a 
       }),
     );
   expect(render(scored)).toContain("点数・順位が一致（1件の候補）");
-  expect(render(scored)).toContain('value="" selected=""');
+  expect(render(scored)).toContain(`value="${same.id}" selected=""`);
   const missing = render({
     ...scored,
     final_scores: [41000, 30000, 20000, 9000],
@@ -221,4 +221,93 @@ test("one score candidate keeps automatic mode; conflicting scores do not get a 
     "最終点数を照合できません",
   );
   expect(mortalSourceOptions([same], scored, false)).toHaveLength(0);
+});
+
+test("automatic source preview shows and defaults to the matching replay without a manual override", () => {
+  const same = entry(1);
+  same.history!.players[0].name = "<架空の相手>";
+  const before = structuredClone(same);
+  const html = renderToStaticMarkup(
+    createElement(MortalSourceSelect, {
+      entries: [same],
+      stage: { ...stage, final_scores: [25000, 25000, 25000, 25000] },
+      local: true,
+      value: "",
+      disabled: false,
+      onChange: () => {
+        throw Error("Preview must not change selection");
+      },
+    }),
+  );
+  const visible = html.split("</select>")[1];
+  expect(visible).toContain("紐付け先（自動選択）");
+  for (const text of [
+    "2026/11/3 09:00",
+    "2位",
+    "25,000点",
+    "&lt;架空の相手&gt; / 架空C / 架空D",
+  ])
+    expect(visible).toContain(text);
+  expect(visible).not.toContain("紐付け済み");
+  expect(html).toContain(`value="${same.id}" selected=""`);
+  expect(same).toEqual(before);
+});
+
+test("ambiguous automatic candidates show both replay summaries and require manual choice", () => {
+  const html = renderToStaticMarkup(
+    createElement(MortalSourceSelect, {
+      entries: [entry(1), entry(2, "2026-11-04T00:00:00Z")],
+      stage: { ...stage, final_scores: [25000, 25000, 25000, 25000] },
+      local: true,
+      value: "",
+      disabled: false,
+      onChange: () => {},
+    }),
+  );
+  const visible = html.split("</select>")[1];
+  expect(visible).toContain("自動紐付けの候補（2件）");
+  expect(visible).toContain("2026/11/3 09:00");
+  expect(visible).toContain("2026/11/4 09:00");
+  expect(visible).toContain("候補が複数あるため、元牌譜を選んでください。");
+  expect(html).toContain('value="" selected=""');
+});
+
+test("no score match, unavailable scores and unreceived Windows sources never appear as automatic candidates", () => {
+  for (const [scores, local] of [
+    [null, true],
+    [[41000, 30000, 20000, 9000], true],
+    [[25000, 25000, 25000, 25000], false],
+  ] as const) {
+    const html = renderToStaticMarkup(
+      createElement(MortalSourceSelect, {
+        entries: [entry(1)],
+        stage: { ...stage, final_scores: scores ? [...scores] : null },
+        local,
+        value: "",
+        disabled: false,
+        onChange: () => {},
+      }),
+    );
+    expect(html.split("</select>")[1]).not.toContain("自動紐付けの候補");
+    expect(html.split("</select>")[1]).not.toContain("紐付け先（自動選択）");
+  }
+});
+
+test("manual selection replaces the automatic preview with the explicitly chosen replay", () => {
+  const same = entry(1),
+    other = entry(2, "2026-11-04T00:00:00Z");
+  const html = renderToStaticMarkup(
+    createElement(MortalSourceSelect, {
+      entries: [same, other],
+      stage: { ...stage, final_scores: [25000, 25000, 25000, 25000] },
+      local: true,
+      value: other.id,
+      disabled: true,
+      onChange: () => {},
+    }),
+  );
+  const visible = html.split("</select>")[1];
+  expect(visible).toContain("選択した牌譜：2026/11/4 09:00");
+  expect(visible).not.toContain("自動紐付けの候補");
+  expect(visible).not.toContain("2026/11/3 09:00");
 });
