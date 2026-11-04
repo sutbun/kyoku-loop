@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "KyokuLoop Mortal Helper",
   "description": "選んだ牌譜を順番にMortalで解析し、JSON保存とKyokuLoopへの登録を行います。",
-  "version": "0.1.1.4",
-  "version_name": "DEV-11.05-4",
+  "version": "0.1.1.5",
+  "version_name": "DEV-11.05-5",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",

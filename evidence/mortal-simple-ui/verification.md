@@ -19,3 +19,9 @@
 
 ## Delivery boundary
 Package committed GitHub main into DEV-11.05-4, update the existing installed folders in place with the checked updater and retain backups. The extension ID, ledger and IndexedDB stay at their existing paths. Browser extension reload and subjective user UX acceptance are separate from file/hash verification. Do not reload the user's extension during active processing.
+
+## DEV-11.05-5: resume after closing the processing tab
+
+The reported paused batch had completed registrations and an unsent next item, but retained the old, closed Mortal tab ID. A permitted resume then tried tabs.get on that ID and paused again. After the existing resume guards accept an explicit resume from tab_closed, detach only the obsolete tab reference. The next unsent item opens a new tab; cached JSON still resumes only local registration.
+
+Verification: the new closed-tab regression failed with phase paused before the fix, then all 18 BatchRunner cases passed, including retained-JSON registration and refusal when a claimed report's bytes are missing after its read grant. check/build passed. Final isolated related suite: all 12 passed, including actual extension first registration -> close result tab -> explicit UI resume -> next registration, exactly one submit/read per fictional source, existing questions/answers/session/unsaved input retained, plus the prior restart/ACK and Edge popup checks. The app/Python source is unchanged; reuse the immediately preceding main's successful 165 Python cases. Real Mortal requests/user DB writes: 0. Logs and generated artifacts: D:/dev-data/kyoku-loop/private/mortal-closed-tab-20261105. User completion of the paused real batch remains separate from these synthetic checks.
