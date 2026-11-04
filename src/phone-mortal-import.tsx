@@ -1,4 +1,6 @@
 import { MortalSourceSelect } from "./mortal-source-select";
+import { MortalRegistrationNotice } from "./mortal-registration-notice";
+import type { MortalRegistrationResult } from "./mortal-registration";
 import { useEffect, useState } from "react";
 import { api, errors } from "./api";
 import { previewMortal, type LocalMaterial } from "./offline/mortal-compiler";
@@ -68,7 +70,10 @@ export function PhoneMortalImport({
   const [entry, setEntry] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{
+    result: MortalRegistrationResult;
+    local: boolean;
+  } | null>(null);
   const [updateError, setUpdateError] = useState("");
   useEffect(() => {
     onPendingChange?.(!!stage || busy);
@@ -103,7 +108,7 @@ export function PhoneMortalImport({
     void work(async () => {
       setStage(null);
       setMaterial(null);
-      setNotice("");
+      setNotice(null);
       setUpdateError("");
       setEntry("");
       if (selected.size > 20 * 1024 * 1024) throw new Error(errors.size_limit);
@@ -186,37 +191,29 @@ export function PhoneMortalImport({
             onClick={() =>
               void work(async () => {
                 if (material) {
-                  const result = await api<{ duplicate: boolean }>({
+                  const result = await api<MortalRegistrationResult>({
                     action: "register_local",
                     material,
                     final_scores: stage.final_scores ?? null,
                     analysis_id: entry || null,
                   });
-                  setNotice(
-                    result.duplicate
-                      ? "この端末に登録済みの結果です"
-                      : "この端末に登録しました",
-                  );
+                  setNotice({ result, local: true });
                   setStage(null);
                   setMaterial(null);
                   await onRegistered(true);
                   return;
                 }
-                const result = await request<{
-                  id: string;
-                  duplicate: boolean;
-                  source: string;
-                }>({
+                const result = await request<
+                  MortalRegistrationResult & {
+                    source: string;
+                  }
+                >({
                   action: "register",
                   token: stage.token,
                   source: stage.source,
                   analysis_id: entry || null,
                 });
-                setNotice(
-                  result.duplicate
-                    ? "Windowsに登録済みの結果です"
-                    : "Windowsに登録しました",
-                );
+                setNotice({ result, local: false });
                 setStage(null);
                 // The registration acknowledgement is durable even if pack refresh fails.
                 await updatePack();
@@ -261,7 +258,7 @@ export function PhoneMortalImport({
           取り消す
         </button>
       )}
-      {notice && <p role="status">{notice}</p>}
+      {notice && <MortalRegistrationNotice {...notice} entries={entries} />}
       {updateError && (
         <div className="error" role="alert">
           {updateError}
