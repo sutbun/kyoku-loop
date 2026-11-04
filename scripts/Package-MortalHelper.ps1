@@ -13,7 +13,7 @@ $target = [IO.Path]::GetFullPath((Join-Path $DestinationRoot $version))
 if (Test-Path -LiteralPath $target) { throw "Package already exists; refusing to overwrite: $target" }
 $extension = Join-Path $target 'extension'
 New-Item -ItemType Directory -Path $extension -Force | Out-Null
-$names = @('manifest.json','core.js','background.js','inspector.js','content.js','popup.html','popup.js','popup.css','batch.js','payloads.js','app-content.js')
+$names = @('manifest.json','core.js','background.js','inspector.js','content.js','popup.html','popup.js','popup.css','batch.js','payloads.js','app-content.js','diagnostics.js')
 $hashes = @{}
 foreach ($name in $names) {
     $from = Join-Path $source $name; $to = Join-Path $extension $name

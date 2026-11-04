@@ -92,11 +92,23 @@ def validate(report):
 def _meld_signature(m, review=False):
     kind = m['type']
     if kind not in ('chi', 'pon', 'daiminkan', 'ankan', 'kakan'): raise ValueError()
-    tiles = list(m['consumed'])
-    if kind != 'ankan': tiles.append(m['pai'] if review else m['tile'])
-    if not review and kind == 'kakan': tiles.append(m['added'])
+    if review and kind == 'kakan':
+        # mjai-reviewer's State::Fuuro stores the original pon separately:
+        # consumed are the two held pon tiles, pai is the fourth (added) tile.
+        consumed = m.get('consumed')
+        target = m.get('previous_pon_target')
+        if (not isinstance(consumed, list) or len(consumed) != 2
+                or type(target) is not int or target not in range(4)
+                or m.get('previous_pon_pai') not in EXACT_TILES or m.get('pai') not in EXACT_TILES):
+            raise ValueError('reconstruction_failed')
+        tiles = consumed + [m.get('previous_pon_pai'), m.get('pai')]
+    else:
+        tiles = list(m['consumed'])
+        if kind != 'ankan': tiles.append(m['pai'] if review else m['tile'])
+        if not review and kind == 'kakan': tiles.append(m['added'])
+        target = m.get('target')
     if any(t not in EXACT_TILES for t in tiles): raise ValueError()
-    return kind, tuple(sorted(tiles)), m.get('target')
+    return kind, tuple(sorted(tiles)), target
 
 
 def final_scores(report):

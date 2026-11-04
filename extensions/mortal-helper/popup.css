@@ -87,6 +87,15 @@ select {
 details {
   margin-top: 16px;
 }
+#copy-notice:empty {
+  display: none;
+}
+#diagnostics-text {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 8px 0;
+  font: 12px/1.5 monospace;
+}
 button:disabled {
   opacity: 0.5;
   cursor: default;

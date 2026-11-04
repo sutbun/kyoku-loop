@@ -34,6 +34,15 @@
         ><button id="batch-stop" disabled>停止</button>
       </div>
       <p id="batch-notice" role="status" aria-live="polite"></p>
+      <button id="copy-diagnostics" disabled>診断情報をコピー</button>
+      <p id="copy-notice" class="hint" role="status" aria-live="polite"></p>
+      <textarea
+        id="diagnostics-text"
+        aria-label="コピー用の診断情報"
+        rows="8"
+        readonly
+        hidden
+      ></textarea>
       <p class="hint">
         1件の保存・登録が完了してから30秒空けて次へ進みます。処理中はMortalタブを残してください。
       </p>

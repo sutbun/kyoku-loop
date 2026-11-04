@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$PackageDirectory,
-    [string]$HelperRoot = 'E:\Apps\KyokuLoopMortalHelper'
+    [string]$HelperRoot = 'E:\Apps\KyokuLoopMortalHelper',
+    [string]$InstalledDirectory
 )
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath($HelperRoot).TrimEnd('\','/')
@@ -20,8 +21,17 @@ function OwnedPath([string]$Path) {
 $package=OwnedPath $PackageDirectory
 $next=Get-Content -LiteralPath (Join-Path $package 'package-info.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($next.version -notmatch '^DEV-[0-9]{2}\.[0-9]{2}-[0-9]+$' -or $next.sourceSha -notmatch '^[a-f0-9]{40}$') { throw 'Invalid package metadata.' }
-$record=Join-Path $root 'installed.json'
-if (Test-Path -LiteralPath $record) {
+$record=OwnedPath (Join-Path $root 'installed.json')
+if ($InstalledDirectory) {
+    $target=OwnedPath $InstalledDirectory
+    $primary=if (Test-Path -LiteralPath $record) { Get-Content -LiteralPath $record -Raw -Encoding UTF8 | ConvertFrom-Json } else { $null }
+    if ($primary -and (OwnedPath $primary.directory) -eq $target) { $old=$primary }
+    else {
+        $record=OwnedPath (Join-Path (Split-Path $target -Parent) 'installed-extension.json')
+        if (Test-Path -LiteralPath $record) { $old=Get-Content -LiteralPath $record -Raw -Encoding UTF8 | ConvertFrom-Json }
+        else { $old=Get-Content -LiteralPath (OwnedPath (Join-Path (Split-Path $target -Parent) 'package-info.json')) -Raw -Encoding UTF8 | ConvertFrom-Json }
+    }
+} elseif (Test-Path -LiteralPath $record) {
     $old=Get-Content -LiteralPath $record -Raw -Encoding UTF8 | ConvertFrom-Json
     $target=OwnedPath $old.directory
 } else {
@@ -30,7 +40,7 @@ if (Test-Path -LiteralPath $record) {
 }
 if ((Split-Path $target -Leaf) -ne 'extension' -or (Split-Path (Split-Path $target -Parent) -Leaf) -notmatch '^DEV-[0-9]{2}\.[0-9]{2}-[0-9]+$') { throw 'Invalid installed extension path.' }
 if ($target -eq (Join-Path $package 'extension')) { throw 'The immutable package cannot be its own update target.' }
-$names=@('manifest.json','core.js','background.js','inspector.js','content.js','popup.html','popup.js','popup.css','batch.js','payloads.js','app-content.js')
+$names=@('manifest.json','core.js','background.js','inspector.js','content.js','popup.html','popup.js','popup.css','batch.js','payloads.js','app-content.js','diagnostics.js')
 if (@($next.files.PSObject.Properties).Count -ne $names.Count -or @($next.files.PSObject.Properties.Name | Where-Object { $_ -notin $names }).Count) { throw 'Unexpected package files.' }
 foreach ($name in $names) {
     $hash=$next.files.$name
@@ -45,6 +55,7 @@ foreach ($name in $oldNames) {
 $before=Get-Content -LiteralPath (Join-Path $target 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $after=Get-Content -LiteralPath (Join-Path $package 'extension\manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($before.name -ne $after.name -or $before.key -ne $after.key) { throw 'Extension identity must stay unchanged.' }
+if ($after.version_name -ne $next.version) { throw 'Manifest version and package metadata differ.' }
 $tag=(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N')
 $backup=OwnedPath (Join-Path $root ('backups\'+$tag))
 $stage=OwnedPath (Join-Path (Split-Path $target -Parent) ('extension-stage-'+$tag))
