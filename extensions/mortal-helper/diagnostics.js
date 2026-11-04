@@ -1,9 +1,11 @@
 export function diagnosticText(status, version, label = (value) => value) {
   const batch = status?.batch;
   const item = batch?.items?.[batch.index];
-  const job = status?.jobs?.find((j) =>
-    item?.jobId ? j.id === item.jobId : j.tabId === status.tabId,
-  );
+  const job = batch
+    ? item?.jobId
+      ? status?.jobs?.find((j) => j.id === item.jobId)
+      : undefined
+    : status?.jobs?.find((j) => j.tabId === status.tabId);
   const reason = batch?.reason || job?.reason || job?.transferError;
   const source = item?.id || job?.source?.split("paipu=")[1] || "未確認";
   const code = /^[a-z_]{1,60}$/.test(reason)
