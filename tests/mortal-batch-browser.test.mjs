@@ -228,7 +228,8 @@ async function fixture(label, lostACK = false) {
     );
     await worker.evaluate(
       ({ site, tabId }) => {
-        const create = chrome.tabs.create.bind(chrome.tabs);
+        globalThis.fixtureCreateTab = chrome.tabs.create.bind(chrome.tabs);
+        const create = globalThis.fixtureCreateTab;
         chrome.tabs.create = (options) =>
           options.url?.startsWith(site + "/")
             ? chrome.tabs.update(tabId, options)
@@ -268,6 +269,27 @@ async function fixture(label, lostACK = false) {
       api,
       prior,
       python,
+      async closeAndPrepareReplacement() {
+        await mortalPage.close();
+        // As with the initial tab, pre-attach a page so Playwright can intercept
+        // its first site navigation. Production still uses tabs.create.
+        const replacement = await context.newPage();
+        await replacement.goto(SITE + "/ja.html");
+        const replacementId = await worker.evaluate(
+          async (url) =>
+            (await chrome.tabs.query({})).find((t) => t.url === url).id,
+          SITE + "/ja.html",
+        );
+        await worker.evaluate(
+          ({ site, tabId }) => {
+            chrome.tabs.create = (options) =>
+              options.url?.startsWith(site + "/")
+                ? chrome.tabs.update(tabId, options)
+                : globalThis.fixtureCreateTab(options);
+          },
+          { site: SITE, tabId: replacementId },
+        );
+      },
       async speedCooldown() {
         await worker.evaluate(() => {
           const original = Date.now;
@@ -346,6 +368,18 @@ test(
         JSON.stringify(await f.state()),
       );
       assert.deepEqual(f.calls.posts, [1]);
+      await f.closeAndPrepareReplacement();
+      await until(
+        f.state,
+        (s) => s.batch?.phase === "paused" && s.batch.reason === "tab_closed",
+        "closed result tab pauses next unsent source",
+      );
+      await f.popup.locator("#batch-start").click();
+      await until(
+        f.state,
+        (s) => s.batch?.phase === "running",
+        "explicit resume from closed tab",
+      );
       await f.speedCooldown();
       const finished = await until(
         f.state,

@@ -171,6 +171,9 @@ export class BatchRunner {
   }
   async resume(appTabId) {
     const { data, b, item, job, cached } = await this.resumeContext();
+    // The old tab cannot be reused after closure. Only detach it after all
+    // existing submission/payload guards have accepted this explicit resume.
+    if (b.reason === "tab_closed") b.tabId = undefined;
     b.phase = "running";
     b.reason = null;
     b.stopAfterCurrent = false;

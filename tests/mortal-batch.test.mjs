@@ -341,3 +341,61 @@ test("resume availability requires retained bytes after a claimed failed transfe
   await assert.rejects(r.runner.resume(10), /submission_uncertain/);
   assert.equal(r.calls.read, 1);
 });
+
+test("resume after closing the previous result tab opens a new tab for the unsent next source", async () => {
+  const r = rig();
+  await launch(r);
+  r.data().batch.items.push({ ...entry(2), status: "queued" });
+  await r.runner.drive();
+  assert.equal(r.data().batch.index, 1);
+  assert.equal(r.calls.register, 1);
+  assert.equal(r.data().jobs[0].phase, "registered");
+  await r.runner.pause("tab_closed");
+  r.host.open = async (url, previous) => {
+    if (previous === 7) throw Error("tab_closed");
+    r.calls.open.push(url);
+    return { id: 8 };
+  };
+  r.time(32000);
+  assert.equal(await r.runner.canResume(), true);
+  await r.runner.resume(10);
+  await r.runner.drive();
+  assert.equal(r.data().batch.phase, "running");
+  assert.equal(r.data().batch.tabId, 8);
+  assert.equal(r.data().batch.items[1].status, "opening");
+  assert.equal(r.calls.open.length, 2);
+  assert.ok(r.calls.open[1].includes(encodeURIComponent(source(2))));
+  assert.equal(r.calls.register, 1);
+  assert.equal(r.calls.read, 1);
+});
+
+test("tab closure still cannot resume a claimed report with no retained bytes after its read grant", async () => {
+  const r = rig();
+  await launch(r);
+  r.data().jobs[0].transferAttempted = true;
+  await r.runner.pause("tab_closed");
+  const before = JSON.stringify(r.data());
+  assert.equal(await r.runner.canResume(), false);
+  await assert.rejects(r.runner.resume(10), /submission_uncertain/);
+  assert.equal(JSON.stringify(r.data()), before);
+  assert.equal(r.calls.open.length, 1);
+  assert.equal(r.calls.read, 0);
+});
+
+test("closing a tab with retained JSON resumes registration without reading the report again", async () => {
+  const r = rig();
+  await launch(r);
+  r.data().batch.items.push({ ...entry(2), status: "queued" });
+  r.lost(true);
+  await r.runner.drive();
+  assert.ok(r.payload());
+  await r.runner.pause("tab_closed");
+  r.lost(false);
+  await r.runner.resume(10);
+  await r.runner.drive();
+  assert.equal(r.data().batch.index, 1);
+  assert.equal(r.calls.open.length, 1);
+  assert.equal(r.calls.read, 1);
+  assert.equal(r.calls.register, 2);
+  assert.equal(r.payload(), null);
+});
