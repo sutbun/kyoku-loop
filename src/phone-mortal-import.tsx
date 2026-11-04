@@ -1,3 +1,4 @@
+import { MortalSourceSelect } from "./mortal-source-select";
 import { useEffect, useState } from "react";
 import { api, errors } from "./api";
 import { compileMortal, type LocalMaterial } from "./offline/mortal-compiler";
@@ -169,23 +170,14 @@ export function PhoneMortalImport({
             解析対象：席{stage.target_seat! + 1} ·{" "}
             {stage.players[stage.target_seat!]}
           </p>
-          <label>
-            元牌譜（任意）
-            <select
-              value={entry}
-              onChange={(e) => setEntry(e.target.value)}
-              disabled={disabled || busy}
-            >
-              <option value="">指定せず登録</option>
-              {entries
-                .filter((e) => local || e.received)
-                .map((e, i) => (
-                  <option key={e.id} value={e.id}>
-                    保存牌譜 {i + 1} · {e.url.split("paipu=")[1]}
-                  </option>
-                ))}
-            </select>
-          </label>
+          <MortalSourceSelect
+            entries={entries}
+            stage={stage}
+            local={local}
+            value={entry}
+            disabled={disabled || busy}
+            onChange={setEntry}
+          />
           <button
             className="button primary"
             disabled={disabled || busy || (!online && !local)}
