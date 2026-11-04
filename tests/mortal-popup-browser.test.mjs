@@ -342,3 +342,41 @@ test("missing app offers an open action and retry without starting anything", as
     await f.close();
   }
 });
+
+test("inline confirmation is visible as waiting, with only the normal stop action", async () => {
+  const status = {
+    ...idle,
+    batch: {
+      id: "batch",
+      phase: "running",
+      model: "4.1b",
+      index: 1,
+      items: [
+        { status: "done" },
+        { id: "fictional-next", jobId: "waiting-job", status: "active" },
+      ],
+    },
+    jobs: [
+      {
+        id: "waiting-job",
+        phase: "waiting",
+        awaitingConfirmation: true,
+        claimed: false,
+      },
+    ],
+  };
+  const f = await fixture([], status);
+  try {
+    await expect(f.page.locator("#batch-notice")).toContainText("本人確認待ち");
+    await expect(f.page.locator("#batch-start")).not.toBeVisible();
+    await expect(f.page.locator("#batch-stop")).toBeVisible();
+    assert.equal(
+      await f.page.evaluate(() =>
+        window.fixture.calls.some((x) => x.type !== "STATUS"),
+      ),
+      false,
+    );
+  } finally {
+    await f.close();
+  }
+});

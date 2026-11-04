@@ -185,14 +185,60 @@ test(
         );
 
       await t.test(
-        "waits for enabled button, submits once and saves JSON bytes",
+        "waits for visible inline confirmation beyond readiness timeout, then submits once and saves JSON bytes",
         async () => {
+          await target.evaluate(() => {
+            const marker = document.createElement("div");
+            marker.id = "fictional-confirmation";
+            marker.className = "cf-turnstile";
+            marker.textContent = "架空の確認欄";
+            marker.hidden = true;
+            window.challengeClicks = 0;
+            window.challengeResponseReads = 0;
+            marker.addEventListener("click", () => window.challengeClicks++);
+            document.querySelector("form").append(marker);
+            const response = document.createElement("input");
+            response.type = "hidden";
+            response.name = "cf-turnstile-response";
+            Object.defineProperty(response, "value", {
+              get() {
+                window.challengeResponseReads++;
+                throw Error("Do not read the challenge response");
+              },
+            });
+            document.querySelector("form").append(response);
+            document.querySelector("form").addEventListener("submit", () => {
+              window.name = JSON.stringify({
+                clicks: window.challengeClicks,
+                reads: window.challengeResponseReads,
+              });
+            });
+          });
+          const hiddenWidget = await worker.evaluate(
+            (id) => chrome.tabs.sendMessage(id, { type: "INSPECT" }),
+            targetId,
+          );
+          assert.equal(hiddenWidget.confirmationPending, false);
+          await target.evaluate(() => {
+            document.querySelector("#fictional-confirmation").hidden = false;
+          });
           const started = await message("START");
           assert.equal(started.ok, true, JSON.stringify(started));
           await pause(1100);
           assert.equal(posts, 0);
           assert.equal((await state()).jobs[0].phase, "waiting");
+          assert.equal((await state()).jobs[0].awaitingConfirmation, true);
+          await worker.evaluate(() => {
+            const previousNow = Date.now;
+            Date.now = () => previousNow() + 61000;
+          });
+          await message("STATUS");
+          assert.equal((await state()).jobs[0].phase, "waiting");
+          assert.equal((await state()).jobs[0].claimed, false);
+          assert.equal(posts, 0);
           await target.evaluate(() => {
+            // Fixture of the site's normal enabled state after verification;
+            // no challenge is solved or clicked by the extension under test.
             document.querySelector("button").disabled = false;
           });
           const data = await until(
@@ -212,6 +258,10 @@ test(
             }),
           );
           assert.equal(posts, 1);
+          assert.deepEqual(
+            await target.evaluate(() => JSON.parse(window.name)),
+            { clicks: 0, reads: 0 },
+          );
           assert.equal(data.jobs[0].task, task);
           assert.equal(data.jobs[0].source, source);
           const bytes = await readFile(data.jobs[0].filename, "utf8");

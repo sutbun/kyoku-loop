@@ -340,3 +340,81 @@ test("the live form's empty temperature uses the site default without editing it
   assert.equal((await tick(r.helper, s)).action, "click");
   assert.equal(s.temperature, "");
 });
+
+test("inline confirmation waits past readiness timeout and grants one click after natural readiness", async () => {
+  const r = rig();
+  const pending = { ...snap(), ready: false, confirmationPending: true };
+  await start(r.helper, pending);
+  await r.helper.expire(120000);
+  assert.equal(r.data().jobs[0].phase, "waiting");
+  assert.equal(r.data().jobs[0].awaitingConfirmation, true);
+  assert.equal(r.data().jobs[0].claimed, false);
+  const inputState = {
+    tabId: 7,
+    documentId: "form-doc",
+    url: input,
+    snapshot: pending,
+  };
+  assert.equal(
+    (await new Helper(r.io).tick(inputState, 121000)).action,
+    "wait",
+  );
+  const grant = await r.helper.tick(
+    { ...inputState, snapshot: { ...snap(), confirmationPending: false } },
+    122000,
+  );
+  assert.equal(grant.action, "click");
+  assert.equal(r.data().jobs[0].claimed, true);
+  assert.notEqual(
+    (await new Helper(r.io).tick({ ...inputState, snapshot: snap() }, 123000))
+      .action,
+    "click",
+  );
+});
+
+test("a removed confirmation widget returns to a bounded ordinary readiness wait", async () => {
+  const r = rig();
+  await start(r.helper, { ...snap(), ready: false, confirmationPending: true });
+  await r.helper.tick(
+    {
+      tabId: 7,
+      documentId: "form-doc",
+      url: input,
+      snapshot: { ...snap(), ready: false, confirmationPending: false },
+    },
+    120000,
+  );
+  assert.equal(r.data().jobs[0].phase, "waiting");
+  assert.equal(r.data().jobs[0].awaitingConfirmation, undefined);
+  await r.helper.expire(164999);
+  assert.equal(r.data().jobs[0].phase, "waiting");
+  await r.helper.expire(165001);
+  assert.equal(r.data().jobs[0].reason, "timeout");
+});
+
+test("confirmation waiting still stops on restrictions, another document, changed form, or user cancellation", async () => {
+  for (const change of [
+    { snapshot: { ...snap(), error: "access_restricted" } },
+    { snapshot: { error: "human_confirmation" } },
+    { snapshot: { ...snap(), model: "3.0" } },
+    { documentId: "different-document", snapshot: snap() },
+  ]) {
+    const r = rig();
+    await start(r.helper, {
+      ...snap(),
+      ready: false,
+      confirmationPending: true,
+    });
+    const result = await r.helper.tick(
+      { tabId: 7, documentId: "form-doc", url: input, ...change },
+      120000,
+    );
+    assert.equal(result.action, "stop");
+    assert.equal(r.data().jobs[0].claimed, false);
+  }
+  const r = rig();
+  await start(r.helper, { ...snap(), ready: false, confirmationPending: true });
+  await r.helper.stopTab(7, "cancelled");
+  assert.equal((await tick(r.helper)).action, "idle");
+  assert.equal(r.data().jobs[0].claimed, false);
+});

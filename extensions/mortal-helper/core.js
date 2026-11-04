@@ -74,7 +74,10 @@ export const fingerprint = (s) =>
 const stop = (job, reason) => {
   job.phase = "stopped";
   job.reason = reason;
+  delete job.awaitingConfirmation;
 };
+const confirmationWait = (job) =>
+  job.phase === "waiting" && job.awaitingConfirmation === true;
 
 // All callers serialize operations. Persist grants before returning them: a worker
 // restart may leave an uncertain operation, but must never repeat a submission.
@@ -115,6 +118,8 @@ export class Helper {
       expires: now + 45000,
       claimed: false,
     };
+    if (snapshot.confirmationPending === true && !snapshot.ready)
+      job.awaitingConfirmation = true;
     data.jobs.push(job);
     await this.io.write(data);
     return job;
@@ -123,7 +128,7 @@ export class Helper {
     const data = await this.state();
     const job = data.jobs.find((j) => j.tabId === tabId && active(j));
     if (!job) return { action: "idle" };
-    if (now > job.expires) stop(job, "timeout");
+    if (now > job.expires && !confirmationWait(job)) stop(job, "timeout");
     else if (documentId !== job.documentId) {
       if (job.phase === "waiting") stop(job, "page_changed");
       else return { action: "idle" }; // A late message from the previous document cannot affect the next one.
@@ -140,6 +145,22 @@ export class Helper {
         (page?.kind !== "input" || fingerprint(snapshot) !== job.key)
       )
         stop(job, "form_changed");
+      if (
+        active(job) &&
+        !snapshot.ready &&
+        snapshot.confirmationPending === true
+      ) {
+        if (!job.awaitingConfirmation) {
+          job.awaitingConfirmation = true;
+          await this.io.write(data);
+        }
+        return { action: "wait" };
+      }
+      if (active(job) && job.awaitingConfirmation) {
+        delete job.awaitingConfirmation;
+        job.expires = now + 45000;
+        await this.io.write(data);
+      }
       if (active(job) && snapshot.ready) {
         job.phase = "submitting";
         job.claimed = true;
@@ -207,7 +228,9 @@ export class Helper {
   async expire(now = Date.now()) {
     const data = await this.state();
     let changed = false;
-    for (const job of data.jobs.filter((j) => active(j) && now > j.expires)) {
+    for (const job of data.jobs.filter(
+      (j) => active(j) && now > j.expires && !confirmationWait(j),
+    )) {
       stop(job, "timeout");
       changed = true;
     }
