@@ -1,7 +1,7 @@
 """Validation for private Amae-koromo history metadata; no network or analysis."""
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from hashlib import sha256
 
 try:
@@ -67,6 +67,8 @@ def record(value, selected):
         url = source_url(url)
         if not url.endswith('_a' + str(encoded_player(selected['player']))):
             raise ValueError('history_target_mismatch')
+    if 'rank' in value and (type(value['rank']) is not int or value['rank'] != order.index(seat) + 1):
+        raise ValueError('invalid_history')
     data = {'at': moment.isoformat(), 'players': clean_players, 'seat': seat,
             'rank': order.index(seat) + 1, 'url': url, 'mode': selected['mode']}
     identity = url if url else json.dumps(data, ensure_ascii=False, sort_keys=True)
@@ -118,3 +120,9 @@ def parse_batch(value):
             raise ValueError('invalid_history')
         valid[url] = {'url': url, 'meta': meta or (previous or {}).get('meta')}
     return list(valid.values()), len(raw)
+
+def same_meta(left, right):
+    def canonical(value):
+        v = validated_meta(value)
+        return {k: v[k] for k in ('url', 'player', 'mode', 'seat', 'rank', 'players')} | {'at': datetime.fromisoformat(v['at'].replace('Z','+00:00')).astimezone(timezone.utc).isoformat(timespec='milliseconds')}
+    return canonical(left) == canonical(right)
