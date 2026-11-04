@@ -1,6 +1,7 @@
 import type { LocalMaterial } from "./mortal-compiler";
 import { validFinalScores } from "../mortal-source-match";
 import { reconcileLocalSources } from "./source-links";
+import { storedSourceReceipt } from "../mortal-registration";
 import type {
   HistoryEvent,
   ItemHistory,
@@ -1251,6 +1252,16 @@ export function phoneReduce(
     ].includes(r.action)
   )
     reconcileLocalSources(state);
+  if (r.action === "register_local") {
+    const own = state.local_imports!.find(
+      (e) => e.material.id === r.material.id,
+    )!;
+    const source = state.analysis_queue?.find((e) => e.id === own.analysis_id);
+    data = {
+      ...(data as object),
+      source_link: storedSourceReceipt(own.analysis_id, source?.history),
+    };
+  }
   if (!["state", "study_current", "item_history"].includes(r.action))
     state.sequence++;
   return { state, data };
