@@ -219,17 +219,21 @@ test(
             engine: "Mortal",
             fictional: true,
           });
-          await selectTarget();
-          await popup.evaluate(async () =>
-            (await import("./popup.js")).refresh(),
-          );
-          assert.match(
-            await popup.locator("#notice").innerText(),
-            /ファイルを保存しました/,
-          );
           await popup.locator("#tools > summary").click();
           await popup.locator("#single > summary").click();
-          await popup.locator("#notice").waitFor({ state: "visible" });
+          await until(
+            async () => {
+              // This harness opens the popup as a browser tab. Restore the real
+              // target after clicks, and wait for any startup list read to end.
+              await selectTarget();
+              await popup.evaluate(async () =>
+                (await import("./popup.js")).refresh(),
+              );
+              return popup.locator("#notice").innerText();
+            },
+            (text) => text.includes("ファイルを保存しました"),
+            "single save completion in menu",
+          );
           await popup
             .locator("body")
             .screenshot({ path: join(root, "popup-saved.png") });
