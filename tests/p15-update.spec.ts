@@ -41,6 +41,10 @@ async function boot(page: Page) {
   await page.route("**/phone/mortal", (r) => r.abort());
   await page.goto("/phone/");
   await page
+    .getByRole("navigation", { name: "メイン" })
+    .getByRole("button", { name: "設定", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "問題を端末に保存", exact: true })
     .click();
   await expect
@@ -152,6 +156,10 @@ test("existing version label updates the real waiting worker once and keeps reco
   await page.reload();
   await expect(page.getByTestId("version-update")).toBeEnabled();
   const before = await state(page);
+  await page
+    .getByRole("navigation", { name: "メイン" })
+    .getByRole("button", { name: "牌譜", exact: true })
+    .click();
   await page.getByText("解析結果を追加", { exact: true }).click();
   await page
     .getByLabel("Mortal JSON / JSON.gz", { exact: true })
@@ -222,17 +230,21 @@ test("existing version label updates the real waiting worker once and keeps reco
   await context.setOffline(true);
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "復習を再開する", exact: false }),
+    page.getByRole("button", { name: "続きから再開", exact: false }),
   ).toBeEnabled();
   expect(await state(page)).toEqual(before);
   await page.getByTestId("version-update").click();
   await expect(page.getByTestId("version-update")).toContainText("接続を確認");
   await page
-    .getByRole("button", { name: "復習を再開する", exact: false })
+    .getByRole("navigation", { name: "メイン" })
+    .getByRole("button", { name: "学習", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "続きから再開", exact: false })
     .click();
   await page.getByTestId("version-update").click();
   await expect(page.getByTestId("version-update")).toContainText(
-    "ホームで更新",
+    "学習を中断して更新",
   );
   // Explicitly resuming a session advances the existing storage epoch once;
   // the original material, answers and session content remain identical.
@@ -250,6 +262,11 @@ test("unsubmitted URL and another editing window defer activation then both wind
   await boot(page);
   const other = await context.newPage();
   await boot(other);
+  await other
+    .getByRole("navigation", { name: "メイン" })
+    .getByRole("button", { name: "牌譜", exact: true })
+    .click();
+  await other.getByText("URLを追加", { exact: true }).click();
   await other
     .getByLabel("雀魂共有URL", { exact: true })
     .fill("https://game.mahjongsoul.com/?paipu=fictional-update-draft");

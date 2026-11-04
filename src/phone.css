@@ -361,3 +361,142 @@
 .phone-header .phone-sync-button.has-warning {
   color: #ffe0a3;
 }
+
+.phone-tab-title {
+  font-size: 20px;
+  margin: 4px 0 14px;
+}
+.phone-study-home {
+  display: grid;
+  gap: 14px;
+  padding: 6px 0;
+}
+.phone-review-card {
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--green);
+  color: #fff;
+}
+.phone-card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.phone-card-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.phone-card-heading b {
+  font-size: 28px;
+  font-weight: 500;
+}
+.phone-review-card .button,
+.phone-practice-card .button {
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  font-size: 15px;
+}
+.phone-app .phone-practice-card {
+  margin: 0;
+  padding: 20px;
+}
+.phone-app .phone-practice-card h2 {
+  margin-bottom: 14px;
+  font-size: 16px;
+}
+.phone-review-done {
+  margin: 4px 0;
+  padding: 8px 4px;
+  color: var(--muted);
+  font-size: 15px;
+}
+.phone-app .phone-library-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  padding: 16px 20px;
+  min-height: 56px;
+  width: 100%;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.phone-library-link span {
+  font-size: 24px;
+}
+.phone-storage-warning {
+  margin-top: 8px;
+}
+.phone-imports > details > summary {
+  min-height: 48px;
+  align-content: center;
+  cursor: pointer;
+  color: var(--green);
+  font-size: 15px;
+  padding: 8px 0;
+}
+.phone-imports > details + details {
+  border-top: 1px solid var(--line);
+  margin-top: 0;
+}
+.phone-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.phone-replay-row {
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+.phone-replay-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.phone-replay-summary strong {
+  font-size: 14px;
+}
+.phone-replay-actions {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+.phone-replay-actions > details {
+  flex: 1;
+  min-width: 0;
+}
+.phone-replay-actions summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+.phone-replay-actions > .button {
+  flex: 0 0 auto;
+  margin: 0;
+  min-height: 44px;
+}
+.phone-replay-detail {
+  display: grid;
+  gap: 6px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}
+.phone-replay-detail p {
+  margin: 0;
+}
+.phone-replay-pending {
+  color: var(--muted);
+}
+.phone-study-options .study-options {
+  margin: 0;
+}
