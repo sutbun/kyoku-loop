@@ -99,6 +99,57 @@ def _meld_signature(m, review=False):
     return kind, tuple(sorted(tiles)), m.get('target')
 
 
+def final_scores(report):
+    """Conservative preview hint, never game identity or an automatic link.
+
+    Compare mjai end deltas with the embedded editor log. Leave unallocated
+    deposits, missing deltas and unsupported endings unknown rather than guess.
+    """
+    def vector(value):
+        return (isinstance(value, list) and len(value) == 4
+                and all(type(v) is int and abs(v) <= 1000000 for v in value))
+
+    try:
+        report = validate(report)
+        events = report['mjai_log']
+        if [e['type'] for e in events[-2:]] != ['end_kyoku', 'end_game']:
+            return None
+        start = max(i for i, e in enumerate(events) if e['type'] == 'start_kyoku')
+        scores = events[start]['scores']
+        log = report['split_logs'][-1]['log'][0]
+        if not vector(scores) or log[1] != scores:
+            return None
+        scores = scores[:]
+        reached, ends = set(), []
+        for e in events[start+1:-2]:
+            if e['type'] == 'reach_accepted':
+                actor = e.get('actor')
+                if type(actor) is not int or actor not in range(4) or actor in reached or ends:
+                    return None
+                reached.add(actor)
+                scores[actor] -= 1000
+            elif e['type'] in ('hora', 'ryukyoku'):
+                if not vector(e.get('deltas')):
+                    return None
+                ends.append(e)
+                scores = [a+b for a, b in zip(scores, e['deltas'])]
+        result = log[-1]
+        if (not ends or not isinstance(result, list) or not result
+                or result[0] != ('和了' if ends[0]['type'] == 'hora' else '流局')):
+            return None
+        deltas = result[1::2]
+        if len(deltas) != len(ends) or any(not vector(d) for d in deltas):
+            return None
+        editor = [v-(1000 if i in reached else 0) for i, v in enumerate(log[1])]
+        for delta in deltas:
+            editor = [a+b for a, b in zip(editor, delta)]
+        if scores != editor or not vector(scores) or sum(scores) != 100000:
+            return None
+        return scores
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+        return None
+
+
 def project(report):
     report = validate(report)
     seat = report['player_id']

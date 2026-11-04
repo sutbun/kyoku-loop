@@ -170,6 +170,7 @@ class Store(StudyMixin, AnalysisQueueMixin):
         if mortal:
             return {'token':token,'players':[str(n)[:100] for n in names], 'engine':'Mortal',
                     'target_seat':report['player_id'], 'preferred_model':0,
+                    'final_scores':mortal_report.final_scores(report),
                     'models':[{'index':0,'name':report['review']['model_tag']}], 'rounds':len(report['split_logs'])}
         return {'token':token,'players':[str(n)[:100] for n in names],
                 'models':[{'index':int(k),'name':v} for k,v in report['naga_types'].items()],

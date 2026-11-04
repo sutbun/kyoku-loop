@@ -1,7 +1,7 @@
 import { MortalSourceSelect } from "./mortal-source-select";
 import { useEffect, useState } from "react";
 import { api, errors } from "./api";
-import { compileMortal, type LocalMaterial } from "./offline/mortal-compiler";
+import { previewMortal, type LocalMaterial } from "./offline/mortal-compiler";
 import { readPhone } from "./offline/store";
 import type { Stage } from "./real-types";
 import type { AnalysisEntry } from "./analysis-queue";
@@ -108,13 +108,15 @@ export function PhoneMortalImport({
       setEntry("");
       if (selected.size > 20 * 1024 * 1024) throw new Error(errors.size_limit);
       if (local) {
-        const compiled = await compileMortal(selected);
+        const { material: compiled, final_scores } =
+          await previewMortal(selected);
         setMaterial(compiled);
         setStage({
           source: "local",
           token: "",
           engine: "Mortal",
           target_seat: compiled.seat,
+          final_scores,
           players: compiled.players,
           rounds: compiled.rounds,
           models: [{ index: 0, name: compiled.model }],

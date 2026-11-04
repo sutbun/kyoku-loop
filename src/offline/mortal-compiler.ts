@@ -52,10 +52,11 @@ export async function saveCompiler() {
   if (!(await compilerReady())) throw Error("runtime_missing");
   await execute(null, "");
 }
-async function execute(
+async function execute<T = LocalMaterial>(
   data: string | null,
   created: string,
-): Promise<LocalMaterial> {
+  preview = false,
+): Promise<T> {
   const worker = new Worker(
     new URL("./mortal-compiler.worker.ts", import.meta.url),
     { type: "module" },
@@ -78,20 +79,30 @@ async function execute(
       if (event.data.ok) resolve(event.data.data);
       else reject(Error(event.data.error));
     };
-    worker.postMessage({ id: 1, data, created });
+    worker.postMessage({ id: 1, data, created, preview });
   });
 }
 export async function compileMortal(
   file: File | Blob,
   created = new Date().toISOString(),
 ) {
+  return execute(await encodeMortal(file), created);
+}
+export async function previewMortal(file: File | Blob) {
+  return execute<{ material: LocalMaterial; final_scores: number[] | null }>(
+    await encodeMortal(file),
+    new Date().toISOString(),
+    true,
+  );
+}
+async function encodeMortal(file: File | Blob) {
   if (file.size > 20 * 1024 * 1024) throw Error("size_limit");
   if (!(await compilerReady())) throw Error("runtime_missing");
   const bytes = new Uint8Array(await file.arrayBuffer());
   let binary = "";
   for (let i = 0; i < bytes.length; i += 8192)
     binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  return execute(btoa(binary), created);
+  return btoa(binary);
 }
 
 // Recompile retained originals before importing a backup; supplied scenes/IDs are not trusted.
