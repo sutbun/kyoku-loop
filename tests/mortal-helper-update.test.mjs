@@ -13,9 +13,12 @@ import {
 import { resolve, join } from "node:path";
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 function fixture() {
+  const version = JSON.parse(
+    readFileSync("extensions/mortal-helper/manifest.json", "utf8"),
+  ).version_name;
   const root = resolve(".local/helper-update-test/" + crypto.randomUUID());
   const installed = join(root, "DEV-11.04-20/extension"),
-    pack = join(root, "DEV-11.05-2");
+    pack = join(root, version);
   mkdirSync(installed, { recursive: true });
   mkdirSync(join(pack, "extension"), { recursive: true });
   const files = {},
@@ -60,7 +63,7 @@ function fixture() {
   writeFileSync(
     join(pack, "package-info.json"),
     JSON.stringify({
-      version: "DEV-11.05-2",
+      version,
       sourceSha: "a".repeat(40),
       files,
     }),

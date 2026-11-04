@@ -67,3 +67,33 @@ test("single-page and unavailable job snapshots do not invent submission or save
   const empty = diagnosticText({}, "DEV-test");
   assert.ok(empty.includes("送信操作済み：未確認"));
 });
+
+test("a queued batch item never borrows the previous result from a reused tab", () => {
+  const text = diagnosticText(
+    {
+      tabId: 3,
+      batch: {
+        phase: "paused",
+        reason: "page_changed",
+        model: "4.1b",
+        index: 1,
+        items: [{ status: "done" }, { id: "fictional-next", status: "queued" }],
+      },
+      jobs: [
+        {
+          id: "previous",
+          tabId: 3,
+          source: "https://game.mahjongsoul.com/?paipu=fictional-previous",
+          task: "previous-result",
+          phase: "registered",
+          claimed: true,
+        },
+      ],
+    },
+    "DEV-test",
+  );
+  assert.ok(text.includes("牌譜ID：fictional-next"));
+  assert.ok(text.includes("結果ID：未取得"));
+  assert.ok(text.includes("送信操作済み：未確認"));
+  assert.ok(!text.includes("previous-result"));
+});
