@@ -25,14 +25,14 @@ function initialize() {
     ])
       py.FS.writeFile("/compiler/" + name, code);
     py.runPython(
-      "import sys,json; sys.path.insert(0,'/compiler'); from mortal_material import compile_upload",
+      "import sys,json; sys.path.insert(0,'/compiler'); from mortal_material import compile_upload, preview_upload",
     );
     return py;
   })());
 }
 let chain = Promise.resolve();
 self.onmessage = (event) => {
-  const { id, data, created } = event.data;
+  const { id, data, created, preview } = event.data;
   chain = chain.then(async () => {
     try {
       const py = await initialize();
@@ -44,10 +44,12 @@ self.onmessage = (event) => {
         throw Error("invalid_json");
       py.globals.set("_encoded_upload", data);
       py.globals.set("_created_at", created);
+      py.globals.set("_preview", preview === true);
       try {
         const result = py.runPython(`
 try:
-    _result = {'ok': True, 'data': compile_upload(_encoded_upload, _created_at)}
+    _compile = preview_upload if _preview else compile_upload
+    _result = {'ok': True, 'data': _compile(_encoded_upload, _created_at)}
 except Exception as error:
     _code = str(error)
     _allowed = {'invalid_json','inbox_mortal_only','size_limit','unsupported_format','unsupported_rule','unsupported_model','reconstruction_failed','invalid_import_time'}
@@ -56,7 +58,9 @@ json.dumps(_result, ensure_ascii=False)
 `);
         self.postMessage({ id, ...JSON.parse(result) });
       } finally {
-        py.runPython("del _encoded_upload, _created_at, _result");
+        py.runPython(
+          "del _encoded_upload, _created_at, _preview, _result, _compile",
+        );
       }
     } catch {
       self.postMessage({ id, ok: false, error: "runtime_unavailable" });

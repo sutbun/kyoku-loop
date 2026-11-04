@@ -122,6 +122,7 @@ export type Workspace = {
 export type Stage = {
   engine?: "NAGA" | "Mortal";
   target_seat?: number;
+  final_scores?: number[] | null;
   token: string;
   players: string[];
   models: { index: number; name: string }[];

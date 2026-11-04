@@ -103,3 +103,11 @@ def compile_upload(encoded, created_at):
             'important_count':len(content['important']),'family_ids':material['family_ids'],
             'policies':{i['id']:[v*100/byid[i['id']]['weight_total'] for v in byid[i['id']]['raw_weights']] for i in items},
             'items':items,'payload':base64.b64encode(gzip.compress(raw,mtime=0)).decode(), 'reveals':reveals}
+
+
+def preview_upload(encoded, created_at):
+    # Keep preview hints outside LocalMaterial: old retained backups must still
+    # recompile to byte-equivalent material, without changing IDs or history.
+    material = compile_upload(encoded, created_at)
+    report = json.loads(gzip.decompress(base64.b64decode(material['payload'])))
+    return {'material': material, 'final_scores': mortal_report.final_scores(report)}
