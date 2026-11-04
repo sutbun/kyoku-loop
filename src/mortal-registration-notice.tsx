@@ -38,8 +38,10 @@ export function MortalRegistrationNotice({
   const place = local ? "この端末" : "Windows";
   return (
     <p role="status" style={{ overflowWrap: "anywhere" }}>
-      {place}
-      {result.duplicate ? "に登録済みの結果です" : "に登録しました"}
+      <span>
+        {place}
+        {result.duplicate ? "に登録済みの結果です" : "に登録しました"}
+      </span>
       <br />
       <strong>
         {link?.linked
