@@ -110,10 +110,15 @@ export async function verifyLocalBackup(state: PhoneState) {
   if (state.schema !== 2) return;
   if (!(await compilerReady())) throw Error("runtime_missing");
   for (const entry of state.local_imports ?? []) {
-    const actual = await execute(
-      entry.material.payload,
-      entry.material.created,
-    );
+    const { material: actual, final_scores } = await execute<{
+      material: LocalMaterial;
+      final_scores: number[] | null;
+    }>(entry.material.payload, entry.material.created, true);
+    if (
+      entry.final_scores !== undefined &&
+      JSON.stringify(entry.final_scores) !== JSON.stringify(final_scores)
+    )
+      throw Error("invalid_phone_backup");
     const { payload: a, reveals: ar, policies: ap, ...left } = actual;
     const { payload: b, reveals: br, policies: bp, ...right } = entry.material;
     if (JSON.stringify(left) !== JSON.stringify(right))
@@ -140,6 +145,18 @@ export async function retainedReveals(material: LocalMaterial) {
   if (JSON.stringify(left) !== JSON.stringify(right))
     throw Error("invalid_phone_backup");
   return ar ?? {};
+}
+
+export async function retainedSourceScores(material: LocalMaterial) {
+  const { material: actual, final_scores } = await execute<{
+    material: LocalMaterial;
+    final_scores: number[] | null;
+  }>(material.payload, material.created, true);
+  const { payload: a, reveals: ar, policies: ap, ...left } = actual;
+  const { payload: b, reveals: br, policies: bp, ...right } = material;
+  if (JSON.stringify(left) !== JSON.stringify(right))
+    throw Error("invalid_phone_backup");
+  return final_scores;
 }
 
 // Old device records retain the original report. Derive exact policy without

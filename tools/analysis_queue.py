@@ -94,6 +94,7 @@ class AnalysisQueueMixin:
                                 (PREFIX+ident, json.dumps(entry, ensure_ascii=False)))
                 if value['meta']:
                     self._receive_analysis_history({'id':ident, 'history':value['meta']})
+            self.reconcile_mortal_sources()
         return {'added': added, 'existing': supplied-added, 'total': len(existing)+added}
 
     def analysis_entry(self, ident):
@@ -127,7 +128,8 @@ class AnalysisQueueMixin:
                 self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)',
                     (PREFIX+entry['id'], json.dumps({k:v for k,v in entry.items() if k!='history'} | {'requested':False, 'reports':[]}, ensure_ascii=False)))
                 self._receive_analysis_history(entry)
-                receipts.append(self.analysis_entry(entry['id']))
+            self.reconcile_mortal_sources()
+            receipts = [self.analysis_entry(entry['id']) for entry in valid]
         # Only a committed transaction supplies a receipt. Original URL stays on phone.
         return {'entries':receipts, 'received_at':self.moment().isoformat()}
 

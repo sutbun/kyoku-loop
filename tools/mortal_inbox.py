@@ -83,22 +83,6 @@ class MortalInbox:
         return {**config, 'error': error, 'files': [{'name': Path(r['path']).name,
                                    **{k: v for k, v in r.items() if k != 'path'}} for r in files]}
 
-    def known_source(self, report):
-        try:
-            from .p2_store import digest
-        except ImportError:
-            from p2_store import digest
-        game = digest([s['log'] for s in report['split_logs']])
-        urls = {r[0] for r in self.store.db.execute(
-            'SELECT source_game_url FROM reports WHERE game=? AND seat=? AND source_game_url IS NOT NULL',
-            (game, report['player_id'])) if r[0]}
-        # Only previously explicit links with identical full game and seat qualify.
-        if len(urls) != 1:
-            return None, None
-        url = next(iter(urls))
-        entry = next((e for e in self.store.analysis_entries() if e['url'] == url), None)
-        return url, entry['id'] if entry else None
-
     def scan(self, now=None):
         try:
             from .p2_store import decode, LIMIT, ImportFailure
@@ -155,9 +139,8 @@ class MortalInbox:
                     if previous and self.store.db.execute('SELECT 1 FROM reports WHERE id=?', (previous['report'],)).fetchone():
                         result = {'id': previous['report'], 'duplicate': True}
                     else:
-                        source, ident = self.known_source(report)
                         staged = self.store.stage(payload, None)
-                        result = self.store.commit(staged['token'], report['player_id'], 0, source, ident)
+                        result = self.store.commit(staged['token'], report['player_id'], 0, None)
                         with self.store.db:
                             self.store.db.execute('DELETE FROM staging WHERE token=?', (staged['token'],))
                     db.execute('UPDATE files SET status=?,hash=?,report=?,error=NULL,updated=? WHERE path=?',

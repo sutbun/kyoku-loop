@@ -1,4 +1,6 @@
 import type { LocalMaterial } from "./mortal-compiler";
+import { validFinalScores } from "../mortal-source-match";
+import { reconcileLocalSources } from "./source-links";
 import type {
   HistoryEvent,
   ItemHistory,
@@ -64,6 +66,8 @@ export type LocalImport = {
   material: LocalMaterial;
   item_ids: string[];
   analysis_id: string | null;
+  final_scores?: number[] | null;
+  source_link_kind?: "scores" | "identity";
   synced_source?: string;
 };
 export type PhoneState = {
@@ -386,6 +390,18 @@ export function validatePhoneBackup(
       for (const entry of s.local_imports!) {
         validateMaterial(entry.material);
         if (
+          entry.final_scores !== undefined &&
+          entry.final_scores !== null &&
+          !validFinalScores(entry.final_scores)
+        )
+          fail("invalid_phone_backup");
+        if (
+          entry.source_link_kind !== undefined &&
+          (!entry.analysis_id ||
+            !["scores", "identity"].includes(entry.source_link_kind))
+        )
+          fail("invalid_phone_backup");
+        if (
           reports.has(entry.material.id) ||
           !Array.isArray(entry.item_ids) ||
           entry.item_ids.length > 3 ||
@@ -680,6 +696,12 @@ export function phoneReduce(
       if (state.schema !== 2) fail("runtime_missing");
       validateMaterial(r.material);
       const material = r.material as LocalMaterial;
+      if (
+        r.final_scores !== undefined &&
+        r.final_scores !== null &&
+        !validFinalScores(r.final_scores)
+      )
+        fail("invalid_receipt");
       const existing = state.local_imports!.find(
         (e) => e.material.id === material.id,
       );
@@ -689,11 +711,16 @@ export function phoneReduce(
           if (!state.analysis_queue?.some((e) => e.id === r.analysis_id))
             fail("queue_not_found");
           existing.analysis_id = r.analysis_id;
+          delete existing.source_link_kind;
           delete existing.synced_source;
           data = { id: material.id, duplicate: true };
           break;
         }
-        return { state: input, data: { id: material.id, duplicate: true } };
+        if (existing.final_scores === undefined && r.final_scores !== undefined)
+          existing.final_scores = clone(r.final_scores);
+        reconcileLocalSources(state);
+        data = { id: material.id, duplicate: true };
+        break;
       }
       if (
         r.analysis_id !== null &&
@@ -742,9 +769,34 @@ export function phoneReduce(
         material: clone(material),
         item_ids: ids,
         analysis_id: r.analysis_id,
+        ...(r.final_scores !== undefined
+          ? { final_scores: clone(r.final_scores) }
+          : {}),
       });
+      reconcileLocalSources(state);
       validatePhoneBackup(state);
       data = { id: material.id, duplicate: false };
+      break;
+    }
+    case "source_scores": {
+      if (!Array.isArray(r.entries) || r.entries.length > 1000)
+        fail("invalid_receipt");
+      for (const hint of r.entries) {
+        const own = state.local_imports?.find((e) => e.material.id === hint.id);
+        if (
+          !own ||
+          (hint.final_scores !== null && !validFinalScores(hint.final_scores))
+        )
+          fail("invalid_receipt");
+        if (own!.final_scores === undefined)
+          own!.final_scores = clone(hint.final_scores);
+        else if (
+          JSON.stringify(own!.final_scores) !==
+          JSON.stringify(hint.final_scores)
+        )
+          fail("invalid_receipt");
+      }
+      data = { linked: reconcileLocalSources(state) };
       break;
     }
     case "cache_reveals": {
@@ -887,6 +939,7 @@ export function phoneReduce(
           });
       }
       validateAnalysisQueue(state.analysis_queue);
+      reconcileLocalSources(state);
       data = {
         added: added.length,
         existing: batch.length - added.length,
@@ -1187,6 +1240,17 @@ export function phoneReduce(
     default:
       fail("phone_only");
   }
+  if (
+    [
+      "analysis_bulk",
+      "analysis_add",
+      "analysis_ack",
+      "restore_phone",
+      "register_local",
+      "source_scores",
+    ].includes(r.action)
+  )
+    reconcileLocalSources(state);
   if (!["state", "study_current", "item_history"].includes(r.action))
     state.sequence++;
   return { state, data };

@@ -1,24 +1,8 @@
+import { mortalScoreHint, matchesMortalScores } from "./mortal-source-match";
 import type { Stage } from "./real-types";
 import type { AnalysisEntry } from "./analysis-queue";
 
 const points = (score: number) => `${score.toLocaleString("ja-JP")}点`;
-function scoreHint(stage: Stage) {
-  const scores = stage.final_scores,
-    seat = stage.target_seat;
-  if (
-    !scores ||
-    scores.length !== 4 ||
-    scores.some((s) => !Number.isSafeInteger(s) || Math.abs(s) > 1000000) ||
-    scores.reduce((a, b) => a + b, 0) !== 100000 ||
-    seat === undefined ||
-    !Number.isInteger(seat) ||
-    seat < 0 ||
-    seat > 3
-  )
-    return null;
-  const order = [0, 1, 2, 3].sort((a, b) => scores[b] - scores[a] || a - b);
-  return { scores, own: scores[seat], rank: order.indexOf(seat) + 1 };
-}
 
 export function mortalSourceOptions(
   entries: AnalysisEntry[],
@@ -27,9 +11,7 @@ export function mortalSourceOptions(
 ) {
   const seat = stage.target_seat;
   const target = seat !== undefined ? stage.players[seat] : undefined;
-  const hint = scoreHint(stage);
-  const scoreSet = (scores: number[]) =>
-    JSON.stringify([...scores].sort((a, b) => a - b));
+  const hint = mortalScoreHint(stage.final_scores, stage.target_seat);
   const names = (players: string[]) =>
     JSON.stringify(players.map((n) => n.trim()).sort());
   return entries
@@ -51,10 +33,8 @@ export function mortalSourceOptions(
         names(h.players.map((p) => p.name)) === names(stage.players);
       const scoreMatches =
         !!h &&
-        !!hint &&
-        h.rank === hint.rank &&
-        h.players[h.seat].score === hint.own &&
-        scoreSet(h.players.map((p) => p.score)) === scoreSet(hint.scores);
+        seat !== undefined &&
+        matchesMortalScores(h, stage.final_scores, seat);
       return { entry, label, matches, scoreMatches, index };
     })
     .filter((o) => local || o.entry.received)
@@ -86,7 +66,7 @@ export function MortalSourceSelect({
   onChange: (value: string) => void;
 }) {
   const options = mortalSourceOptions(entries, stage, local);
-  const hint = scoreHint(stage);
+  const hint = mortalScoreHint(stage.final_scores, stage.target_seat);
   const scored = options.filter((o) => o.scoreMatches);
   // Known conflicting scores must not be elevated by identical/anonymized names.
   const matched = options.filter((o) => !o.scoreMatches && o.matches && !hint),
@@ -119,7 +99,7 @@ export function MortalSourceSelect({
           onChange={(e) => onChange(e.target.value)}
           style={{ maxWidth: "100%", minWidth: 0 }}
         >
-          <option value="">指定せず登録</option>
+          <option value="">自動で紐付け（候補が1件の場合）</option>
           {scored.length > 0 && (
             <optgroup label={`点数・順位が一致（${scored.length}件の候補）`}>
               {render(scored)}

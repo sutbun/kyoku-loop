@@ -80,7 +80,7 @@ test("Windows-only registration hides unreceived URLs and missing metadata retai
   );
   expect(mortalSourceOptions([a, b], stage, true)).toHaveLength(2);
 });
-test("even one matching candidate stays unselected; JSON opponents and selected source are readable and escaped", () => {
+test("preview defaults to automatic linking; JSON opponents and manual source remain readable and escaped", () => {
   const a = entry(1);
   a.history!.players[0].name = "<script>other</script>";
   const same = entry(2);
@@ -97,6 +97,7 @@ test("even one matching candidate stays unselected; JSON opponents and selected 
   );
   expect(changed).toBe(0);
   expect(html).toContain('value="" selected=""');
+  expect(html).toContain("自動で紐付け（候補が1件の場合）");
   expect(html).toContain("4人の名前が一致");
   expect(html).toContain("JSONの対戦相手");
   expect(html).toContain("&lt;script&gt;other&lt;/script&gt;");
@@ -191,7 +192,7 @@ test("ties use target seat to break ranks and malformed summaries cannot recomme
   ).toBe(false);
 });
 
-test("one score candidate still needs selection; conflicting scores do not get a name-match heading", () => {
+test("one score candidate keeps automatic mode; conflicting scores do not get a name-match heading", () => {
   const same = entry(1);
   const scored = { ...stage, final_scores: [25000, 25000, 25000, 25000] };
   const render = (source: Stage) =>

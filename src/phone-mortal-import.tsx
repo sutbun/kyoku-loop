@@ -189,6 +189,7 @@ export function PhoneMortalImport({
                   const result = await api<{ duplicate: boolean }>({
                     action: "register_local",
                     material,
+                    final_scores: stage.final_scores ?? null,
                     analysis_id: entry || null,
                   });
                   setNotice(
