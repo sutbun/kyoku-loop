@@ -456,12 +456,7 @@ class Store(StudyMixin, AnalysisQueueMixin):
         if not row: raise ImportFailure('stage_expired')
         report = decode(row['payload'])
         if report.get('engine') != 'Mortal': raise ImportFailure('inbox_mortal_only')
-        if analysis_id is None:
-            try:from .mortal_inbox import MortalInbox
-            except ImportError:from mortal_inbox import MortalInbox
-            url, analysis_id = MortalInbox(self).known_source(report)
-        else:
-            url = self.analysis_entry(analysis_id)['url']
+        url = self.analysis_entry(analysis_id)['url'] if analysis_id is not None else None
         # The client cannot choose another seat, model, URL or filesystem path.
         result = self.commit_mortal(row, report, report['player_id'], 0, url, analysis_id, created_at, item_ids)
         return result | {'source': own}
