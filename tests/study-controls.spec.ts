@@ -133,7 +133,7 @@ for (const mode of ["button", "select", "repeat"] as const)
       await page.evaluate(() => localStorage.getItem("kyokuloop-answer-mode")),
     ).toBe(mode);
     await page
-      .getByRole("button", { name: "5問練習する", exact: true })
+      .getByRole("button", { name: /問練習する/, exact: true })
       .click();
     const tile = page.getByTestId("real-hand").locator("button").first();
     await tile.click();
@@ -235,7 +235,7 @@ for (const [width, height] of [
     await page.setViewportSize({ width, height });
     await open(page, initial(mortal));
     await page
-      .getByRole("button", { name: "5問練習する", exact: true })
+      .getByRole("button", { name: /問練習する/, exact: true })
       .click();
     await settle(page);
     const hand = page.getByTestId("real-hand");
@@ -307,7 +307,7 @@ test("sync trouble stays in the fixed header and its details never move the boar
   const state = initial();
   state.last_sync = "2026-11-01T00:00:00Z";
   await open(page, state);
-  await page.getByRole("button", { name: "5問練習する", exact: true }).click();
+  await page.getByRole("button", { name: /問練習する/, exact: true }).click();
   await settle(page);
   const before = await page.locator(".board-panel").boundingBox();
   await page.evaluate(() => {
