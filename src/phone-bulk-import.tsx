@@ -1,4 +1,5 @@
-import { readAnalysisFile } from "./analysis-queue";
+import { readAnalysisFile, parseAnalysisBatch } from "./analysis-queue";
+import { openMortal, mortalLink, MORTAL_READY } from "./mortal-handoff";
 import { useEffect, useState } from "react";
 import { errors } from "./api";
 export function PhoneBulkImport({
@@ -23,6 +24,14 @@ export function PhoneBulkImport({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [codeNotice, setCodeNotice] = useState("");
+  const [openedURL, setOpenedURL] = useState("");
+  let singleURL = "";
+  try {
+    const entries = parseAnalysisBatch(value);
+    if (entries.length === 1) singleURL = entries[0].url;
+  } catch {
+    /* Keep incomplete input editable; validate on submit. */
+  }
   useEffect(() => {
     onPendingChange(!!value || working);
   }, [value, working, onPendingChange]);
@@ -45,16 +54,36 @@ export function PhoneBulkImport({
       onBusy(false);
     }
   };
+  const submit = (analyse: boolean) =>
+    void work(async () => {
+      // Validate the complete batch before opening anything or saving any URL.
+      const entries = parseAnalysisBatch(value);
+      if (analyse && entries.length !== 1) throw Error("invalid_bulk_text");
+      if (analyse) openMortal(entries[0].url);
+      const result = await onImport(value);
+      setOpenedURL(analyse ? entries[0].url : "");
+      setValue("");
+      setNotice(
+        `この端末に${result.added}件追加 · 重複${result.existing}件${result.updated !== undefined ? ` · 情報${result.updated}件補完` : ""}${analyse ? ` · ${MORTAL_READY}` : ""}`,
+      );
+      try {
+        await onSaved();
+      } catch {
+        setError(
+          "端末への保存は完了しました。画面を更新できませんでした。牌譜タブを開き直してください。",
+        );
+      }
+    });
   return (
-    <details className="bulk-history">
-      <summary>牌譜URLをまとめて追加</summary>
+    <div className="bulk-history">
       <label>
-        URL一覧
+        雀魂共有URL
         <textarea
           value={value}
           rows={3}
           maxLength={2 * 1024 * 1024}
-          placeholder="1行に1件の雀魂URL、または情報付きデータ"
+          placeholder="URLを1件、または改行して複数件貼り付け"
+          autoCapitalize="none"
           autoComplete="off"
           spellCheck={false}
           disabled={disabled || working}
@@ -62,9 +91,40 @@ export function PhoneBulkImport({
             setValue(e.target.value);
             setError("");
             setNotice("");
+            setOpenedURL("");
           }}
         />
       </label>
+      <div className="bulk-history-actions">
+        <button
+          className="button primary"
+          disabled={disabled || working || !value.trim()}
+          onClick={() => submit(false)}
+        >
+          {working ? "処理中…" : "追加"}
+        </button>
+        {singleURL && (
+          <button
+            className="button secondary"
+            disabled={disabled || working}
+            onClick={() => submit(true)}
+          >
+            Mortalへ
+          </button>
+        )}
+        <button
+          className="text-button"
+          disabled={disabled || working || !value}
+          onClick={() => {
+            setValue("");
+            setError("");
+            setNotice("");
+            setOpenedURL("");
+          }}
+        >
+          入力を取り消す
+        </button>
+      </div>
       <label>
         URL一覧のテキストファイル
         <input
@@ -81,41 +141,6 @@ export function PhoneBulkImport({
           }}
         />
       </label>
-      <div className="bulk-history-actions">
-        <button
-          className="button primary"
-          disabled={disabled || working || !value.trim()}
-          onClick={() =>
-            void work(async () => {
-              const result = await onImport(value);
-              setValue("");
-              setNotice(
-                `この端末に${result.added}件追加 · 重複${result.existing}件${result.updated !== undefined ? ` · 情報${result.updated}件補完` : ""}`,
-              );
-              try {
-                await onSaved();
-              } catch {
-                setError(
-                  "端末への保存は完了しました。画面を更新できませんでした。ホームを開き直してください。",
-                );
-              }
-            })
-          }
-        >
-          {working ? "処理中…" : "まとめて追加"}
-        </button>
-        <button
-          className="text-button"
-          disabled={disabled || working || !value}
-          onClick={() => {
-            setValue("");
-            setError("");
-            setNotice("");
-          }}
-        >
-          入力を取り消す
-        </button>
-      </div>
       <details>
         <summary>情報付き取得コード</summary>
         <label>
@@ -149,7 +174,20 @@ export function PhoneBulkImport({
           {error}
         </div>
       )}
-      {notice && <p role="status">{notice}</p>}
-    </details>
+      {notice && (
+        <p role="status">
+          {notice}
+          {openedURL && (
+            <a
+              href={mortalLink(openedURL)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Mortalを開く
+            </a>
+          )}
+        </p>
+      )}
+    </div>
   );
 }

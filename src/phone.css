@@ -500,3 +500,11 @@
 .phone-study-options .study-options {
   margin: 0;
 }
+
+.phone-source-add textarea {
+  font-size: 16px;
+}
+.phone-source-add .bulk-history > label + label,
+.phone-source-add .bulk-history-actions + label {
+  margin-top: 14px;
+}

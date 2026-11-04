@@ -15,7 +15,6 @@ import { saveShell, verifyShell } from "./offline/shell";
 import { pendingEvents } from "./offline/engine";
 import { synchronizePhone, downloadPhonePack } from "./offline/sync";
 import { synchronizeAnalysis } from "./offline/analysis-sync";
-import { SourceInput } from "./analysis-ui";
 import type { AnalysisEntry } from "./analysis-queue";
 import { PhoneMortalImport } from "./phone-mortal-import";
 import {
@@ -35,7 +34,6 @@ import { usePhoneStudyLayout } from "./phone-study-layout";
 function PhoneApp() {
   const [updateLock, setUpdateLock] = useState(false);
   const [importPending, setImportPending] = useState(false);
-  const [sourcePending, setSourcePending] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
   const busyRef = useRef(0),
     importBusyRef = useRef(false);
@@ -416,8 +414,7 @@ function PhoneApp() {
               updateLocked()
             )
               return "処理後に再試行";
-            if (sourcePending || importPending || bulkPending)
-              return "入力を完了";
+            if (importPending || bulkPending) return "入力を完了";
             if (active) return "学習を中断して更新";
             return null;
           }}
@@ -498,22 +495,6 @@ function PhoneApp() {
             <section className="panel phone-imports" aria-label="牌譜を追加">
               <details className="phone-source-add">
                 <summary>URLを追加</summary>
-                <SourceInput
-                  mortal
-                  disabled={busy || importBusy || !loaded}
-                  onPendingChange={setSourcePending}
-                  onSave={async (url) => {
-                    await api({ action: "analysis_add", url });
-                    await refresh();
-                    // Keep the saved URL even if offline shell repair fails.
-                    void saveShell().catch(() => {
-                      setError(
-                        "URLは保存済みです。アプリ本体の保存を確認できないため、通信復帰後に保存を確認してください。",
-                      );
-                    });
-                    if (navigator.onLine) void syncRecords();
-                  }}
-                />
                 <PhoneBulkImport
                   historyCode={historyCode}
                   disabled={busy || importBusy || !loaded}
