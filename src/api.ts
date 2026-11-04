@@ -18,6 +18,9 @@ export const errors: Record<string, string> = {
   inbox_file_error:
     "ファイルを読めません。保存を確認し、保存し直してください。",
   multiple_files: "ファイルを1つ選んでください。",
+  invalid_bulk_text:
+    "雀魂URLを1行に1件、最大500件で入力してください。ファイルはUTF-8のテキストを選んでください。",
+  bulk_text_limit: "URL一覧は2MB以下のテキストファイルを選んでください。",
   invalid_history:
     "一括データを確認してください。対応する雀魂URLを1行に1件、または一括取得データを貼り付けてください（最大500件）。",
   invalid_queue:

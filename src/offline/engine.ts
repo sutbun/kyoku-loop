@@ -9,6 +9,7 @@ import type {
 } from "../real-types";
 import {
   sourceURL,
+  parseAnalysisText,
   validateAnalysisQueue,
   type AnalysisEntry,
 } from "../analysis-queue";
@@ -852,6 +853,23 @@ export function phoneReduce(
       state.receipts = receipts;
       state.last_sync = reply.pack.exported_at;
       data = { synced: true };
+      break;
+    }
+    case "analysis_bulk": {
+      const urls = parseAnalysisText(r.data);
+      const existing = new Set((state.analysis_queue ?? []).map((e) => e.url));
+      const added = urls.filter((url) => !existing.has(url));
+      if (existing.size + added.length > 1000) fail("queue_full");
+      state.analysis_queue ??= [];
+      state.analysis_queue.push(
+        ...added.map((url) => ({
+          id: url.split("paipu=")[1],
+          url,
+          created: at,
+        })),
+      );
+      validateAnalysisQueue(state.analysis_queue);
+      data = { added: added.length, existing: urls.length - added.length };
       break;
     }
     case "analysis_add": {

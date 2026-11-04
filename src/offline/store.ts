@@ -65,6 +65,7 @@ async function transact<T>(request: Record<string, unknown>): Promise<T> {
           request.action === "analysis_ack" ||
           request.action === "restore_phone" ||
           [
+            "analysis_bulk",
             "enable_local",
             "register_local",
             "import_ack",
