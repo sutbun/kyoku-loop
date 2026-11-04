@@ -87,14 +87,22 @@ async function openStudy(
   await page.goto("/phone/");
   if (options.styles) await page.addStyleTag({ content: options.styles });
   if (options.warning) {
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page.getByRole("button", { name: "今すぐ同期", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "同期の状態を確認", exact: true }),
     ).toContainText("同期を確認");
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
   }
   await page
     .getByRole("button", {
-      name: options.mode === "practice" ? "今すぐ学ぶ" : "今日の復習を始める",
+      name: options.mode === "practice" ? "5問練習する" : "今日の復習を始める",
       exact: options.mode === "practice",
     })
     .click();
@@ -229,7 +237,7 @@ for (const [width, height] of [
       page,
       page.getByRole("button", { name: "回答する", exact: true }),
     );
-    await page.getByRole("button", { name: "中断してホームへ" }).click();
+    await page.getByRole("button", { name: "中断して学習へ" }).click();
     await expect(page.locator(".phone-app")).not.toHaveClass(/is-studying/);
   });
 }

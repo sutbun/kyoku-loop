@@ -121,6 +121,10 @@ test("PWA commits atomically, resumes with no network after browser restart and 
       expect(
         (await context.request.get("http://127.0.0.1:1460" + path)).status(),
       ).toBe(200);
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await expect(
       page.getByRole("button", { name: "問題を端末に保存", exact: true }),
     ).toBeEnabled();
@@ -136,6 +140,10 @@ test("PWA commits atomically, resumes with no network after browser restart and 
         return put.call(this, value, ...(args as [IDBValidKey]));
       };
     });
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "問題を端末に保存", exact: true })
       .click();
@@ -161,6 +169,10 @@ test("PWA commits atomically, resumes with no network after browser restart and 
       };
     });
     await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
+    await page
       .getByRole("button", { name: "問題を端末に保存", exact: true })
       .click();
     await expect(page.getByRole("alert")).toContainText(
@@ -171,6 +183,10 @@ test("PWA commits atomically, resumes with no network after browser restart and 
       "オフライン利用可能",
     );
     await page.evaluate(() => (window as any).restorePut());
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "問題を端末に保存", exact: true })
       .click();
@@ -186,6 +202,10 @@ test("PWA commits atomically, resumes with no network after browser restart and 
     });
     expect(cachePaths.some((p) => p.includes("/api"))).toBe(false);
     await context.setOffline(true);
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
     await page.getByRole("button", { name: "今日の復習を始める" }).click();
     await expect(page.getByTestId("study-comparison")).toHaveCount(0);
     await page.locator(".hand button").first().click();
@@ -227,10 +247,14 @@ test("PWA commits atomically, resumes with no network after browser restart and 
     await expect(
       page.getByText("回答 未送信 1件", { exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "復習を再開する" }).click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page.getByRole("button", { name: "続きから再開" }).click();
     await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
     expect((await read(page)).events[0]).toEqual(event);
-    await page.getByRole("button", { name: "中断してホームへ" }).click();
+    await page.getByRole("button", { name: "中断して学習へ" }).click();
     // Missing one shell asset must invalidate readiness even with a valid pack.
     await page.evaluate(async () => {
       for (const k of await caches.keys())
@@ -387,6 +411,10 @@ test("a failed first storage write can be retried without reloading or resetting
   await page.evaluate(() => (window as any).restorePut());
   await page
     .getByRole("button", { name: "保存状態を確認", exact: true })
+    .click();
+  await page
+    .getByRole("navigation", { name: "メイン" })
+    .getByRole("button", { name: "設定", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "問題を端末に保存", exact: true }),

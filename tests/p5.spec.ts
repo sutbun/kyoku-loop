@@ -87,6 +87,10 @@ finally:s.close()
     let page = await context.newPage();
     await page.goto("http://127.0.0.1:1460/phone/");
     await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
+    await page
       .getByRole("button", { name: "問題を端末に保存", exact: true })
       .click();
     await expect(page.getByTestId("offline-status")).toContainText(
@@ -94,6 +98,10 @@ finally:s.close()
       { timeout: 30000 },
     );
     await context.setOffline(true);
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
     await page.getByRole("button", { name: "今日の復習を始める" }).click();
     await page.locator(".hand button").first().click();
     await page.getByRole("button", { name: "回答する", exact: true }).click();
@@ -101,7 +109,7 @@ finally:s.close()
     await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
     const raw = (await read(page)).events[0];
     expect(raw.mode).toBe("scheduled");
-    await page.getByRole("button", { name: "中断してホームへ" }).click();
+    await page.getByRole("button", { name: "中断して学習へ" }).click();
     await page.evaluate(() => {
       const put = IDBObjectStore.prototype.put;
       (window as any).restorePut = () => {
@@ -124,6 +132,10 @@ finally:s.close()
       .events;
     expect(history).toHaveLength(1);
     await page.evaluate(() => (window as any).restorePut());
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page.getByRole("button", { name: "今すぐ同期", exact: true }).click();
     await expect
       .poll(async () => Object.keys((await read(page)).receipts ?? {}).length, {
@@ -134,6 +146,10 @@ finally:s.close()
       backend({ action: "item_history", item: raw.item }).data.events,
     ).toHaveLength(1);
     expect((await read(page)).events[0]).toEqual(raw);
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page.getByText("端末の管理", { exact: true }).click();
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "記録をファイルに保存" }).click();
@@ -183,7 +199,11 @@ finally:s.close()
     await expect(
       page.getByText("回答 未送信 0件", { exact: true }),
     ).toHaveCount(0);
-    await page.getByRole("button", { name: "復習を再開する" }).click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page.getByRole("button", { name: "続きから再開" }).click();
     await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
     expect((await read(page)).events[0]).toEqual(raw);
     await context.close();
@@ -194,6 +214,10 @@ finally:s.close()
     await routes(context);
     page = await context.newPage();
     await page.goto("http://127.0.0.1:1460/phone/");
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page.getByText("端末の管理", { exact: true }).click();
     await expect(
       page.getByRole("button", { name: "記録をファイルに保存" }),
@@ -206,9 +230,13 @@ finally:s.close()
     const recovered = await read(page);
     expect(recovered.events[0]).toEqual(raw);
     expect(recovered.device).not.toBe(raw.device);
-    await page.getByRole("button", { name: "復習を再開する" }).click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page.getByRole("button", { name: "続きから再開" }).click();
     await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "中断してホームへ" }).click();
+    await page.getByRole("button", { name: "中断して学習へ" }).click();
     await context.setOffline(false);
     await expect
       .poll(async () => Object.keys((await read(page)).receipts ?? {}).length, {

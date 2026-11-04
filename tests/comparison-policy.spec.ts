@@ -44,7 +44,9 @@ test("exact policy stays hidden before confirming and old packs remain accepted"
   expect(() => validatePack(broken)).toThrow("invalid_pack");
 });
 for (const width of [320, 390, 768])
-  test(`three compact exact policy values at ${width}px`, async ({ page }, info) => {
+  test(`three compact exact policy values at ${width}px`, async ({
+    page,
+  }, info) => {
     await page.setViewportSize({ width, height: 1000 });
     // Fulfil every request from this build or generated data: no request reaches
     // the server or the user's API/database even if another suite owns port 1460.
@@ -93,7 +95,11 @@ for (const width of [320, 390, 768])
       seeded,
     );
     await page.reload();
-    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page.getByRole("button", { name: /問練習する/, exact: true }).click();
     await expect(page.locator(".comparison-policy")).toHaveCount(0);
     await page.getByTestId("real-hand").locator("button").last().click();
     await page.getByRole("button", { name: "回答する", exact: true }).click();

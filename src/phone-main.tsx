@@ -5,7 +5,9 @@ import { updateLocked } from "./offline/update-lock";
 import { useEffect, useState, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { api, errors } from "./api";
-import { PracticeCard, StudyPanel } from "./study-ui";
+import { StudyPanel } from "./study-ui";
+import { PhoneStudyHome } from "./phone-study-home";
+import { PhoneReplayList } from "./phone-replay-list";
 import { StudyOptions } from "./study-options";
 import type { StudySession, Workspace } from "./real-types";
 import { readPhone } from "./offline/store";
@@ -13,7 +15,7 @@ import { saveShell, verifyShell } from "./offline/shell";
 import { pendingEvents } from "./offline/engine";
 import { synchronizePhone, downloadPhonePack } from "./offline/sync";
 import { synchronizeAnalysis } from "./offline/analysis-sync";
-import { SourceInput, AnalysisList } from "./analysis-ui";
+import { SourceInput } from "./analysis-ui";
 import type { AnalysisEntry } from "./analysis-queue";
 import { PhoneMortalImport } from "./phone-mortal-import";
 import {
@@ -41,7 +43,11 @@ function PhoneApp() {
     reports: [],
     items: [],
   });
-  const [screen, setScreen] = useState<"home" | "study">("home");
+  const [screen, setScreen] = useState<"study" | "replays" | "settings">(
+    "study",
+  );
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [reportFilter, setReportFilter] = useState<string[] | undefined>();
   const [active, setActive] = useState(false);
   const studying =
     screen === "study" &&
@@ -385,6 +391,16 @@ function PhoneApp() {
               >
                 同期を再試行
               </button>
+              <button
+                className="text-button"
+                disabled={busy || importBusy}
+                onClick={() => {
+                  setScreen("settings");
+                  setSyncNoticeOpen(false);
+                }}
+              >
+                保存と同期を開く
+              </button>
             </div>
           )}
         </div>
@@ -402,7 +418,7 @@ function PhoneApp() {
               return "処理後に再試行";
             if (sourcePending || importPending || bulkPending)
               return "入力を完了";
-            if (screen !== "home") return "ホームで更新";
+            if (active) return "学習を中断して更新";
             return null;
           }}
         />
@@ -417,15 +433,71 @@ function PhoneApp() {
               </button>
             </div>
           )}
-          {screen === "home" ? (
-            <>
-              <PracticeCard
-                workspace={workspace}
-                disabled={busy || importBusy || !loaded}
-                onBegin={begin}
-              />
-              <section className="panel">
-                <h2>牌譜を追加</h2>
+          <div hidden={screen !== "study"}>
+            {!active && !libraryOpen ? (
+              <>
+                <PhoneStudyHome
+                  workspace={workspace}
+                  disabled={busy || importBusy || !loaded}
+                  onBegin={begin}
+                  onLibrary={() => {
+                    setReportFilter(undefined);
+                    setLibraryOpen(true);
+                  }}
+                  onAdd={() => setScreen("replays")}
+                />
+                {loaded && !!workspace.items.length && !ready && (
+                  <button
+                    className="text-button phone-storage-warning"
+                    onClick={() => setScreen("settings")}
+                  >
+                    オフライン保存を確認 ›
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                {!active && (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setLibraryOpen(false);
+                      setReportFilter(undefined);
+                    }}
+                  >
+                    学習に戻る
+                  </button>
+                )}
+                <StudyPanel
+                  portable
+                  reportFilter={reportFilter}
+                  workspace={workspace}
+                  active={active}
+                  filter={filter}
+                  onFilter={setFilter}
+                  onActive={(value) => {
+                    setActive(value);
+                    if (!value) setLibraryOpen(true);
+                  }}
+                  onRefresh={refresh}
+                  onSession={(session) =>
+                    setWorkspace((w) => ({ ...w, session }))
+                  }
+                  onHome={() => {
+                    setActive(false);
+                    setLibraryOpen(false);
+                    void run(refresh);
+                  }}
+                  onReview={() => {}}
+                />
+              </>
+            )}
+          </div>
+          <div hidden={screen !== "replays"}>
+            <h1 className="phone-tab-title">牌譜</h1>
+            <section className="panel phone-imports" aria-label="牌譜を追加">
+              <details className="phone-source-add">
+                <summary>URLを追加</summary>
                 <SourceInput
                   mortal
                   disabled={busy || importBusy || !loaded}
@@ -461,207 +533,191 @@ function PhoneApp() {
                     if (navigator.onLine) void syncRecords();
                   }}
                 />
-                <PhoneMortalImport
-                  disabled={busy || (!local && syncing) || !loaded}
-                  online={online}
-                  local={local}
-                  entries={analysisQueue}
-                  onPendingChange={setImportPending}
-                  onBusy={(value) => {
-                    importBusyRef.current = value;
-                    setImportBusy(value);
-                  }}
-                  onRegistered={async (registeredLocal) => {
-                    if (registeredLocal) {
-                      await refresh();
-                      return;
-                    }
-                    await syncRecords(true);
-                    const state = await readPhone();
-                    if (!state?.pack) {
-                      await saveShell();
-                      await api({
-                        action: "install_pack",
-                        pack: await downloadPhonePack(),
-                      });
-                    }
-                    await refresh();
-                  }}
-                />
-                <AnalysisList
-                  entries={analysisQueue}
-                  portable
-                  disabled={busy || importBusy}
-                />
-              </section>
-              <section className="panel phone-download" aria-label="保存と同期">
-                <p data-testid="offline-status">
-                  {ready
-                    ? `オフライン利用可能 · ${workspace.items.length}問`
-                    : "オフライン保存の確認が必要です"}
-                </p>
-                <div className="phone-storage-actions">
-                  <button
-                    className="button secondary"
-                    disabled={
-                      busy || syncing || importBusy || !loaded || !online
-                    }
-                    onClick={() =>
-                      void run(async () => {
-                        await saveShell();
-                        await saveCompiler();
-                        await api({ action: "enable_local" });
-                        await navigator.storage?.persist?.().catch(() => false);
-                        await refresh();
-                      })
-                    }
-                  >
-                    {compilerSaved && local
-                      ? "端末用の保存を確認"
-                      : "端末だけで使う準備"}
-                  </button>
-                  <button
-                    className="button primary"
-                    disabled={busy || importBusy || !loaded}
-                    onClick={download}
-                  >
-                    {busy
-                      ? "保存を確認中…"
-                      : pending ||
-                          (workspace.session && !workspace.session.complete)
-                        ? "アプリ本体の保存を確認"
-                        : "問題を端末に保存"}
-                  </button>
-                  <button
-                    className="button secondary"
-                    disabled={
-                      busy || importBusy || syncing || !loaded || !online
-                    }
-                    onClick={() => {
-                      setError("");
-                      void syncRecords(false, true);
-                    }}
-                  >
-                    今すぐ同期
-                  </button>
-                </div>
-                {compilerSaved && local && (
-                  <small data-testid="compiler-ready">
-                    端末内の取り込み準備完了
-                  </small>
-                )}
-                {!matchMedia("(display-mode: standalone)").matches &&
-                  !ready && (
-                    <p className="install-hint">
-                      Safariの共有 →「ホーム画面に追加」
-                    </p>
-                  )}
-              </section>
-              <details className="panel phone-tools">
-                <summary>端末の管理</summary>
-                <div className="phone-tools-content">
-                  <StudyOptions />
-                  <small>
-                    {lastSync
-                      ? `最終同期：${new Date(lastSync).toLocaleString("ja-JP")}`
-                      : "同期はまだ完了していません"}
-                  </small>
-                  {saved && (
-                    <small>
-                      取得：{new Date(saved).toLocaleString("ja-JP")}
-                    </small>
-                  )}
-                  <small>{capacity}</small>
-                  <a
-                    href="/phone/licenses/NOTICE.txt"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    利用ライセンス
-                  </a>
-                  <small>
-                    {persistent
-                      ? "保存の保護を要求済み"
-                      : "自動消去からの保護は未確認"}{" "}
-                    · 容量不足やサイトデータ消去に備え、記録を保存できます。
-                  </small>
-                  <button
-                    className="button secondary"
-                    disabled={busy || !loaded}
-                    onClick={exportRecords}
-                  >
-                    記録をファイルに保存
-                  </button>
-                  <label className="file-drop">
-                    記録ファイルから復旧
-                    <input
-                      type="file"
-                      accept=".json,application/json"
-                      disabled={busy || syncing || !loaded}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (!file) return;
-                        void run(async () => {
-                          if (file.size > 20 * 1024 * 1024)
-                            throw new Error(
-                              "20MB以下の記録ファイルを選択してください。",
-                            );
-                          const backup = JSON.parse(await file.text());
-                          await verifyLocalBackup(backup);
-                          await api({ action: "restore_phone", backup });
-                          await refresh();
-                          if (navigator.onLine) void syncRecords();
-                        });
-                      }}
-                    />
-                  </label>
-                </div>
               </details>
-            </>
-          ) : (
-            <StudyPanel
-              portable
-              workspace={workspace}
-              active={active}
-              filter={filter}
-              onFilter={setFilter}
-              onActive={setActive}
-              onRefresh={refresh}
-              onSession={(session) => setWorkspace((w) => ({ ...w, session }))}
-              onHome={() => {
-                setScreen("home");
-                setActive(false);
-                void run(refresh);
+              <PhoneMortalImport
+                disabled={busy || (!local && syncing) || !loaded}
+                online={online}
+                local={local}
+                entries={analysisQueue}
+                onPendingChange={setImportPending}
+                onBusy={(value) => {
+                  importBusyRef.current = value;
+                  setImportBusy(value);
+                }}
+                onRegistered={async (registeredLocal) => {
+                  if (registeredLocal) {
+                    await refresh();
+                    return;
+                  }
+                  await syncRecords(true);
+                  const state = await readPhone();
+                  if (!state?.pack) {
+                    await saveShell();
+                    await api({
+                      action: "install_pack",
+                      pack: await downloadPhonePack(),
+                    });
+                  }
+                  await refresh();
+                }}
+              />
+            </section>
+            <PhoneReplayList
+              entries={analysisQueue}
+              disabled={busy || importBusy}
+              onProblems={(reports) => {
+                setReportFilter(reports);
+                setFilter("すべて");
+                setLibraryOpen(true);
+                setScreen("study");
               }}
-              onReview={() => {}}
             />
-          )}
+          </div>
+          <div hidden={screen !== "settings"}>
+            <h1 className="phone-tab-title">設定</h1>
+            <section className="panel phone-study-options">
+              <StudyOptions />
+            </section>
+            <section className="panel phone-download" aria-label="保存と同期">
+              <p data-testid="offline-status">
+                {ready
+                  ? `オフライン利用可能 · ${workspace.items.length}問`
+                  : "オフライン保存の確認が必要です"}
+              </p>
+              <div className="phone-storage-actions">
+                <button
+                  className="button secondary"
+                  disabled={busy || syncing || importBusy || !loaded || !online}
+                  onClick={() =>
+                    void run(async () => {
+                      await saveShell();
+                      await saveCompiler();
+                      await api({ action: "enable_local" });
+                      await navigator.storage?.persist?.().catch(() => false);
+                      await refresh();
+                    })
+                  }
+                >
+                  {compilerSaved && local
+                    ? "端末用の保存を確認"
+                    : "端末だけで使う準備"}
+                </button>
+                <button
+                  className="button primary"
+                  disabled={busy || importBusy || !loaded}
+                  onClick={download}
+                >
+                  {busy
+                    ? "保存を確認中…"
+                    : pending ||
+                        (workspace.session && !workspace.session.complete)
+                      ? "アプリ本体の保存を確認"
+                      : "問題を端末に保存"}
+                </button>
+                <button
+                  className="button secondary"
+                  disabled={busy || importBusy || syncing || !loaded || !online}
+                  onClick={() => {
+                    setError("");
+                    void syncRecords(false, true);
+                  }}
+                >
+                  今すぐ同期
+                </button>
+              </div>
+              {compilerSaved && local && (
+                <small data-testid="compiler-ready">
+                  端末内の取り込み準備完了
+                </small>
+              )}
+              {!matchMedia("(display-mode: standalone)").matches && !ready && (
+                <p className="install-hint">
+                  Safariの共有 →「ホーム画面に追加」
+                </p>
+              )}
+            </section>
+            <details className="panel phone-tools">
+              <summary>端末の管理</summary>
+              <div className="phone-tools-content">
+                <small>
+                  {lastSync
+                    ? `最終同期：${new Date(lastSync).toLocaleString("ja-JP")}`
+                    : "同期はまだ完了していません"}
+                </small>
+                {saved && (
+                  <small>取得：{new Date(saved).toLocaleString("ja-JP")}</small>
+                )}
+                <small>{capacity}</small>
+                <a
+                  href="/phone/licenses/NOTICE.txt"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  利用ライセンス
+                </a>
+                <small>
+                  {persistent
+                    ? "保存の保護を要求済み"
+                    : "自動消去からの保護は未確認"}{" "}
+                  · 容量不足やサイトデータ消去に備え、記録を保存できます。
+                </small>
+                <button
+                  className="button secondary"
+                  disabled={busy || !loaded}
+                  onClick={exportRecords}
+                >
+                  記録をファイルに保存
+                </button>
+                <label className="file-drop">
+                  記録ファイルから復旧
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    disabled={busy || syncing || !loaded}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      void run(async () => {
+                        if (file.size > 20 * 1024 * 1024)
+                          throw new Error(
+                            "20MB以下の記録ファイルを選択してください。",
+                          );
+                        const backup = JSON.parse(await file.text());
+                        await verifyLocalBackup(backup);
+                        await api({ action: "restore_phone", backup });
+                        await refresh();
+                        if (navigator.onLine) void syncRecords();
+                      });
+                    }}
+                  />
+                </label>
+              </div>
+            </details>
+          </div>
         </div>
       </main>
       <nav inert={updateLock} className="phone-nav" aria-label="メイン">
-        <button
-          disabled={importBusy}
-          aria-current={screen === "home" ? "page" : undefined}
-          onClick={() => {
-            setScreen("home");
-            setActive(false);
-            void run(refresh);
-          }}
-        >
-          ホーム
-        </button>
-        <button
-          disabled={importBusy}
-          aria-current={screen === "study" ? "page" : undefined}
-          onClick={() => {
-            setScreen("study");
-            setActive(false);
-            void run(refresh);
-          }}
-        >
-          学習
-        </button>
+        {(
+          [
+            ["study", "学習"],
+            ["replays", "牌譜"],
+            ["settings", "設定"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            disabled={busy || importBusy}
+            aria-current={screen === id ? "page" : undefined}
+            onClick={() => {
+              setScreen(id);
+              setSyncNoticeOpen(false);
+              void run(refresh);
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </nav>
     </div>
   );

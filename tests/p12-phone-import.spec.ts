@@ -104,6 +104,10 @@ test("iPad entry validates JSON.gz, requires explicit registration, then downloa
   try {
     await routePhone(page, call);
     await page.goto("/phone/");
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "牌譜", exact: true })
+      .click();
     await page.getByText("解析結果を追加", { exact: true }).click();
     const file = page.getByLabel("Mortal JSON / JSON.gz", { exact: true });
     await file.setInputFiles({
@@ -145,7 +149,11 @@ test("iPad entry validates JSON.gz, requires explicit registration, then downloa
       { timeout: 45000 },
     );
     expect(call({ action: "state" }).data.items).toHaveLength(1);
-    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page.getByRole("button", { name: /問練習する/, exact: true }).click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
     await expect(page.getByTestId("study-comparison")).toHaveCount(0);
   } finally {
@@ -166,24 +174,40 @@ test("lost registration acknowledgement retries once and merges new review items
     await routePhone(page, call, options);
     await page.goto("/phone/");
     await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
+    await page
       .getByRole("button", { name: "問題を端末に保存", exact: true })
       .click();
     await expect(page.getByTestId("offline-status")).toHaveText(
       "オフライン利用可能 · 1問",
       { timeout: 45000 },
     );
-    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page.getByRole("button", { name: /問練習する/, exact: true }).click();
     await page.getByTestId("real-hand").getByRole("button").last().click();
     await page.getByRole("button", { name: "回答する", exact: true }).click();
     await page.getByRole("button", { name: "理解した", exact: true }).click();
-    await page.getByRole("button", { name: "ホーム", exact: true }).click();
-    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await page.getByRole("button", { name: "学習へ", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page.getByRole("button", { name: /問練習する/, exact: true }).click();
     await page.getByTestId("real-hand").getByRole("button").last().click();
     await page
-      .getByRole("button", { name: "中断してホームへ", exact: true })
+      .getByRole("button", { name: "中断して学習へ", exact: true })
       .click();
     const before = await phoneState(page);
     expect(before.events).toHaveLength(1);
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "牌譜", exact: true })
+      .click();
     await page.getByText("解析結果を追加", { exact: true }).click();
     await page
       .getByLabel("Mortal JSON / JSON.gz", { exact: true })
@@ -213,6 +237,10 @@ test("lost registration acknowledgement retries once and merges new review items
     expect(stillRetained.events).toEqual(before.events);
     expect(stillRetained.session).toEqual(before.session);
     options.blockSync = false;
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page.getByRole("button", { name: "今すぐ同期", exact: true }).click();
     await expect
       .poll(async () => (await phoneState(page)).pack.items.length, {
@@ -225,7 +253,7 @@ test("lost registration acknowledgement retries once and merges new review items
     expect(call({ action: "state" }).data.items).toHaveLength(2);
     await page.reload();
     await expect(
-      page.getByRole("button", { name: "復習を再開する →", exact: false }),
+      page.getByRole("button", { name: "続きから再開", exact: false }),
     ).toBeVisible();
   } finally {
     rmSync(folder, { recursive: true, force: true });
@@ -293,6 +321,10 @@ test("first device retries only pack delivery after registration without registe
       failDownloadOnce: true,
     });
     await page.goto("/phone/");
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "牌譜", exact: true })
+      .click();
     await page.getByText("解析結果を追加", { exact: true }).click();
     await page
       .getByLabel("Mortal JSON / JSON.gz", { exact: true })
@@ -352,6 +384,10 @@ test("shortcut JSON with identical repeated rounds registers once and opens a re
   try {
     await routePhone(page, call);
     await page.goto("/phone/");
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "牌譜", exact: true })
+      .click();
     await page.getByText("解析結果を追加", { exact: true }).click();
     await page
       .getByLabel("Mortal JSON / JSON.gz", { exact: true })
@@ -386,7 +422,11 @@ test("shortcut JSON with identical repeated rounds registers once and opens a re
       page.getByText("Windowsに登録済みの結果です", { exact: true }),
     ).toBeVisible();
     expect(call({ action: "state" }).data.reports).toHaveLength(1);
-    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page.getByRole("button", { name: /問練習する/, exact: true }).click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
     await expect(page.getByTestId("study-comparison")).toHaveCount(0);
   } finally {
@@ -405,6 +445,10 @@ test.describe("tablet layout", () => {
   }) => {
     await page.route("**/phone/api", (route) => route.abort());
     await page.goto("/phone/");
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "牌譜", exact: true })
+      .click();
     await page.getByText("解析結果を追加", { exact: true }).click();
     await expect(
       page.getByLabel("Mortal JSON / JSON.gz", { exact: true }),
