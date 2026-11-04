@@ -5,11 +5,12 @@ import { errors } from "../api";
 export async function synchronizeAnalysis(): Promise<void> {
   const entries = (await readPhone())?.analysis_queue ?? [];
   if (!entries.length) return;
-  const snapshot = entries.map(({ id, url, created, history }) => ({
+  const snapshot = entries.map(({ id, url, created, history, visibility }) => ({
     id,
     url,
     created,
     ...(history ? { history } : {}),
+    ...(visibility ? { visibility } : {}),
   }));
   const controller = new AbortController(),
     timer = setTimeout(() => controller.abort(), 25000);

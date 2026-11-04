@@ -87,7 +87,9 @@ function PhoneApp() {
     setResultPending(
       state?.local_imports?.filter((e) => !e.synced_source).length ?? 0,
     );
-    setAnalysisQueue(state?.analysis_queue ?? []);
+    setAnalysisQueue(
+      (state?.analysis_queue ?? []).filter((e) => !e.visibility?.deleted),
+    );
     setPending(state ? pendingEvents(state).length : 0);
     setLastSync(state?.last_sync ?? "");
     setSaved(state?.pack?.exported_at ?? "");
@@ -545,7 +547,14 @@ function PhoneApp() {
             </section>
             <PhoneReplayList
               entries={analysisQueue}
-              disabled={busy || importBusy}
+              disabled={busy || importBusy || syncing}
+              onDelete={(ids) =>
+                void run(async () => {
+                  await api({ action: "analysis_delete", ids });
+                  await refresh();
+                  if (navigator.onLine) void syncRecords();
+                })
+              }
               onProblems={(reports) => {
                 setReportFilter(reports);
                 setFilter("すべて");

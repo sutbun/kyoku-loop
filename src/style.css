@@ -1946,7 +1946,7 @@ dialog::backdrop {
   border-top: 1px solid var(--line, #ddd);
   padding: 16px 0;
 }
-.analysis-row > div:first-child {
+.analysis-row > .analysis-row-title {
   flex: 1 1 180px;
 }
 .analysis-row.drop-active {
@@ -2402,4 +2402,26 @@ dialog::backdrop {
   .quiz-layout > .quiz-answer {
     align-self: end;
   }
+}
+
+.replay-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.replay-selection > label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.replay-selection input,
+input.replay-checkbox {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  margin: 0;
+  accent-color: var(--green);
 }

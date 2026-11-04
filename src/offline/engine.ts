@@ -15,6 +15,9 @@ import {
   normalizeAnalysisHistory,
   sameAnalysisHistory,
   validateAnalysisQueue,
+  visibleAnalysis,
+  mergeVisibility,
+  setAnalysisVisible,
   type AnalysisEntry,
 } from "../analysis-queue";
 
@@ -909,6 +912,24 @@ export function phoneReduce(
       data = { synced: true };
       break;
     }
+    case "analysis_delete": {
+      if (
+        !Array.isArray(r.ids) ||
+        !r.ids.length ||
+        r.ids.length > 1000 ||
+        new Set(r.ids).size !== r.ids.length ||
+        !r.ids.every(
+          (id: unknown) =>
+            typeof id === "string" &&
+            state.analysis_queue?.some((e) => e.id === id),
+        )
+      )
+        fail("invalid_queue");
+      for (const e of state.analysis_queue ?? [])
+        if (r.ids.includes(e.id)) setAnalysisVisible(e, false);
+      data = { deleted: r.ids.length };
+      break;
+    }
     case "analysis_bulk": {
       const batch = parseAnalysisBatch(r.data);
       state.analysis_queue ??= [];
@@ -919,6 +940,7 @@ export function phoneReduce(
       for (const entry of batch) {
         const own = existing.get(entry.url);
         if (own) {
+          setAnalysisVisible(own, true);
           if (entry.history) {
             if (
               own.history &&
@@ -955,6 +977,7 @@ export function phoneReduce(
         id = url.split("paipu=")[1];
       state.analysis_queue ??= [];
       const existing = state.analysis_queue.find((e) => e.id === id);
+      if (existing) setAnalysisVisible(existing, true);
       if (!existing) {
         if (state.analysis_queue.length >= 1000) fail("queue_full");
         state.analysis_queue.push({ id, url, created: at });
@@ -1005,6 +1028,14 @@ export function phoneReduce(
           requested: receipt!.requested,
           reports: clone(receipt!.reports),
           ready: receipt!.ready,
+          ...(mergeVisibility(own!.visibility, receipt!.visibility)
+            ? {
+                visibility: mergeVisibility(
+                  own!.visibility,
+                  receipt!.visibility,
+                ),
+              }
+            : {}),
         });
       }
       data = { synced: true };
@@ -1047,13 +1078,18 @@ export function phoneReduce(
             id: entry.id,
             url: entry.url,
             created: entry.created,
+            ...(entry.visibility
+              ? { visibility: clone(entry.visibility) }
+              : {}),
             ...(entry.history
               ? { history: normalizeAnalysisHistory(entry.history, entry.url) }
               : {}),
           });
-        else if (entry.history) {
+        else {
           const own = state.analysis_queue.find((e) => e.id === entry.id)!;
-          if (!own.history)
+          const visibility = mergeVisibility(own.visibility, entry.visibility);
+          if (visibility) own.visibility = clone(visibility);
+          if (entry.history && !own.history)
             own.history = normalizeAnalysisHistory(entry.history, entry.url);
         }
       }

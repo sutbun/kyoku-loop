@@ -577,6 +577,7 @@ class StudyMixin:
                     if current:
                         entry=stored_entry(json.loads(current[0]))
                         entry['reports']=list(dict.fromkeys(entry['reports']+incoming['reports']))
+                        self._analysis_merge_visibility(entry, incoming)
                         self._put_analysis(entry)
                     else:self._put_analysis(incoming)
                 elif row['key'] in ('analysis_setup',NAGA_PREFERENCE):

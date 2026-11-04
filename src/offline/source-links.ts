@@ -1,9 +1,10 @@
 import type { PhoneState, LocalImport } from "./engine";
 import { matchesMortalScores } from "../mortal-source-match";
+import { visibleAnalysis } from "../analysis-queue";
 
 export function reconcileLocalSources(state: PhoneState) {
   const imports = state.local_imports ?? [],
-    entries = state.analysis_queue ?? [];
+    entries = (state.analysis_queue ?? []).filter(visibleAnalysis);
   const family = (entry: LocalImport) =>
     `${entry.material.game}:${entry.material.seat}`;
   const plans: { own: LocalImport; id: string; kind: "scores" | "identity" }[] =
