@@ -81,6 +81,6 @@ node --test tests/mortal-helper-update.test.mjs
 ## 手動送信済みの結果からの明示復旧（11.05-7）
 paused/manual_submissionで、現在の元項目のmanual blockが一致し、active job・保持JSON・同じ元URLの過去の送信/読取許可・アクセス拒否がない場合だけ復旧を許可する。本人がそのMortal結果タブを表示して「この結果を登録して続行」を押すと、STATUSで見た結果IDと現在の正規結果URL/documentを改めて照合する。別ID/別origin/既知の別結果/未完了表示は拒否する。閲覧しただけでは復旧しない。
 
-拡張更新後の既存結果ページにbridgeがなければ、自分のinspector/contentだけを同じトップdocumentへ接続する。結果表示の通常DOMを確認し、本人が停止項目へ対応付けた既存結果をmanualSubmissionとして耐久記録した後、既存のブラウザJSON保存→1回内容取得→席/モデル/元対局の点数/順位/全内容/登録ACKの検証へ渡す。元のmanual blockは消さず、通常の入力フォームを再送しない。以前の無断typed-result採用拒否も維持する。
+拡張更新後の既存結果ページにbridgeがなければ、自分のinspector/contentだけを同じトップdocumentへ接続する。接続済みのlistenerがあれば再設置せず、無効になった旧接続のtimer/submit listenerを解放してから接続する。結果表示の通常DOMを確認し、本人が停止項目へ対応付けた既存結果をmanualSubmissionとして耐久記録した後、既存のブラウザJSON保存→1回内容取得→席/モデル/元対局の点数/順位/全内容/登録ACKの検証へ渡す。元のmanual blockは消さず、通常の入力フォームを再送しない。以前の無断typed-result採用拒否も維持する。
 
 登録が成功すると元の選択済み一覧の次へ進む。取得後のローカル登録失敗は既存の保持JSONからのみ再開し、二重取得/再解析を行わない。拒否/送信状態不明などの停止条件は解除しない。登録済みの件数や元の学習/未保存入力を保持する。
