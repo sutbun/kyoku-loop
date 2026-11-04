@@ -328,7 +328,13 @@ class Store(StudyMixin, AnalysisQueueMixin):
                 if report_id not in entry['reports']: entry['reports'].append(report_id)
                 self._put_analysis(entry)
             self.reconcile_mortal_sources()
-        return {'id':report_id,'duplicate':bool(linked)}
+            saved_url = self.db.execute('SELECT source_game_url FROM reports WHERE id=?', (report_id,)).fetchone()[0]
+            saved_entry = next((e for e in self.analysis_entries() if e['url'] == saved_url), None)
+            source_link = {'linked': bool(saved_url), 'analysis_id': saved_entry['id'] if saved_entry else None}
+            history = saved_entry.get('history') if saved_entry else None
+            if history:
+                source_link.update(at=history['at'], rank=history['rank'], score=history['players'][history['seat']]['score'])
+        return {'id':report_id,'duplicate':bool(linked),'source_link':source_link}
 
     def reconcile_mortal_sources(self):
         try: from .mortal_sources import reconcile
