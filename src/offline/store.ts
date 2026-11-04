@@ -68,6 +68,7 @@ async function transact<T>(request: Record<string, unknown>): Promise<T> {
             "analysis_bulk",
             "enable_local",
             "register_local",
+            "source_scores",
             "import_ack",
             "bind_source",
           ].includes(String(request.action))

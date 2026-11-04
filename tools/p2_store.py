@@ -305,7 +305,8 @@ class Store(StudyMixin, AnalysisQueueMixin):
                 raise ImportFailure('source_conflict')
             if linked:
                 content['created'] = json.loads(linked['content'])['created']
-                if linked['source_game_url']: content['source_link_kind'] = 'manual'
+                if linked['source_game_url']:
+                    content['source_link_kind'] = json.loads(linked['content']).get('source_link_kind', 'manual')
             self.db.execute('INSERT OR IGNORE INTO sources VALUES(?,?,?,?)',(source,row['payload'],row['url'],content['created']))
             self.db.execute('''INSERT INTO reports VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
                 content=excluded.content,source_game_url=COALESCE(reports.source_game_url,excluded.source_game_url)''',
@@ -326,9 +327,20 @@ class Store(StudyMixin, AnalysisQueueMixin):
                 entry = self.analysis_entry(analysis_id)
                 if report_id not in entry['reports']: entry['reports'].append(report_id)
                 self._put_analysis(entry)
+            self.reconcile_mortal_sources()
         return {'id':report_id,'duplicate':bool(linked)}
 
+    def reconcile_mortal_sources(self):
+        try: from .mortal_sources import reconcile
+        except ImportError: from mortal_sources import reconcile
+        if self.db.in_transaction:
+            return reconcile(self)
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            return reconcile(self)
+
     def state(self):
+        self.reconcile_mortal_sources()
         reports=[]
         for row in self.db.execute('SELECT id,content,source_game_url FROM reports ORDER BY rowid DESC'):
             d=json.loads(row['content'])
@@ -350,7 +362,7 @@ class Store(StudyMixin, AnalysisQueueMixin):
         if not row:
             raise ImportFailure('not_found')
         content=json.loads(row['content'])
-        content['source_link_kind']='manual' if row['source_game_url'] else 'unlinked'
+        content['source_link_kind']=content.get('source_link_kind', 'manual') if row['source_game_url'] else 'unlinked'
         content['registered']=[r['id'] for r in self.db.execute('SELECT id FROM study_items')]
         content['manual']=[r['id'] for r in self.db.execute('SELECT id FROM study_items WHERE manual=1')]
         return content

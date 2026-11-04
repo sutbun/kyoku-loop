@@ -41,6 +41,7 @@ export async function mortalRequest<T>(body: object): Promise<T> {
   }
 }
 export async function synchronizeLocalImports() {
+  await (await import("./source-reconcile")).hydrateLocalSources();
   const state = await readPhone();
   if (state?.schema !== 2) return;
   for (const entry of state.local_imports ?? []) {

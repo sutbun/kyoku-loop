@@ -105,6 +105,15 @@ export async function api<T>(request: object): Promise<T> {
           await import("./offline/hand-reveal")
         ).openPhoneHands(reveal.item)) as T;
       const store = await import("./offline/store");
+      if (reveal.action === "state") {
+        try {
+          await (
+            await import("./offline/source-reconcile")
+          ).hydrateLocalSources();
+        } catch {
+          // Optional link recovery must not prevent studying retained questions.
+        }
+      }
       const result = await store.phoneTransaction<T>(
         request as Record<string, unknown>,
       );

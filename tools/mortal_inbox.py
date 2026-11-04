@@ -92,7 +92,7 @@ class MortalInbox:
         urls = {r[0] for r in self.store.db.execute(
             'SELECT source_game_url FROM reports WHERE game=? AND seat=? AND source_game_url IS NOT NULL',
             (game, report['player_id'])) if r[0]}
-        # Only previously explicit links with identical full game and seat qualify.
+        # Reuse an existing link only for the identical full game and seat.
         if len(urls) != 1:
             return None, None
         url = next(iter(urls))
