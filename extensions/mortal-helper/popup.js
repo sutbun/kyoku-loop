@@ -2,6 +2,7 @@ import { diagnosticText } from "./diagnostics.js";
 
 const $ = (id) => document.getElementById(id);
 const messages = {
+  selection_limit: "最大20件です",
   waiting: "送信できる状態を待っています",
   submitting: "送信操作を開始・結果は未確認です",
   analysing: "解析完了を待っています",
@@ -67,197 +68,344 @@ const messages = {
 const label = (value) =>
   messages[value] || "操作を完了できませんでした。ページを確認してください。";
 let busy = false,
-  feedback = "";
-let refreshing = false,
-  entries = [],
+  refreshing = false,
+  loading = false;
+let entries = [],
   batch = null,
-  hasPending = false,
-  batchFeedback = "";
+  latestStatus = null;
+let loadedKey = null,
+  loadError = "",
+  batchFeedback = "",
+  feedback = "";
 const selected = new Set();
-let latestStatus = null;
-function batchControls() {
-  const locked = ["running", "paused"].includes(batch?.phase);
-  $("batch-model").disabled = busy || locked;
-  $("batch-load").disabled = busy || locked;
-  $("batch-start").textContent =
-    batch?.phase === "paused"
-      ? "続きから再開"
-      : batch?.phase === "running"
-        ? "解析・登録中"
-        : `選択した${selected.size}件を解析・登録`;
-  $("batch-start").disabled =
-    busy ||
-    batch?.phase === "running" ||
-    (batch?.phase === "paused"
-      ? ["access_restricted", "invalid_report", "payload_missing"].includes(
-          batch.reason,
-        )
-      : !selected.size || selected.size > 20);
-  $("batch-stop").textContent =
-    batch?.phase === "paused"
-      ? "この一覧を終了"
-      : batch?.stopAfterCurrent
-        ? "この1件の後に停止"
-        : "停止";
-  $("batch-stop").disabled =
-    busy ||
-    !locked ||
-    !!batch?.stopAfterCurrent ||
-    (batch?.phase === "paused" && hasPending);
-  for (const input of $("batch-list").querySelectorAll("input"))
-    input.disabled =
-      locked || !entries.find((e) => e.id === input.value)?.available;
+const verified = (entry) => [9, 12, 16].includes(entry.history?.mode);
+const locked = () => ["running", "paused"].includes(batch?.phase);
+const currentKey = () =>
+  `${batch?.id || "idle"}:${batch?.phase || "idle"}:${$("batch-model").value}`;
+const shortStage = {
+  waiting: "送信の準備中",
+  submitting: "送信中",
+  analysing: "解析中",
+  saving: "保存中",
+  saved: "登録中",
+  registered: "登録済み",
+};
+const stopLabels = {
+  local_unavailable: "KyokuLoopと接続できません",
+  source_conflict: "対局情報が一致しません",
+  invalid_report: "解析結果を確認できません",
+  invalid_receipt: "登録完了を確認できません",
+  reconstruction_failed: "局面の照合で停止しました",
+  access_restricted: "アクセス制限で停止しました",
+  human_confirmation: "Mortalで本人確認が必要です",
+  browser_restarted: "再起動により停止しました",
+  timeout: "待ち時間の上限に達しました",
+};
+function chooseDefault() {
+  selected.clear();
+  for (const entry of entries.filter(verified).slice(0, 20))
+    selected.add(entry.id);
+}
+function entryLabel(entry) {
+  const h = entry.history;
+  const at = new Date(h?.at);
+  if (!h?.at || !Number.isFinite(at.getTime()))
+    return `日時不明 · ${entry.id.slice(-8)}`;
+  const date = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(at);
+  return `${date}${h.rank ? `　${h.rank}位` : ""}`;
 }
 function renderEntries() {
   $("batch-list").replaceChildren();
-  for (const entry of entries) {
-    const row = document.createElement("label");
-    row.className = "queue-entry";
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.value = entry.id;
-    input.checked = selected.has(entry.id);
-    input.addEventListener("change", () => {
-      if (input.checked) selected.add(entry.id);
-      else selected.delete(entry.id);
-      batchControls();
-    });
-    const text = document.createElement("span"),
-      h = entry.history;
-    text.textContent = h ? `${h.at} ／ ${h.rank}位` : "日時・順位なし";
-    const detail = document.createElement("small");
-    detail.textContent = entry.id;
-    const reason = document.createElement("small");
-    reason.textContent = entry.reason
-      ? label(entry.reason)
-      : entry.reuse
-        ? "保存済み結果から登録（再解析なし）"
-        : h
-          ? "未登録"
-          : "ルール未確認：四人半荘だけ選んでください";
-    text.append(detail, reason);
-    row.append(input, text);
-    $("batch-list").append(row);
+  for (const confirmed of [true, false]) {
+    const group = entries.filter((e) => verified(e) === confirmed);
+    if (!group.length) continue;
+    if (!confirmed) {
+      const title = document.createElement("p");
+      title.className = "group-label";
+      title.textContent = "四人半荘か確認して選択";
+      $("batch-list").append(title);
+    }
+    for (const entry of group) {
+      const row = document.createElement("label");
+      row.className = "queue-entry";
+      row.title = entry.id;
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = entry.id;
+      input.checked = selected.has(entry.id);
+      input.addEventListener("change", () => {
+        batchFeedback = "";
+        if (input.checked && selected.size >= 20) {
+          input.checked = false;
+          batchFeedback = "selection_limit";
+        } else if (input.checked) selected.add(entry.id);
+        else selected.delete(entry.id);
+        render();
+      });
+      const text = document.createElement("span");
+      text.textContent = entryLabel(entry);
+      if (entry.reuse) {
+        const reuse = document.createElement("small");
+        reuse.textContent = "保存済み結果から登録";
+        text.append(reuse);
+      }
+      row.append(input, text);
+      $("batch-list").append(row);
+    }
   }
-  if (!entries.length)
-    $("batch-list").textContent =
-      "解析待ちの牌譜はありません。KyokuLoopに牌譜を追加してください。";
-  batchControls();
 }
-function batchProgress(data) {
-  batch = data.batch;
-  hasPending = data.hasPendingPayload;
-  batchControls();
-  if (batch?.phase === "running" || batch?.phase === "paused") {
-    const item = batch.items[batch.index],
-      job = data.jobs.find((j) => j.id === item?.jobId);
-    const progress = `登録 ${batch.items.filter((i) => i.status === "done").length}件 ／ 全${batch.items.length}件`;
-    const detail =
-      batch.phase === "paused"
-        ? label(batch.reason)
-        : batch.nextAt > Date.now() && item?.status === "queued"
-          ? `次の対局まで ${Math.ceil((batch.nextAt - Date.now()) / 1000)}秒`
-          : job
-            ? job.phase === "saved"
-              ? "JSONを検証し、KyokuLoopへ登録しています"
-              : label(job.phase)
-            : "Mortalのページを開いています";
-    $("batch-notice").textContent =
-      batchFeedback ||
-      `${progress}\n${item?.id || ""}\n${detail}${batch.stopAfterCurrent ? "\nこの1件の処理後に停止します。" : ""}`;
-  } else
-    $("batch-notice").textContent =
-      batchFeedback ||
-      (batch?.phase === "done"
-        ? `完了：登録 ${batch.items.filter((i) => i.status === "done").length}件、スキップ ${batch.items.filter((i) => i.status === "skipped").length}件。KyokuLoopに戻ると一覧が更新されます。`
-        : batch?.phase === "ended"
-          ? "一覧を終了しました。送信・登録の記録は保持しています。"
-          : "");
+function render() {
+  const data = latestStatus || { jobs: [] };
+  const running = batch?.phase === "running";
+  const paused = batch?.phase === "paused";
+  const done = batch?.phase === "done";
+  const singleActive = data.jobs.find((j) =>
+    ["waiting", "submitting", "analysing", "saving"].includes(j.phase),
+  );
+  const singleError =
+    !locked() &&
+    data.jobs.find(
+      (j) =>
+        j.tabId === data.tabId &&
+        j.phase === "stopped" &&
+        !["cancelled", "user_pause"].includes(j.reason),
+    );
+  const registered =
+    batch?.items.filter((i) => i.status === "done").length || 0;
+  const total = batch?.items.length || 0;
+  const skipped =
+    batch?.items.filter((i) => i.status === "skipped").length || 0;
+  const count = $("batch-count");
+  const notice = $("batch-notice");
+  notice.textContent = "";
+  if (running || paused) {
+    count.textContent = paused
+      ? `${registered} / ${total}件を登録して停止`
+      : `登録完了 ${registered} / ${total}件`;
+    if (paused)
+      notice.textContent =
+        batch.reason === "user_pause"
+          ? "一時停止中"
+          : stopLabels[batch.reason] || label(batch.reason);
+    else {
+      const item = batch.items[batch.index];
+      const job = data.jobs.find((j) => j.id === item?.jobId);
+      const stage =
+        batch.nextAt > Date.now() && item?.status === "queued"
+          ? `次の開始まで ${Math.ceil((batch.nextAt - Date.now()) / 1000)}秒`
+          : `${Math.min(batch.index + 1, total)}件目を${shortStage[job?.phase] || "準備中"}`;
+      notice.textContent =
+        stage + (batch.stopAfterCurrent ? "\nこの1件の後に停止します" : "");
+    }
+    if (skipped) notice.textContent += `\nスキップ ${skipped}件`;
+  } else if (singleActive) {
+    count.textContent = "1件を保存中";
+    notice.textContent = shortStage[singleActive.phase];
+  } else if (loadError) {
+    count.textContent = "読み込めませんでした";
+    notice.textContent = ["open_kyokuloop_tab", "local_unavailable"].includes(
+      loadError,
+    )
+      ? "同じブラウザでPCのKyokuLoopを開いてください"
+      : label(loadError);
+  } else if (done) {
+    count.textContent = `${registered}件を登録しました`;
+    if (skipped) notice.textContent = `スキップ ${skipped}件`;
+  } else if (loading || loadedKey === null) count.textContent = "読み込み中";
+  else {
+    count.textContent = entries.length
+      ? `未登録 ${entries.length}件`
+      : "未解析の牌譜はありません";
+    if (entries.length && !entries.some(verified))
+      notice.textContent = "対象を変更して四人半荘を選んでください";
+  }
+  if (batchFeedback) notice.textContent = label(batchFeedback);
+  const progress = $("batch-progress");
+  progress.hidden = !(running || paused);
+  progress.max = total || 1;
+  progress.value = registered;
+  const start = $("batch-start");
+  start.hidden =
+    running ||
+    !!singleActive ||
+    (paused ? !data.resumeAllowed : !entries.length || !!loadError || loading);
+  start.textContent = paused
+    ? data.hasPendingPayload
+      ? "登録を再開"
+      : "続きから再開"
+    : `${done ? "次の" : ""}${selected.size}件を解析・登録`;
+  start.disabled =
+    busy ||
+    loading ||
+    (paused ? !data.resumeAllowed : selected.size === 0 || selected.size > 20);
+  const stop = $("batch-stop");
+  stop.hidden = !running;
+  stop.textContent = batch?.stopAfterCurrent
+    ? "この1件の後に停止"
+    : "この1件で止める";
+  stop.disabled = busy || !!batch?.stopAfterCurrent;
+  $("open-app").hidden = !(
+    done ||
+    !!loadError ||
+    (!locked() && loadedKey !== null && !loading && !entries.length) ||
+    (paused && batch.reason === "local_unavailable")
+  );
+  $("retry-load").hidden = !loadError || locked();
+  $("retry-load").disabled = busy || loading;
+  $("batch-model").disabled = busy || loading || locked() || !!singleActive;
+  $("batch-load").disabled = busy || loading || locked() || !!singleActive;
+  $("end-batch").hidden = !paused;
+  $("end-batch").disabled = busy || data.hasPendingPayload || !!singleActive;
+  const targets = $("targets");
+  targets.hidden =
+    locked() || !!singleActive || !entries.length || !!loadError || loading;
+  if (targets.hidden) targets.open = false;
+  $("selection-count").textContent = `${selected.size} / 20件を選択`;
+  for (const input of $("batch-list").querySelectorAll("input")) {
+    input.checked = selected.has(input.value);
+    input.disabled = busy || loading || locked();
+  }
+  $("select-default").disabled = busy || loading || !entries.some(verified);
+  $("select-none").disabled = busy || loading || !selected.size;
+  const showError = (paused && batch.reason !== "user_pause") || !!singleError;
+  $("copy-diagnostics").hidden = !showError;
+  $("copy-diagnostics").disabled = !latestStatus;
+  if (!showError) {
+    $("copy-notice").textContent = "";
+    $("diagnostics-text").hidden = true;
+  }
 }
-$("version").textContent = chrome.runtime.getManifest().version_name;
+async function loadEntries() {
+  if (loading || locked()) return;
+  loading = true;
+  loadError = "";
+  loadedKey = currentKey(); // Retry only on request or a new state, never each poll.
+  render();
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: "BATCH_LOAD",
+      model: $("batch-model").value,
+    });
+    if (result.error) throw Error(result.error);
+    entries = result.entries
+      .filter((e) => e.available)
+      .sort((a, b) => {
+        const aTime = Date.parse(a.history?.at),
+          bTime = Date.parse(b.history?.at);
+        return (
+          (Number.isFinite(aTime) ? aTime : Infinity) -
+          (Number.isFinite(bTime) ? bTime : Infinity)
+        );
+      });
+    chooseDefault();
+  } catch (error) {
+    entries = [];
+    selected.clear();
+    loadError = messages[error.message] ? error.message : "operation_failed";
+  } finally {
+    loading = false;
+    renderEntries();
+    render();
+  }
+}
+function renderTools(data) {
+  const active = data.jobs.find((j) =>
+    ["waiting", "submitting", "analysing", "saving"].includes(j.phase),
+  );
+  const current = data.jobs.find((j) => j.tabId === data.tabId);
+  const s = data.snapshot;
+  const target = s?.source ? s : current;
+  $("selection").textContent = target?.source
+    ? `${target.source}\nMortal ${target.model}`
+    : "URL入力済みのMortalページを開いてください";
+  $("start").disabled = busy || !s?.source || !!s.error || !!active || locked();
+  $("cancel").disabled =
+    busy || !active || active.tabId !== data.tabId || locked();
+  $("notice").textContent =
+    feedback ||
+    (current
+      ? `${label(current.phase)}${current.reason ? `：${label(current.reason)}` : ""}`
+      : s?.error
+        ? label(s.error)
+        : "");
+  $("export").disabled = !data.jobs.length;
+  $("history").replaceChildren();
+  for (const job of data.jobs) {
+    const box = document.createElement("div");
+    box.className = "record";
+    for (const value of [
+      label(job.phase),
+      job.reason ? label(job.reason) : "",
+      `元URL：${job.source}`,
+      `モデル：${job.model}`,
+      job.task ? `結果ID：${job.task}` : "",
+      job.filename ? `保存先：${job.filename}` : "",
+    ].filter(Boolean)) {
+      const p = document.createElement("p");
+      p.textContent = value;
+      box.append(p);
+    }
+    $("history").append(box);
+  }
+}
 export async function refresh() {
-  if (busy || refreshing) return;
+  if (busy || refreshing || loading) return;
   refreshing = true;
   try {
     const data = await chrome.runtime.sendMessage({ type: "STATUS" });
-    if (data.error) {
-      $("notice").textContent = label(data.error);
-      return;
-    }
+    if (data.error) throw Error(data.error);
     latestStatus = data;
-    $("copy-diagnostics").disabled = false;
-    const running = data.jobs.find((j) =>
-      ["waiting", "submitting", "analysing", "saving"].includes(j.phase),
-    );
-    const current = data.jobs.find((j) => j.tabId === data.tabId);
-    const s = data.snapshot;
-    const selected = s?.source ? s : current;
-    batchProgress(data);
-    $("selection").textContent = selected?.source
-      ? `${selected.source}\nモデル：${selected.model} ／ 対象：${selected.player === "" ? "URLから自動選択" : `東1局の席 ${Number(selected.player) + 1}`}`
-      : "URL入力済みのMortalページを開いてください。初回導入後はページを読み直してください。";
-    const batchLocked = ["running", "paused"].includes(batch?.phase);
-    $("start").disabled = !s?.source || !!s.error || !!running || batchLocked;
-    $("cancel").disabled =
-      !running || running.tabId !== data.tabId || batchLocked;
-    if (s?.source && !batchLocked) $("single").open = true;
-    $("notice").textContent =
-      feedback ||
-      (current
-        ? `${label(current.phase)}${current.reason ? `：${label(current.reason)}` : ""}`
-        : running
-          ? "ほかのタブで1件を処理中です。"
-          : s?.error
-            ? label(s.error)
-            : "");
-    $("export").disabled = !data.jobs.length;
-    $("history").replaceChildren();
-    for (const job of data.jobs) {
-      const box = document.createElement("div");
-      box.className = "record";
-      for (const text of [
-        label(job.phase),
-        job.reason ? label(job.reason) : "",
-        `元URL：${job.source}`,
-        `モデル：${job.model}`,
-        job.task ? `結果ID：${job.task}` : "",
-        job.filename ? `保存先：${job.filename}` : "",
-      ].filter(Boolean)) {
-        const p = document.createElement("p");
-        p.textContent = text;
-        box.append(p);
-      }
-      $("history").append(box);
-    }
+    batch = data.batch;
+    if (locked())
+      $("batch-model").value = batch.model || $("batch-model").value;
+    if (!locked() && loadedKey !== currentKey()) await loadEntries();
+    renderTools(data);
+    render();
+  } catch (error) {
+    loadError = messages[error.message] ? error.message : "operation_failed";
+    render();
   } finally {
     refreshing = false;
   }
 }
 async function batchAction(type) {
-  if (busy) return;
+  if (busy || loading) return;
   busy = true;
   batchFeedback = "";
-  batchControls();
+  render();
   try {
     const result = await chrome.runtime.sendMessage({
       type,
       model: $("batch-model").value,
       ids: [...selected],
     });
-    if (result.error) batchFeedback = label(result.error);
-    else if (type === "BATCH_LOAD") {
-      entries = result.entries;
-      selected.clear();
-      renderEntries();
-    } else if (type === "BATCH_START") selected.clear();
+    if (result.error) batchFeedback = result.error;
+    else if (type === "BATCH_START" || type === "BATCH_RESUME") {
+      $("tools").open = false;
+      $("targets").open = false;
+    }
   } catch {
-    batchFeedback = label("operation_failed");
+    batchFeedback = "operation_failed";
   } finally {
     busy = false;
   }
   await refresh();
 }
-$("batch-load").addEventListener("click", () => void batchAction("BATCH_LOAD"));
+$("batch-load").addEventListener("click", () => {
+  batchFeedback = "";
+  void loadEntries();
+});
+$("retry-load").addEventListener("click", () => {
+  batchFeedback = "";
+  void loadEntries();
+});
 $("batch-start").addEventListener(
   "click",
   () =>
@@ -265,19 +413,39 @@ $("batch-start").addEventListener(
       batch?.phase === "paused" ? "BATCH_RESUME" : "BATCH_START",
     ),
 );
-$("batch-stop").addEventListener(
-  "click",
-  () =>
-    void batchAction(batch?.phase === "paused" ? "BATCH_END" : "BATCH_STOP"),
-);
-$("batch-model").addEventListener("change", () => {
-  entries = [];
+$("batch-stop").addEventListener("click", () => void batchAction("BATCH_STOP"));
+$("end-batch").addEventListener("click", () => void batchAction("BATCH_END"));
+$("open-app").addEventListener("click", async () => {
+  try {
+    const result = await chrome.runtime.sendMessage({ type: "OPEN_APP" });
+    if (result.error) throw Error(result.error);
+  } catch {
+    batchFeedback = "operation_failed";
+    render();
+  }
+});
+$("select-default").addEventListener("click", () => {
+  batchFeedback = "";
+  chooseDefault();
+  render();
+});
+$("select-none").addEventListener("click", () => {
+  batchFeedback = "";
   selected.clear();
-  $("batch-list").textContent =
-    "モデルを変えました。「KyokuLoopから読み込む」で対象を確認してください。";
-  batchControls();
+  render();
+});
+$("batch-model").addEventListener("change", async () => {
+  try {
+    await chrome.storage.local.set({ popupModel: $("batch-model").value });
+    batchFeedback = "";
+    await loadEntries();
+  } catch {
+    batchFeedback = "operation_failed";
+    render();
+  }
 });
 async function action(type) {
+  if (busy) return;
   feedback = "";
   busy = true;
   $("start").disabled = true;
@@ -305,20 +473,27 @@ $("copy-diagnostics").addEventListener("click", async () => {
   const fallback = $("diagnostics-text");
   fallback.hidden = true;
   try {
-    // Call directly from the user's click, without an async fetch or permission.
+    // Keep this write in the user's click, without fetching or asking permission.
     await navigator.clipboard.writeText(text);
-    $("copy-notice").textContent =
-      "診断情報をコピーしました。そのままチャットへ貼り付けられます。";
+    $("copy-notice").textContent = "コピーしました";
   } catch {
     fallback.value = text;
     fallback.hidden = false;
     fallback.focus();
     fallback.select();
-    $("copy-notice").textContent =
-      "下の診断情報を選択しました。Ctrl+Cでコピーできます。";
+    $("copy-notice").textContent = "Ctrl+Cでコピーできます";
   }
 });
-void refresh().catch(() => {
-  $("notice").textContent = label("operation_failed");
-});
-setInterval(() => void refresh().catch(() => {}), 1000);
+$("version").textContent = chrome.runtime.getManifest().version_name;
+async function initialize() {
+  try {
+    const { popupModel } = await chrome.storage.local.get("popupModel");
+    if (["4.1a", "4.1b", "4.1c", "4.0", "3.0"].includes(popupModel))
+      $("batch-model").value = popupModel;
+  } catch {
+    /* Default to 4.1b without modifying the processing ledger. */
+  }
+  await refresh();
+  setInterval(() => void refresh(), 1000);
+}
+void initialize();

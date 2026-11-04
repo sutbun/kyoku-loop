@@ -137,7 +137,7 @@ export class BatchRunner {
     await this.save(data);
     if (job && !job.claimed) await this.helper.stopTab(job.tabId, "cancelled");
   }
-  async resume(appTabId) {
+  async resumeContext() {
     const data = await this.state();
     const b = data.batch;
     if (!b || b.phase !== "paused" || data.jobs.some(active))
@@ -159,6 +159,18 @@ export class BatchRunner {
       (job.phase !== "saved" || job.transferAttempted)
     )
       throw Error("submission_uncertain");
+    return { data, b, item, job, cached };
+  }
+  async canResume() {
+    try {
+      await this.resumeContext();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async resume(appTabId) {
+    const { data, b, item, job, cached } = await this.resumeContext();
     b.phase = "running";
     b.reason = null;
     b.stopAfterCurrent = false;

@@ -1,9 +1,9 @@
 import { test } from "@playwright/test";
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 test("Mortal helper state machine and isolated browser integration", async () => {
   test.setTimeout(300000);
-  execFileSync(
+  const result = spawnSync(
     process.execPath,
     [
       "--test",
@@ -14,6 +14,7 @@ test("Mortal helper state machine and isolated browser integration", async () =>
       "tests/mortal-batch-browser.test.mjs",
       "tests/mortal-helper-update.test.mjs",
       "tests/mortal-diagnostics.test.mjs",
+      "tests/mortal-popup-browser.test.mjs",
     ],
     {
       encoding: "utf8",
@@ -23,4 +24,8 @@ test("Mortal helper state machine and isolated browser integration", async () =>
       maxBuffer: 2 * 1024 * 1024,
     },
   );
+  if (result.error || result.status !== 0)
+    throw new Error(
+      `${result.error?.message || ""}\n${result.stdout}\n${result.stderr}`,
+    );
 });

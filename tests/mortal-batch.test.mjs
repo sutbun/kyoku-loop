@@ -312,3 +312,32 @@ test("a manual submit before the helper has a job is never sent again by the bat
   assert.equal(r.data().jobs.length, 0);
   assert.equal(r.calls.open.length, 0);
 });
+
+test("resume availability is read-only and uses the same guards as resume", async () => {
+  const r = rig();
+  assert.equal(await r.runner.canResume(), false);
+  await r.runner.start([entry(1).id], 10, "4.1b");
+  await r.runner.stop();
+  const before = JSON.stringify(r.data());
+  assert.equal(await r.runner.canResume(), true);
+  assert.equal(JSON.stringify(r.data()), before);
+  assert.equal(r.calls.open.length, 0);
+  await r.runner.pause("access_restricted");
+  assert.equal(await r.runner.canResume(), false);
+  await assert.rejects(r.runner.resume(10), /access_restricted/);
+});
+
+test("resume availability requires retained bytes after a claimed failed transfer", async () => {
+  const r = rig();
+  await launch(r);
+  r.lost(true);
+  await r.runner.drive();
+  const before = JSON.stringify(r.data());
+  assert.equal(await r.runner.canResume(), true);
+  assert.equal(JSON.stringify(r.data()), before);
+  assert.equal(r.calls.read, 1);
+  r.host.get = async () => null;
+  assert.equal(await r.runner.canResume(), false);
+  await assert.rejects(r.runner.resume(10), /submission_uncertain/);
+  assert.equal(r.calls.read, 1);
+});
