@@ -34,11 +34,21 @@ def validate_entry(value):
         if at.tzinfo is None: raise ValueError()
     except (KeyError, TypeError, AttributeError, ValueError):
         raise StudyFailure('invalid_queue') from None
-    return {'id': value['id'], 'url': url, 'created': value['created']}
+    entry = {'id': value['id'], 'url': url, 'created': value['created']}
+    if 'history' in value:
+        try:
+            try: from .paipu_history import validated_meta
+            except ImportError: from paipu_history import validated_meta
+            meta = value['history']
+            if not isinstance(meta, dict) or meta.get('url', url) != url: raise ValueError()
+            entry['history'] = validated_meta(meta | {'url': url})
+        except (ValueError, TypeError, KeyError): raise StudyFailure('invalid_history') from None
+    return entry
 
 
 def stored_entry(value):
     entry = validate_entry(value)
+    entry.pop('history', None)
     if type(value.get('requested')) is not bool or not isinstance(value.get('reports'), list):
         raise StudyFailure('invalid_queue')
     if len(value['reports']) != len(set(value['reports'])) or any(not isinstance(r, str) or not re.fullmatch('[a-f0-9]{64}', r) for r in value['reports']):
@@ -83,8 +93,7 @@ class AnalysisQueueMixin:
                 self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)',
                                 (PREFIX+ident, json.dumps(entry, ensure_ascii=False)))
                 if value['meta']:
-                    self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)',
-                                    (META_PREFIX+ident, json.dumps(value['meta'], ensure_ascii=False)))
+                    self._receive_analysis_history({'id':ident, 'history':value['meta']})
         return {'added': added, 'existing': supplied-added, 'total': len(existing)+added}
 
     def analysis_entry(self, ident):
@@ -97,6 +106,16 @@ class AnalysisQueueMixin:
         self.db.execute('INSERT INTO study_settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
                         (PREFIX+entry['id'], json.dumps(stored_entry(entry), ensure_ascii=False)))
 
+    def _receive_analysis_history(self, entry):
+        if not entry.get('history'): return
+        try: from .paipu_history import META_PREFIX, same_meta
+        except ImportError: from paipu_history import META_PREFIX, same_meta
+        key = META_PREFIX + entry['id']
+        old = self.db.execute('SELECT value FROM study_settings WHERE key=?', (key,)).fetchone()
+        if old and not same_meta(json.loads(old[0]), entry['history']):
+            raise StudyFailure('history_conflict')
+        self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)', (key,json.dumps(entry['history'],ensure_ascii=False)))
+
     def analysis_receive(self, entries):
         if not isinstance(entries, list) or len(entries) > 1000: raise StudyFailure('invalid_queue')
         valid = [validate_entry(e) for e in entries]
@@ -106,7 +125,8 @@ class AnalysisQueueMixin:
             self.db.execute('BEGIN IMMEDIATE')
             for entry in valid:
                 self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)',
-                    (PREFIX+entry['id'], json.dumps(entry | {'requested':False, 'reports':[]}, ensure_ascii=False)))
+                    (PREFIX+entry['id'], json.dumps({k:v for k,v in entry.items() if k!='history'} | {'requested':False, 'reports':[]}, ensure_ascii=False)))
+                self._receive_analysis_history(entry)
                 receipts.append(self.analysis_entry(entry['id']))
         # Only a committed transaction supplies a receipt. Original URL stays on phone.
         return {'entries':receipts, 'received_at':self.moment().isoformat()}

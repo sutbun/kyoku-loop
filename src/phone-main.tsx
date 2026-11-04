@@ -1,3 +1,4 @@
+import historyCode from "../docs/snippets/ipad-history-metadata-shortcut.js?raw";
 import { PhoneBulkImport } from "./phone-bulk-import";
 import { VersionUpdate } from "./version-update";
 import { updateLocked } from "./offline/update-lock";
@@ -442,6 +443,7 @@ function PhoneApp() {
                   }}
                 />
                 <PhoneBulkImport
+                  historyCode={historyCode}
                   disabled={busy || importBusy || !loaded}
                   onPendingChange={setBulkPending}
                   onBusy={(value) => {

@@ -181,12 +181,12 @@ export function AnalysisList({
         >
           <div>
             <strong>
-              {!portable && e.history
+              {e.history
                 ? `${new Date(e.history.at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · ${e.history.rank}位`
                 : `保存牌譜 ${entries.length - i}`}
             </strong>
             <small>
-              {!portable && e.history
+              {e.history
                 ? e.history.players
                     .filter((_, seat) => seat !== e.history!.seat)
                     .map((p) => p.name)
@@ -202,10 +202,15 @@ export function AnalysisList({
               </small>
               <button
                 className="button secondary"
-                disabled={disabled}
+                disabled={
+                  disabled ||
+                  (!!e.history && ![9, 12, 16].includes(e.history.mode))
+                }
                 onClick={() => openMortal(e.url)}
               >
-                Mortalへ
+                {e.history && ![9, 12, 16].includes(e.history.mode)
+                  ? "東風は対象外"
+                  : "Mortalへ"}
               </button>
             </div>
           ) : (

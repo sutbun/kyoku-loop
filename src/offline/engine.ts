@@ -9,7 +9,9 @@ import type {
 } from "../real-types";
 import {
   sourceURL,
-  parseAnalysisText,
+  parseAnalysisBatch,
+  normalizeAnalysisHistory,
+  sameAnalysisHistory,
   validateAnalysisQueue,
   type AnalysisEntry,
 } from "../analysis-queue";
@@ -856,20 +858,42 @@ export function phoneReduce(
       break;
     }
     case "analysis_bulk": {
-      const urls = parseAnalysisText(r.data);
-      const existing = new Set((state.analysis_queue ?? []).map((e) => e.url));
-      const added = urls.filter((url) => !existing.has(url));
-      if (existing.size + added.length > 1000) fail("queue_full");
+      const batch = parseAnalysisBatch(r.data);
       state.analysis_queue ??= [];
-      state.analysis_queue.push(
-        ...added.map((url) => ({
-          id: url.split("paipu=")[1],
-          url,
-          created: at,
-        })),
-      );
+      const existing = new Map(state.analysis_queue.map((e) => [e.url, e]));
+      const added = batch.filter((e) => !existing.has(e.url));
+      if (existing.size + added.length > 1000) fail("queue_full");
+      let updated = 0;
+      for (const entry of batch) {
+        const own = existing.get(entry.url);
+        if (own) {
+          if (entry.history) {
+            if (
+              own.history &&
+              !sameAnalysisHistory(own.history, entry.history, entry.url)
+            )
+              fail("history_conflict");
+            if (!own.history) {
+              own.history = entry.history;
+              updated++;
+            }
+          }
+        } else
+          state.analysis_queue.push({
+            id: entry.url.split("paipu=")[1],
+            url: entry.url,
+            created: at,
+            ...(entry.history ? { history: entry.history } : {}),
+          });
+      }
       validateAnalysisQueue(state.analysis_queue);
-      data = { added: added.length, existing: urls.length - added.length };
+      data = {
+        added: added.length,
+        existing: batch.length - added.length,
+        ...(typeof r.data === "string" && r.data.trimStart().startsWith("{")
+          ? { updated }
+          : {}),
+      };
       break;
     }
     case "analysis_add": {
@@ -908,6 +932,21 @@ export function phoneReduce(
           !Array.isArray(receipt.reports)
         )
           fail("invalid_receipt");
+        if (
+          sent.history &&
+          (!receipt!.history ||
+            !sameAnalysisHistory(sent.history, receipt!.history, sent.url))
+        )
+          fail("invalid_receipt");
+        if (receipt!.history) {
+          if (
+            own!.history &&
+            !sameAnalysisHistory(own!.history, receipt!.history, own!.url)
+          )
+            fail("history_conflict");
+          if (!own!.history)
+            own!.history = normalizeAnalysisHistory(receipt!.history, own!.url);
+        }
         Object.assign(own!, {
           received: r.received_at,
           requested: receipt!.requested,
@@ -955,7 +994,15 @@ export function phoneReduce(
             id: entry.id,
             url: entry.url,
             created: entry.created,
+            ...(entry.history
+              ? { history: normalizeAnalysisHistory(entry.history, entry.url) }
+              : {}),
           });
+        else if (entry.history) {
+          const own = state.analysis_queue.find((e) => e.id === entry.id)!;
+          if (!own.history)
+            own.history = normalizeAnalysisHistory(entry.history, entry.url);
+        }
       }
       validateAnalysisQueue(state.analysis_queue);
       data = { restored: true };
