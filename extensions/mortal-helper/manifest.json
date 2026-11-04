@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "KyokuLoop Mortal Helper",
+  "description": "本人が開いたMortalの1件を送信し、解析完了後にJSONを保存します。",
+  "version": "0.1.0.20",
+  "version_name": "DEV-11.04-20",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "downloads", "webNavigation", "alarms"],
+  "host_permissions": ["https://mjai.ekyu.moe/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": {
+    "default_title": "Mortalの送信とJSON保存",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mjai.ekyu.moe/*"],
+      "js": ["inspector.js", "content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
