@@ -11,6 +11,8 @@
 
 iPadは初回の「端末だけで使う準備」後、取得済みMortal JSONの登録と復習もWindows停止中に行える。操作と端末記録の復旧は [IPAD-STANDALONE.md](IPAD-STANDALONE.md) を参照。
 
+iPad・スマホの下部タブは「学習・牌譜・設定」。起動時は学習を開く。URL/解析結果の登録は「牌譜」、保存/同期/学習の設定/記録の保存と復旧は「設定」へ進む。詳細は [PHONE-NAVIGATION.md](PHONE-NAVIGATION.md)。
+
 ## バックアップ
 
 **KyokuLoop バックアップ**、またはアプリの **学習 → バックアップと復元 → バックアップを作成** を使う。

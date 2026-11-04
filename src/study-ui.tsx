@@ -471,6 +471,7 @@ function BackupDialog({
 }
 export function StudyPanel({
   portable = false,
+  reportFilter,
   workspace,
   active,
   filter,
@@ -482,6 +483,7 @@ export function StudyPanel({
   onReview,
 }: {
   portable?: boolean;
+  reportFilter?: string[];
   workspace: Workspace;
   active: boolean;
   filter: string;
@@ -600,15 +602,17 @@ export function StudyPanel({
       );
       await onRefresh();
     });
-  const items = workspace.items.filter(
-    (i) =>
-      filter === "すべて" ||
-      (filter === "今日"
-        ? !["保留", "習得済み"].includes(i.status) &&
-          !!i.due &&
-          i.due <= (workspace.today ?? "")
-        : i.status === filter),
-  );
+  const items = workspace.items
+    .filter((i) => !reportFilter || reportFilter.includes(i.report))
+    .filter(
+      (i) =>
+        filter === "すべて" ||
+        (filter === "今日"
+          ? !["保留", "習得済み"].includes(i.status) &&
+            !!i.due &&
+            i.due <= (workspace.today ?? "")
+          : i.status === filter),
+    );
   return (
     <>
       {error && (
@@ -648,7 +652,7 @@ export function StudyPanel({
             )}
             <button
               className="text-button"
-              aria-label="中断してホームへ"
+              aria-label={portable ? "中断して学習へ" : "中断してホームへ"}
               disabled={busy}
               onClick={onHome}
             >
@@ -785,7 +789,7 @@ export function StudyPanel({
                   ライブラリへ
                 </button>
                 <button className="button secondary" onClick={onHome}>
-                  ホームへ
+                  {portable ? "学習へ" : "ホームへ"}
                 </button>
                 {session.can_undo && (
                   <button
@@ -803,7 +807,7 @@ export function StudyPanel({
       ) : (
         <>
           <div className="page-heading">
-            <h1>学習ライブラリ</h1>
+            <h1>{reportFilter ? "牌譜の問題" : "学習ライブラリ"}</h1>
             {!portable && (
               <button
                 className="button secondary"
@@ -814,8 +818,16 @@ export function StudyPanel({
               </button>
             )}
           </div>
-          <PracticeCard workspace={workspace} disabled={busy} onBegin={begin} />
-          <StudyOptions />
+          {!portable && (
+            <>
+              <PracticeCard
+                workspace={workspace}
+                disabled={busy}
+                onBegin={begin}
+              />
+              <StudyOptions />
+            </>
+          )}
           <div className="filters" aria-label="学習状態">
             {["今日", "未学習", "復習中", "習得済み", "保留", "すべて"].map(
               (s) => (

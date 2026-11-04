@@ -109,7 +109,10 @@ for (const mode of ["button", "select", "repeat"] as const)
     page,
   }) => {
     await open(page);
-    await page.getByText("端末の管理", { exact: true }).click();
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page.getByText("学習の設定", { exact: true }).click();
     const labels = {
       button: "回答ボタンで決定",
@@ -129,7 +132,9 @@ for (const mode of ["button", "select", "repeat"] as const)
     expect(
       await page.evaluate(() => localStorage.getItem("kyokuloop-answer-mode")),
     ).toBe(mode);
-    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await page
+      .getByRole("button", { name: "5問練習する", exact: true })
+      .click();
     const tile = page.getByTestId("real-hand").locator("button").first();
     await tile.click();
     if (mode !== "select") {
@@ -185,7 +190,7 @@ test("changed remote questions advance automatically while keeping pending answe
   const before = structuredClone(state);
   await open(page, state);
   await page
-    .getByRole("button", { name: "復習を再開する", exact: false })
+    .getByRole("button", { name: "続きから再開", exact: false })
     .click();
   await expect(page.getByText("4 / 5 問", { exact: true })).toBeVisible();
   await expect(page.getByTestId("real-hand")).toBeVisible();
@@ -208,7 +213,7 @@ test("all changed remote questions finish without a manual skip or invented answ
   for (const item of state.pack!.items) item.revision++;
   await open(page, state);
   await page
-    .getByRole("button", { name: "復習を再開する", exact: false })
+    .getByRole("button", { name: "続きから再開", exact: false })
     .click();
   await expect(
     page.getByText("この復習の対象は更新済みです。", { exact: true }),
@@ -229,7 +234,9 @@ for (const [width, height] of [
   }, info) => {
     await page.setViewportSize({ width, height });
     await open(page, initial(mortal));
-    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await page
+      .getByRole("button", { name: "5問練習する", exact: true })
+      .click();
     await settle(page);
     const hand = page.getByTestId("real-hand");
     if (width >= 1000) {
@@ -239,8 +246,17 @@ for (const [width, height] of [
         Math.abs(board!.y + board!.height - card!.y - card!.height),
       ).toBeLessThan(2);
       const handBounds = await hand.boundingBox();
-      const confirmBounds = await page.getByRole("button", {name:"回答する",exact:true}).boundingBox();
-      expect(Math.abs(confirmBounds!.y + confirmBounds!.height - handBounds!.y - handBounds!.height)).toBeLessThan(14);
+      const confirmBounds = await page
+        .getByRole("button", { name: "回答する", exact: true })
+        .boundingBox();
+      expect(
+        Math.abs(
+          confirmBounds!.y +
+            confirmBounds!.height -
+            handBounds!.y -
+            handBounds!.height,
+        ),
+      ).toBeLessThan(14);
     }
     await hand.locator("button").last().click();
     await page.getByRole("button", { name: "回答する", exact: true }).click();
@@ -291,7 +307,7 @@ test("sync trouble stays in the fixed header and its details never move the boar
   const state = initial();
   state.last_sync = "2026-11-01T00:00:00Z";
   await open(page, state);
-  await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+  await page.getByRole("button", { name: "5問練習する", exact: true }).click();
   await settle(page);
   const before = await page.locator(".board-panel").boundingBox();
   await page.evaluate(() => {

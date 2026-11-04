@@ -36,6 +36,10 @@ for (const [width, height] of [
     });
     await page.goto("/phone/");
     await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
+    await page
       .getByRole("button", { name: "問題を端末に保存", exact: true })
       .click();
     await expect(page.getByTestId("offline-status")).toContainText(
@@ -47,9 +51,14 @@ for (const [width, height] of [
     await expect(
       page.getByRole("button", { name: "記録をファイルに保存" }),
     ).not.toBeVisible();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await expect(page.locator(".phone-review-card")).toBeVisible();
     expect(
       await page
-        .locator(".study-hero")
+        .locator(".phone-review-card")
         .evaluate((e) => e.getBoundingClientRect().height),
     ).toBeLessThan(150);
     expect(
@@ -57,14 +66,9 @@ for (const [width, height] of [
         .locator(".phone-tools")
         .evaluate((e) => (e as HTMLDetailsElement).open),
     ).toBe(false);
-    const navTop = await page
-      .locator(".phone-nav")
-      .evaluate((e) => e.getBoundingClientRect().top);
-    expect(
-      await page
-        .getByText("端末の管理", { exact: true })
-        .evaluate((e) => e.getBoundingClientRect().bottom),
-    ).toBeLessThanOrEqual(navTop);
+    await expect(
+      page.getByText("端末の管理", { exact: true }),
+    ).not.toBeVisible();
     if (proof && width === 390 && info.project.name === "phone") {
       mkdirSync(proof, { recursive: true });
       await page.screenshot({
@@ -73,6 +77,10 @@ for (const [width, height] of [
       });
     }
     await context.setOffline(true);
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
     await page.getByRole("button", { name: "今日の復習を始める" }).click();
     await expect(page.locator(".phone-nav")).not.toBeVisible();
     const hand = page.getByTestId("real-hand");
@@ -178,6 +186,10 @@ test("all 37 tile faces remain self-contained after offline reload", async ({
   );
   await page.goto("/phone/");
   await page
+    .getByRole("navigation", { name: "メイン" })
+    .getByRole("button", { name: "設定", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "問題を端末に保存", exact: true })
     .click();
   await expect(page.getByTestId("offline-status")).toContainText(
@@ -185,6 +197,10 @@ test("all 37 tile faces remain self-contained after offline reload", async ({
   );
   await context.setOffline(true);
   await page.reload();
+  await page
+    .getByRole("navigation", { name: "メイン" })
+    .getByRole("button", { name: "学習", exact: true })
+    .click();
   await page.getByRole("button", { name: "今日の復習を始める" }).click();
   await expect.poll(() => page.locator(".river .tile-art").count()).toBe(37);
   expect(

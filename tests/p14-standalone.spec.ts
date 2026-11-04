@@ -56,12 +56,20 @@ for (const scenario of ["save", "sync", "retry", "empty"] as const) {
     await page.goto("/phone/");
     if (scenario === "empty") {
       await page
+        .getByRole("navigation", { name: "メイン" })
+        .getByRole("button", { name: "設定", exact: true })
+        .click();
+      await page
         .getByRole("button", { name: "問題を端末に保存", exact: true })
         .click();
       await expect(
         page.getByRole("button", { name: "端末だけで使う準備", exact: true }),
       ).toBeEnabled({ timeout: 30000 });
     }
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "端末だけで使う準備", exact: true })
       .click();
@@ -86,6 +94,10 @@ for (const scenario of ["save", "sync", "retry", "empty"] as const) {
         "オフライン利用可能",
       );
       unavailable = false;
+      await page
+        .getByRole("navigation", { name: "メイン" })
+        .getByRole("button", { name: "設定", exact: true })
+        .click();
       await page
         .getByRole("button", { name: "今すぐ同期", exact: true })
         .click();
@@ -126,6 +138,10 @@ for (const scenario of ["save", "sync", "retry", "empty"] as const) {
     await expect(page.getByTestId("offline-status")).toHaveText(
       `オフライン利用可能 · ${pack.items.length}問`,
     );
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "今日の復習を始める", exact: false })
       .click();
@@ -314,6 +330,10 @@ test("cached standalone Worker matches Windows material offline under the phone 
   try {
     await page.goto("/phone/");
     await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
+    await page
       .getByRole("button", { name: "端末だけで使う準備", exact: true })
       .click();
     await expect(page.getByTestId("compiler-ready")).toBeVisible({
@@ -348,6 +368,10 @@ test("cached standalone Worker matches Windows material offline under the phone 
     expect(actual).toEqual(wanted);
 
     // Use the shipped UI, not a direct reducer call, for the offline path.
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "牌譜", exact: true })
+      .click();
     await page.getByText("解析結果を追加", { exact: true }).click();
     const input = page.getByLabel("Mortal JSON / JSON.gz", { exact: true });
     await input.setInputFiles({
@@ -396,7 +420,11 @@ test("cached standalone Worker matches Windows material offline under the phone 
     await expect(page.getByTestId("offline-status")).toHaveText(
       "オフライン利用可能 · 2問",
     );
-    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page.getByRole("button", { name: /問練習する/, exact: true }).click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
     await expect(page.getByTestId("study-comparison")).toHaveCount(0);
     await page.locator(".concealed-hand").first().click();
@@ -416,18 +444,30 @@ test("cached standalone Worker matches Windows material offline under the phone 
     ]);
     // Returning to the app refreshes the nested workspace session offline.
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-    await expect(page.getByRole("button", { name: "理解した", exact: true })).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "理解した", exact: true }),
+    ).toBeEnabled();
     await expect(page.locator(".comparison-policy")).toHaveText([
-      /^\d+\.\d%$/, /^\d+\.\d%$/, /^\d+\.\d%$/,
+      /^\d+\.\d%$/,
+      /^\d+\.\d%$/,
+      /^\d+\.\d%$/,
     ]);
     await page.getByRole("button", { name: "理解した", exact: true }).click();
     await page.reload();
     await page
-      .getByRole("button", { name: "復習を再開する", exact: false })
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "続きから再開", exact: false })
       .click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
     await page
-      .getByRole("button", { name: "中断してホームへ", exact: true })
+      .getByRole("button", { name: "中断して学習へ", exact: true })
+      .click();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
       .click();
     await page.getByText("端末の管理", { exact: true }).click();
     const downloadEvent = page.waitForEvent("download");
@@ -458,6 +498,10 @@ test("cached standalone Worker matches Windows material offline under the phone 
         }),
     );
     await page.reload();
+    await page
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "設定", exact: true })
+      .click();
     await page.getByText("端末の管理", { exact: true }).click();
     await expect(page.getByTestId("compiler-ready")).toHaveCount(0);
     await expect(
@@ -488,7 +532,11 @@ test("cached standalone Worker matches Windows material offline under the phone 
       { timeout: 90000 },
     );
     await page
-      .getByRole("button", { name: "復習を再開する", exact: false })
+      .getByRole("navigation", { name: "メイン" })
+      .getByRole("button", { name: "学習", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "続きから再開", exact: false })
       .click();
     await expect(page.getByTestId("real-hand")).toBeVisible();
     // Recompile retained originals through the cached Worker while offline.
@@ -500,7 +548,7 @@ test("cached standalone Worker matches Windows material offline under the phone 
     );
     await expect(page.locator(".concealed-hand .tile-art")).not.toHaveCount(0);
     await page
-      .getByRole("button", { name: "中断してホームへ", exact: true })
+      .getByRole("button", { name: "中断して学習へ", exact: true })
       .click();
     connected = true;
     await context.setOffline(false);
