@@ -263,6 +263,134 @@ test("an empty device offers replay import without an unusable study button", as
   ).toHaveAttribute("aria-current", "page");
 });
 
+for (const [width, count] of [
+  [390, 1],
+  [390, 2],
+  [1180, 1],
+])
+  test(`automatic source details are visible before registration with ${count} candidates at ${width}px`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 844 });
+    await openPhone(page);
+    await page.evaluate(
+      (count) =>
+        new Promise<void>((resolve, reject) => {
+          const request = indexedDB.open("kyokuloop-phone-v1", 1);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result,
+              tx = db.transaction("local", "readwrite"),
+              store = tx.objectStore("local");
+            const read = store.get("state");
+            read.onsuccess = () => {
+              const state = read.result;
+              const player = 123,
+                actor = 1358437 + ((7 * player + 1117113) ^ 86216345);
+              for (let n = 0; n < count; n++) {
+                const id = `260101-fictional-preview-${n}_a${actor}`,
+                  url = `https://game.mahjongsoul.com/?paipu=${id}`;
+                state.analysis_queue[n] = {
+                  id,
+                  url,
+                  created: "2026-11-04T00:00:00Z",
+                  received: "2026-11-04T00:00:00Z",
+                  history: {
+                    url,
+                    player,
+                    seat: 0,
+                    mode: 12,
+                    rank: 1,
+                    at: `2026-11-0${3 + n}T00:00:00Z`,
+                    players: [
+                      "自分",
+                      "長い架空相手名".repeat(12),
+                      "架空C",
+                      "架空D",
+                    ].map((name) => ({ name, score: 25000 })),
+                  },
+                };
+              }
+              store.put(state, "state");
+            };
+            tx.oncomplete = () => {
+              db.close();
+              resolve();
+            };
+            tx.onerror = () => reject(tx.error);
+          };
+        }),
+      count,
+    );
+    await page.reload();
+    await page.route("**/phone/mortal", (route) =>
+      route.fulfill({
+        json: {
+          ok: true,
+          data: {
+            engine: "Mortal",
+            token: "fictional-preview",
+            source: pack.source,
+            target_seat: 0,
+            final_scores: [25000, 25000, 25000, 25000],
+            players: ["Aさん", "Bさん", "Cさん", "Dさん"],
+            models: [{ index: 0, name: "4.1b" }],
+            rounds: 4,
+          },
+        },
+      }),
+    );
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "onLine", {
+        get: () => true,
+        configurable: true,
+      });
+      window.dispatchEvent(new Event("online"));
+    });
+    await tab(page, "牌譜");
+    await page.getByText("解析結果を追加", { exact: true }).click();
+    await page
+      .getByLabel("Mortal JSON / JSON.gz", { exact: true })
+      .setInputFiles({
+        name: "fictional-preview.json",
+        mimeType: "application/json",
+        buffer: Buffer.from("{}"),
+      });
+    const preview = page
+      .getByRole("status")
+      .filter({
+        hasText: count === 1 ? "紐付け先（自動選択）" : "自動紐付けの候補",
+      });
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText("2026/11/3 09:00");
+    await expect(preview).toContainText("1位 · 25,000点");
+    await expect(preview).toContainText("架空C / 架空D");
+    if (count === 2) {
+      await expect(preview).toContainText("2026/11/4 09:00");
+      await expect(preview).toContainText(
+        "候補が複数あるため、元牌譜を選んでください。",
+      );
+    }
+    await expect(
+      page.getByRole("combobox", { name: "元牌譜（任意）", exact: true }),
+    ).toHaveValue(
+      count === 1
+        ? `260101-fictional-preview-0_a${1358437 + ((7 * 123 + 1117113) ^ 86216345)}`
+        : "",
+    );
+    expect(
+      await preview.evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page
+      .locator(".phone-result-import")
+      .screenshot({ path: info.outputPath(`candidate-${count}-${width}.png`) });
+  });
+
 const inputURL = (n: number) =>
   `https://game.mahjongsoul.com/?paipu=260101-fictional-unified-${n}_a123`;
 async function stored(page: Page) {
