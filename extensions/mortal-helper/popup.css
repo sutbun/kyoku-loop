@@ -7,7 +7,7 @@
   color-scheme: light;
 }
 body {
-  width: 350px;
+  width: 410px;
   margin: 0;
   padding: 16px;
 }
@@ -30,6 +30,8 @@ p {
 .buttons {
   display: flex;
   gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 button {
   font: inherit;
@@ -40,11 +42,50 @@ button {
   background: #f7f7f7;
   color: inherit;
 }
-#start {
+#start,
+#batch-start {
   background: #175e49;
   color: white;
   border-color: #175e49;
   flex: 1;
+}
+select {
+  font: inherit;
+  padding: 5px;
+}
+.load-row {
+  margin-top: 12px;
+}
+.load-row label {
+  margin-left: auto;
+}
+#batch-list {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 12px 0;
+  border-block: 1px solid #ddd;
+}
+.queue-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 2px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid #eee;
+}
+.queue-entry input {
+  margin-top: 5px;
+  flex: none;
+}
+.queue-entry small {
+  display: block;
+}
+#batch-notice {
+  white-space: pre-line;
+  min-height: 22px;
+}
+details {
+  margin-top: 16px;
 }
 button:disabled {
   opacity: 0.5;

@@ -1,4 +1,11 @@
 import { Helper, active, MAX_BYTES, route } from "./core.js";
+import { APP, BatchRunner, choices } from "./batch.js";
+import {
+  pendingPayload,
+  getPayload,
+  putPayload,
+  removePayload,
+} from "./payloads.js";
 
 const ready = chrome.storage.local.setAccessLevel({
   accessLevel: "TRUSTED_CONTEXTS",
@@ -15,6 +22,118 @@ const helper = new Helper({
     await ready;
     await chrome.storage.local.set({ state });
   },
+});
+const isAppURL = (value) => {
+  try {
+    const u = new URL(value);
+    return u.origin === APP && u.pathname === "/" && !u.username && !u.password;
+  } catch {
+    return false;
+  }
+};
+async function appCall(tabId, message) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!isAppURL(tab.url)) throw Error("local_unavailable");
+    let ping;
+    try {
+      ping = await chrome.tabs.sendMessage(
+        tabId,
+        { type: "APP_PING" },
+        { frameId: 0 },
+      );
+    } catch {
+      /* Install only our isolated bridge, retaining the app's current UI. */
+    }
+    if (!ping?.ok)
+      await chrome.scripting.executeScript({
+        target: { tabId, frameIds: [0] },
+        files: ["app-content.js"],
+      });
+    const frame = await chrome.webNavigation.getFrame({ tabId, frameId: 0 });
+    if (!frame?.documentId || !isAppURL(frame.url))
+      throw Error("local_unavailable");
+    const result = await chrome.tabs.sendMessage(tabId, message, {
+      documentId: frame.documentId,
+    });
+    if (!result?.ok) throw Error(result?.error || "local_unavailable");
+    return result.data;
+  } catch (e) {
+    throw Error(
+      /^[a-z_]{1,60}$/.test(e.message) ? e.message : "local_unavailable",
+    );
+  }
+}
+async function findApp() {
+  const [current] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+  if (isAppURL(current?.url)) return current.id;
+  const tabs = (await chrome.tabs.query({ url: APP + "/*" })).filter((t) =>
+    isAppURL(t.url),
+  );
+  if (tabs.length !== 1) throw Error("open_kyokuloop_tab");
+  return tabs[0].id;
+}
+const batch = new BatchRunner(helper, {
+  now: () => Date.now(),
+  list: (tabId) => appCall(tabId, { type: "APP_LIST" }),
+  pending: pendingPayload,
+  get: getPayload,
+  put: putPayload,
+  remove: removePayload,
+  open: async (url, previous) => {
+    if (!previous) return chrome.tabs.create({ url, active: true });
+    let tab;
+    try {
+      tab = await chrome.tabs.get(previous);
+    } catch {
+      throw Error("tab_closed");
+    }
+    const page = route(tab.url),
+      state = await helper.state(),
+      b = state.batch;
+    const current = b.items[b.index];
+    const previousTasks = state.jobs
+      .filter((j) => b.items.some((i) => i.jobId === j.id))
+      .map((j) => j.task);
+    if (
+      !(page?.kind === "result" && previousTasks.includes(page.task)) &&
+      !(page?.kind === "input" && page.source === current.url)
+    )
+      throw Error("page_changed");
+    return chrome.tabs.update(previous, { url });
+  },
+  read: async (job, documentId) => {
+    if (!documentId) throw Error("wrong_result");
+    let result;
+    try {
+      result = await chrome.tabs.sendMessage(
+        job.tabId,
+        { type: "READ_REPORT", task: job.task, model: job.model },
+        { documentId },
+      );
+    } catch {
+      throw Error("report_read_failed");
+    }
+    if (!result?.ok) throw Error(result?.error || "report_read_failed");
+    return {
+      jobId: job.id,
+      source: job.source,
+      task: job.task,
+      model: job.model,
+      data: result.data,
+      hash: result.hash,
+    };
+  },
+  register: (tabId, job, payload) =>
+    appCall(tabId, {
+      type: "APP_IMPORT",
+      source: job.source,
+      model: job.model,
+      data: payload.data,
+    }),
 });
 let pending = Promise.resolve();
 const serial = (fn) => {
@@ -41,7 +160,7 @@ async function refresh() {
   const { jobs } = await helper.state();
   const job = jobs.find(active);
   await chrome.action.setBadgeText({ text: job ? "処理中" : "" });
-  if (job)
+  if (job || (await helper.state()).batch?.phase === "running")
     await chrome.alarms.create("mortal-helper-expiry", {
       periodInMinutes: 0.5,
     });
@@ -87,9 +206,37 @@ const popupSender = (sender) =>
   sender.url === chrome.runtime.getURL("popup.html");
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  serial(async () => {
+  const dispatch = async () => {
     if (popupSender(sender)) {
       await expireJobs();
+      if (message.type === "BATCH_LOAD") {
+        const appTabId = await findApp();
+        const state = await helper.state();
+        return {
+          entries: choices(
+            await appCall(appTabId, { type: "APP_LIST" }),
+            state.jobs,
+            message.model || "4.1b",
+            state.blocks,
+          ),
+        };
+      }
+      if (message.type === "BATCH_START") {
+        await batch.start(message.ids, await findApp(), message.model);
+        return { ok: true };
+      }
+      if (message.type === "BATCH_STOP") {
+        await batch.stop();
+        return { ok: true };
+      }
+      if (message.type === "BATCH_RESUME") {
+        await batch.resume(await findApp());
+        return { ok: true };
+      }
+      if (message.type === "BATCH_END") {
+        await batch.end();
+        return { ok: true };
+      }
       const [tab] = await chrome.tabs.query({
         active: true,
         currentWindow: true,
@@ -111,9 +258,13 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
           tabId: tab?.id,
           snapshot,
           jobs: (await helper.state()).jobs.slice(-20).reverse(),
+          batch: (await helper.state()).batch || null,
+          hasPendingPayload: !!(await pendingPayload()),
         };
       }
       if (message.type === "START") {
+        if (["running", "paused"].includes((await helper.state()).batch?.phase))
+          throw Error("another_job_running");
         if (route(tab?.url)?.kind !== "input") throw Error("wrong_page");
         const frame = await chrome.webNavigation.getFrame({
           tabId: tab.id,
@@ -126,6 +277,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
           { type: "INSPECT" },
           { documentId: frame.documentId },
         );
+        const blocked = (await helper.state()).blocks?.[snapshot?.source];
+        if (blocked) throw Error(blocked);
         const job = await helper.start({
           tabId: tab.id,
           documentId: frame.documentId,
@@ -145,6 +298,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         return { ok: true, id: job.id };
       }
       if (message.type === "CANCEL") {
+        if ((await helper.state()).batch?.phase === "running")
+          throw Error("another_job_running");
         const job = (await helper.state()).jobs.find(
           (j) => j.tabId === tab?.id && active(j),
         );
@@ -194,12 +349,14 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     } else if (pageSender(sender)) {
       if (message.type === "TICK") {
         await expireJobs();
-        const response = await helper.tick({
+        const input = {
           tabId: sender.tab.id,
           documentId: sender.documentId,
           url: sender.url,
           snapshot: message.snapshot,
-        });
+        };
+        const response =
+          (await batch.tick(input)) || (await helper.tick(input));
         if (response.action === "download") await save(response);
         return response;
       }
@@ -207,6 +364,13 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         message.type === "STOP" &&
         ["form_changed", "manual_submission"].includes(message.reason)
       ) {
+        const b = (await helper.state()).batch;
+        if (
+          ["running", "paused"].includes(b?.phase) &&
+          b.tabId === sender.tab.id &&
+          b.items[b.index]?.documentId === sender.documentId
+        )
+          await batch.pause(message.reason);
         if (
           (await helper.state()).jobs.some(
             (j) =>
@@ -220,17 +384,22 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       }
     }
     throw Error("invalid_message");
+  };
+  serial(async () => {
+    const value = await dispatch();
+    await batch.drive();
+    await refresh();
+    return value;
   })
-    .then(async (value) => {
-      await refresh();
-      respond(value);
-    })
+    .then(respond)
     .catch((error) => respond({ error: error.message || "operation_failed" }));
   return true;
 });
 chrome.webNavigation.onCommitted.addListener((detail) => {
   void serial(async () => {
     await helper.navigate(detail);
+    await batch.navigation(detail);
+    await batch.drive();
     await refresh();
   }).catch(() => {});
 });
@@ -238,12 +407,17 @@ chrome.webNavigation.onErrorOccurred.addListener((detail) => {
   if (detail.frameId === 0)
     void serial(async () => {
       await helper.stopTab(detail.tabId, "navigation_failed");
+      if ((await helper.state()).batch?.tabId === detail.tabId)
+        await batch.pause("navigation_failed");
       await refresh();
     }).catch(() => {});
 });
 chrome.tabs.onRemoved.addListener((tabId) => {
   void serial(async () => {
     await helper.stopTab(tabId, "tab_closed");
+    const b = (await helper.state()).batch;
+    if (b?.tabId === tabId || b?.appTabId === tabId)
+      await batch.pause("tab_closed");
     await refresh();
   }).catch(() => {});
 });
@@ -256,6 +430,7 @@ chrome.downloads.onChanged.addListener((delta) => {
     )
       return;
     await finishDownload((await chrome.downloads.search({ id: delta.id }))[0]);
+    await batch.drive();
     await refresh();
   }).catch(() => {});
 });
@@ -269,6 +444,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         (await chrome.downloads.search({ id: j.downloadId }))[0],
       );
     await expireJobs();
+    await batch.drive();
     await refresh();
   }).catch(() => {});
 });
@@ -278,6 +454,7 @@ async function endInterrupted() {
       await helper.stopTab(j.tabId, "browser_restarted");
       await cancelDownload(j.downloadId);
     }
+    await batch.pause("browser_restarted");
     await refresh();
   });
 }

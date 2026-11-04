@@ -7,17 +7,49 @@
   </head>
   <body>
     <header>
-      <strong>Mortalの送信とJSON保存</strong><small id="version"></small>
+      <strong>Mortal解析とKyokuLoop登録</strong><small id="version"></small>
     </header>
-    <p id="selection">Mortalの入力ページを開いてください。</p>
-    <div class="buttons">
-      <button id="start" disabled>この1件を開始</button
-      ><button id="cancel" disabled>停止</button>
-    </div>
-    <p id="notice" role="status" aria-live="polite"></p>
-    <p class="hint">
-      保存先：既定のダウンロード先 → KyokuLoop-Mortal<br />JSONの内容検証とKyokuLoopへの登録は別の処理です。
-    </p>
+    <section aria-label="まとめて解析・登録">
+      <div class="buttons load-row">
+        <button id="batch-load">KyokuLoopから読み込む</button>
+        <label
+          >モデル
+          <select id="batch-model">
+            <option>4.1b</option>
+            <option>4.1a</option>
+            <option>4.1c</option>
+            <option>4.0</option>
+            <option>3.0</option>
+          </select></label
+        >
+      </div>
+      <p class="hint">
+        PCのKyokuLoop（127.0.0.1:1460）を同じブラウザで開いてください。四人半荘を最大20件選べます。
+      </p>
+      <div id="batch-list" aria-label="牌譜一覧">
+        <p>「KyokuLoopから読み込む」で解析待ちを表示します。</p>
+      </div>
+      <div class="buttons">
+        <button id="batch-start" disabled>選択した0件を解析・登録</button
+        ><button id="batch-stop" disabled>停止</button>
+      </div>
+      <p id="batch-notice" role="status" aria-live="polite"></p>
+      <p class="hint">
+        1件の保存・登録が完了してから30秒空けて次へ進みます。処理中はMortalタブを残してください。
+      </p>
+    </section>
+    <details id="single">
+      <summary>開いているMortalページを1件だけ保存</summary>
+      <p id="selection">Mortalの入力ページを開いてください。</p>
+      <div class="buttons">
+        <button id="start" disabled>この1件を開始</button
+        ><button id="cancel" disabled>停止</button>
+      </div>
+      <p id="notice" role="status" aria-live="polite"></p>
+      <p class="hint">
+        保存先：既定のダウンロード先 → KyokuLoop-Mortal<br />JSONの内容検証とKyokuLoopへの登録は別の処理です。
+      </p>
+    </details>
     <details>
       <summary>最近の処理・元URLとの対応</summary>
       <div id="history"></div>
