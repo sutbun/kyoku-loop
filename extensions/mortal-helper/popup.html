@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>KyokuLoop Mortal Helper</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <strong>Mortalの送信とJSON保存</strong><small id="version"></small>
+    </header>
+    <p id="selection">Mortalの入力ページを開いてください。</p>
+    <div class="buttons">
+      <button id="start" disabled>この1件を開始</button
+      ><button id="cancel" disabled>停止</button>
+    </div>
+    <p id="notice" role="status" aria-live="polite"></p>
+    <p class="hint">
+      保存先：既定のダウンロード先 → KyokuLoop-Mortal<br />JSONの内容検証とKyokuLoopへの登録は別の処理です。
+    </p>
+    <details>
+      <summary>最近の処理・元URLとの対応</summary>
+      <div id="history"></div>
+      <button id="export">対応表を保存</button>
+    </details>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

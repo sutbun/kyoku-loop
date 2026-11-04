@@ -1,0 +1,72 @@
+:root {
+  font:
+    14px/1.55 system-ui,
+    sans-serif;
+  color: #202124;
+  background: #fff;
+  color-scheme: light;
+}
+body {
+  width: 350px;
+  margin: 0;
+  padding: 16px;
+}
+header strong,
+header small {
+  display: block;
+}
+small,
+.hint {
+  color: #666;
+  font-size: 12px;
+}
+p {
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+#selection {
+  white-space: pre-line;
+}
+.buttons {
+  display: flex;
+  gap: 8px;
+}
+button {
+  font: inherit;
+  padding: 7px 12px;
+  cursor: pointer;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: #f7f7f7;
+  color: inherit;
+}
+#start {
+  background: #175e49;
+  color: white;
+  border-color: #175e49;
+  flex: 1;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #175e49;
+  outline-offset: 3px;
+}
+#notice {
+  min-height: 22px;
+}
+summary {
+  cursor: pointer;
+}
+.record {
+  border-top: 1px solid #ddd;
+  margin: 10px 0;
+  padding-top: 10px;
+  overflow-wrap: anywhere;
+}
+.record p {
+  margin: 4px 0;
+}
