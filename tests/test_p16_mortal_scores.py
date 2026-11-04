@@ -51,6 +51,67 @@ class MortalScoresTests(unittest.TestCase):
         self.assertEqual(final_scores(r), [26500, 23500, 26500, 23500])
         self.assertEqual(final_scores(repeated_rounds(two_rounds())), [25000]*4)
 
+    def test_terminal_draw_settles_verified_deposits_to_unique_leader(self):
+        for pool, reaches in [(0, [2]), (2, []), (1, [0, 2])]:
+            with self.subTest(pool=pool, reaches=reaches):
+                start = [14000, 60000-pool*1000, 10000, 16000]
+                r = ending(start, [{'type': 'ryukyoku', 'deltas': [-1000, -1000, 3000, -1000]}], reaches)
+                r['mjai_log'][1]['kyotaku'] = pool
+                r['split_logs'][0]['log'][0][0][2] = pool
+                expected = [v-(1000 if i in reaches else 0)+d for i, (v, d) in enumerate(zip(start, [-1000, -1000, 3000, -1000]))]
+                expected[1] += (pool+len(reaches))*1000
+                before = copy.deepcopy(r)
+                self.assertEqual(final_scores(r), expected)
+                self.assertEqual(r, before)
+
+    def test_unverified_terminal_deposits_abstain(self):
+        base = ending([14000, 60000, 10000, 16000],
+                      [{'type': 'ryukyoku', 'deltas': [-1000, -1000, 3000, -1000]}], [2])
+        base['mjai_log'][1]['kyotaku'] = 0
+        base['split_logs'][0]['log'][0][0][2] = 0
+        mutations = [
+            lambda r: r['mjai_log'][1].pop('kyotaku'),
+            lambda r: r['mjai_log'][1].update(kyotaku=True),
+            lambda r: r['mjai_log'][1].update(kyotaku=-1),
+            lambda r: r['split_logs'][0]['log'][0][0].__setitem__(2, 1),
+            lambda r: r['mjai_log'][-3]['deltas'].__setitem__(0, -2000),
+            lambda r: r['mjai_log'][-3].update(type='hora'),
+            lambda r: r['mjai_log'].pop(),
+        ]
+        for mutate in mutations:
+            with self.subTest(mutate=mutate):
+                r = copy.deepcopy(base)
+                mutate(r)
+                self.assertIsNone(final_scores(r))
+        tied = ending([30000, 30000, 20000, 20000], [{'type': 'ryukyoku', 'deltas': [0]*4}], [2])
+        tied['mjai_log'][1]['kyotaku'] = 0
+        tied['split_logs'][0]['log'][0][0][2] = 0
+        self.assertIsNone(final_scores(tied))
+        # Matching deltas in both representations are still insufficient if
+        # the deficit is not exactly the independently counted deposit pool.
+        invalid = copy.deepcopy(base)
+        invalid['mjai_log'][-3]['deltas'][0] -= 1000
+        invalid['split_logs'][0]['log'][0][-1][1][0] -= 1000
+        self.assertIsNone(final_scores(invalid))
+        invalid = copy.deepcopy(base)
+        invalid['mjai_log'][1]['scores'][0] -= 1000
+        invalid['split_logs'][0]['log'][0][1][0] -= 1000
+        self.assertIsNone(final_scores(invalid))
+
+    def test_verified_draw_settlement_is_exposed_by_local_inspection(self):
+        report = ending([14000, 60000, 10000, 16000],
+                        [{'type': 'ryukyoku', 'deltas': [-1000, -1000, 3000, -1000]}], [2])
+        report['mjai_log'][1]['kyotaku'] = 0
+        report['split_logs'][0]['log'][0][0][2] = 0
+        with tempfile.TemporaryDirectory(dir='D:/dev-data/kyoku-loop/private') as tmp:
+            store = Store(Path(tmp)/'scores.sqlite3')
+            try:
+                result = store.stage(json.dumps(report).encode(), None)
+                self.assertEqual(result['final_scores'], [13000, 60000, 12000, 15000])
+                self.assertEqual(store.db.execute('SELECT count(*) FROM reports').fetchone()[0], 0)
+            finally:
+                store.close()
+
     def test_missing_invalid_inconsistent_or_unsettled_scores_abstain(self):
         base = ending([25000]*4, [{'type': 'hora', 'deltas': [8000, -8000, 0, 0]}])
         mutations = [
