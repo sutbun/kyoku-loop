@@ -58,59 +58,59 @@ export function PhoneReplayList({
               key={e.id}
               data-testid="analysis-row"
             >
-              <div className="phone-replay-summary">
-                <strong>{title}</strong>
-                <span className="badge">{analysisStatus(e)}</span>
-              </div>
-              <div className="phone-replay-actions">
-                <details>
-                  <summary>詳細</summary>
-                  <div className="phone-replay-detail">
-                    {e.history && (
-                      <p>
-                        {e.history.players
-                          .filter((_, seat) => seat !== e.history!.seat)
-                          .map((p) => p.name)
-                          .join(" / ")}
-                      </p>
-                    )}
-                    <small>
-                      保存：{new Date(e.created).toLocaleString("ja-JP")}
-                    </small>
-                    <small>
-                      {e.received
-                        ? "Windows受信済み"
-                        : "この端末に保存済み・未同期"}
-                    </small>
-                    {e.ready && (
-                      <button
-                        className="text-button"
-                        disabled={disabled || unsupported}
-                        onClick={() => openMortal(e.url)}
-                      >
-                        {unsupported ? "東風は対象外" : "Mortalへ"}
-                      </button>
-                    )}
-                  </div>
-                </details>
-                {e.ready && e.reports?.length ? (
-                  <button
-                    className="button secondary"
-                    disabled={disabled}
-                    onClick={() => onProblems(e.reports!)}
-                  >
-                    問題を見る
-                  </button>
-                ) : (
-                  <button
-                    className="button secondary"
-                    disabled={disabled || unsupported}
-                    onClick={() => openMortal(e.url)}
-                  >
-                    {unsupported ? "東風は対象外" : "Mortalへ"}
-                  </button>
+              <div className="phone-replay-info">
+                <div className="phone-replay-summary">
+                  <strong>{title}</strong>
+                  <span className="badge">{analysisStatus(e)}</span>
+                </div>
+                {e.history && (
+                  <p className="phone-replay-opponents">
+                    {e.history.players
+                      .filter((_, seat) => seat !== e.history!.seat)
+                      .map((p) => p.name)
+                      .join(" / ")}
+                  </p>
                 )}
               </div>
+              {e.ready && e.reports?.length ? (
+                <button
+                  className="button secondary phone-replay-primary"
+                  disabled={disabled}
+                  onClick={() => onProblems(e.reports!)}
+                >
+                  問題を見る
+                </button>
+              ) : (
+                <button
+                  className="button secondary phone-replay-primary"
+                  disabled={disabled || unsupported}
+                  onClick={() => openMortal(e.url)}
+                >
+                  {unsupported ? "東風は対象外" : "Mortalへ"}
+                </button>
+              )}
+              <details className="phone-replay-details">
+                <summary>詳細</summary>
+                <div className="phone-replay-detail">
+                  <small>
+                    保存：{new Date(e.created).toLocaleString("ja-JP")}
+                  </small>
+                  <small>
+                    {e.received
+                      ? "Windows受信済み"
+                      : "この端末に保存済み・未同期"}
+                  </small>
+                  {e.ready && (
+                    <button
+                      className="text-button"
+                      disabled={disabled || unsupported}
+                      onClick={() => openMortal(e.url)}
+                    >
+                      {unsupported ? "東風は対象外" : "Mortalへ"}
+                    </button>
+                  )}
+                </div>
+              </details>
               {!e.received && (
                 <small className="phone-replay-pending">未同期</small>
               )}
