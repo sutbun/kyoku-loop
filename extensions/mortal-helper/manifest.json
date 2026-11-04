@@ -1,21 +1,33 @@
 {
   "manifest_version": 3,
   "name": "KyokuLoop Mortal Helper",
-  "description": "本人が開いたMortalの1件を送信し、解析完了後にJSONを保存します。",
-  "version": "0.1.0.20",
-  "version_name": "DEV-11.04-20",
+  "description": "選んだ牌譜を順番にMortalで解析し、JSON保存とKyokuLoopへの登録を行います。",
+  "version": "0.1.0.21",
+  "version_name": "DEV-11.04-21",
   "minimum_chrome_version": "120",
-  "permissions": ["storage", "downloads", "webNavigation", "alarms"],
-  "host_permissions": ["https://mjai.ekyu.moe/*"],
+  "permissions": [
+    "storage",
+    "downloads",
+    "webNavigation",
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": ["https://mjai.ekyu.moe/*", "http://127.0.0.1:1460/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": {
-    "default_title": "Mortalの送信とJSON保存",
+    "default_title": "Mortal解析とKyokuLoop登録",
     "default_popup": "popup.html"
   },
   "content_scripts": [
     {
       "matches": ["https://mjai.ekyu.moe/*"],
       "js": ["inspector.js", "content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["http://127.0.0.1:1460/*"],
+      "js": ["app-content.js"],
       "run_at": "document_idle",
       "all_frames": false
     }
