@@ -11,4 +11,10 @@
 
 Windows版のナビゲーション構成は別で、この変更では維持する。
 
-検証: `npm test -- --config=playwright.phone-tabs.config.ts --project=phone` はPython coreと、日常サーバーへ接続しないEdgeの架空データ画面/ロジック検証を行う。生成画面の観測と実iPadのUX受入を区別する。
+検証は次の順で行う。最後のコマンドは日常サーバーへ接続しないEdgeの架空データ画面/ロジック検証。生成画面の観測と実iPadのUX受入を区別する。
+
+```powershell
+npm run build
+npm run test:core
+npx playwright test -c playwright.phone-tabs.config.ts --project=phone --workers=1
+```
