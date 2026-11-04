@@ -12,6 +12,7 @@ export default defineConfig({
     "phone-bulk-import.spec.ts",
     "phone-history-metadata.spec.ts",
     "mortal-source-picker.spec.ts",
+    "mortal-auto-link.spec.ts",
   ],
   webServer: undefined,
   outputDir: `test-results-phone-tabs/${process.pid}`,

@@ -107,7 +107,7 @@ for (const [width, height] of [
       page.getByRole("button", { name: "今日の復習を始める", exact: false }),
     ).toBeVisible();
     await expect(
-      page.getByLabel("雀魂共有URL", { exact: true }),
+      page.getByRole("textbox", { name: "雀魂共有URL", exact: true }),
     ).not.toBeVisible();
     await expect(
       page.getByRole("button", { name: "今すぐ同期", exact: true }),
@@ -120,12 +120,8 @@ for (const [width, height] of [
     await tab(page, "牌譜");
     await page.getByText("URLを追加", { exact: true }).click();
     await page
-      .getByLabel("雀魂共有URL", { exact: true })
+      .getByRole("textbox", { name: "雀魂共有URL", exact: true })
       .fill("https://game.mahjongsoul.com/?paipu=260101-fictional-tabs-draft");
-    await page.getByText("牌譜URLをまとめて追加", { exact: true }).click();
-    await page
-      .getByRole("textbox", { name: "URL一覧", exact: true })
-      .fill("unfinished draft");
     await tab(page, "設定");
     await expect(page.getByText("学習の設定", { exact: true })).toBeVisible();
     await expect(
@@ -133,15 +129,15 @@ for (const [width, height] of [
     ).toBeVisible();
     await tab(page, "学習");
     await expect(
-      page.getByLabel("雀魂共有URL", { exact: true }),
+      page.getByRole("textbox", { name: "雀魂共有URL", exact: true }),
     ).not.toBeVisible();
     await tab(page, "牌譜");
-    await expect(page.getByLabel("雀魂共有URL", { exact: true })).toHaveValue(
-      /draft$/,
-    );
     await expect(
-      page.getByRole("textbox", { name: "URL一覧", exact: true }),
-    ).toHaveValue("unfinished draft");
+      page.getByRole("textbox", { name: "雀魂共有URL", exact: true }),
+    ).toHaveValue(/draft$/);
+    await expect(
+      page.locator(".phone-source-add textarea:not([readonly])"),
+    ).toHaveCount(1);
     await page.screenshot({
       path: test.info().outputPath(`replays-${width}.png`),
       fullPage: true,
@@ -265,4 +261,110 @@ test("an empty device offers replay import without an unusable study button", as
   await expect(
     page.getByRole("button", { name: "牌譜", exact: true }),
   ).toHaveAttribute("aria-current", "page");
+});
+
+const inputURL = (n: number) =>
+  `https://game.mahjongsoul.com/?paipu=260101-fictional-unified-${n}_a123`;
+async function stored(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<any>((done, fail) => {
+        const r = indexedDB.open("kyokuloop-phone-v1", 1);
+        r.onerror = () => fail(r.error);
+        r.onsuccess = () => {
+          const db = r.result;
+          const t = db.transaction("local");
+          const q = t.objectStore("local").get("state");
+          q.onsuccess = () => done(q.result);
+          t.oncomplete = () => db.close();
+        };
+      }),
+  );
+}
+test("one field saves one or multiple URLs atomically and keeps invalid drafts", async ({
+  page,
+}) => {
+  await openPhone(page);
+  const before = await stored(page);
+  await tab(page, "牌譜");
+  await page.getByText("URLを追加", { exact: true }).click();
+  const input = page.getByRole("textbox", { name: "雀魂共有URL", exact: true });
+  const add = page.getByRole("button", { name: "追加", exact: true });
+  await input.fill(inputURL(1));
+  await expect(
+    page
+      .locator(".bulk-history-actions")
+      .getByRole("button", { name: "Mortalへ", exact: true }),
+  ).toBeVisible();
+  await add.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "この端末に1件追加" }),
+  ).toBeVisible();
+  await input.fill(`${inputURL(1)}\n${inputURL(2)}\n${inputURL(3)}`);
+  await expect(
+    page
+      .locator(".bulk-history-actions")
+      .getByRole("button", { name: "Mortalへ", exact: true }),
+  ).toHaveCount(0);
+  await add.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "この端末に2件追加 · 重複1件" }),
+  ).toBeVisible();
+  const saved = await stored(page);
+  expect(saved.analysis_queue).toHaveLength(28);
+  expect(saved.pack).toEqual(before.pack);
+  expect(saved.events).toEqual(before.events);
+  expect(saved.session).toEqual(before.session);
+  await input.fill(`${inputURL(4)}\ninvalid`);
+  await add.click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(input).toHaveValue(`${inputURL(4)}\ninvalid`);
+  expect((await stored(page)).analysis_queue).toEqual(saved.analysis_queue);
+  await tab(page, "設定");
+  await page.getByTestId("version-update").click();
+  await expect(page.getByTestId("version-update")).toContainText("入力を完了");
+  await tab(page, "牌譜");
+  await expect(input).toHaveValue(`${inputURL(4)}\ninvalid`);
+});
+test("file input shares the field and a single URL opens only the prefilled Mortal page", async ({
+  page,
+}) => {
+  await openPhone(page);
+  await tab(page, "牌譜");
+  await page.getByText("URLを追加", { exact: true }).click();
+  const input = page.getByRole("textbox", { name: "雀魂共有URL", exact: true });
+  await page
+    .getByLabel("URL一覧のテキストファイル", { exact: true })
+    .setInputFiles({
+      name: "fictional.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from(`${inputURL(5)}\n${inputURL(6)}`),
+    });
+  await expect(input).toHaveValue(`${inputURL(5)}\n${inputURL(6)}`);
+  await page.getByRole("button", { name: "追加", exact: true }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "この端末に2件追加" }),
+  ).toBeVisible();
+  await input.fill(inputURL(7));
+  await page.evaluate(() => {
+    (window as any).__opened = [];
+    window.open = ((url: string) => {
+      (window as any).__opened.push(url);
+      return null;
+    }) as typeof window.open;
+  });
+  await page
+    .locator(".bulk-history-actions")
+    .getByRole("button", { name: "Mortalへ", exact: true })
+    .click();
+  await expect(
+    page.getByRole("link", { name: "Mortalを開く", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    `https://mjai.ekyu.moe/ja.html?url=${encodeURIComponent(inputURL(7))}`,
+  );
+  expect(await page.evaluate(() => (window as any).__opened)).toEqual([
+    `https://mjai.ekyu.moe/ja.html?url=${encodeURIComponent(inputURL(7))}`,
+  ]);
+  expect((await stored(page)).analysis_queue).toHaveLength(28);
 });
