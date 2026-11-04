@@ -114,8 +114,9 @@ def _meld_signature(m, review=False):
 def final_scores(report):
     """Conservative preview hint, never game identity or an automatic link.
 
-    Compare mjai end deltas with the embedded editor log. Leave unallocated
-    deposits, missing deltas and unsupported endings unknown rather than guess.
+    Compare mjai end deltas with the embedded editor log. A terminal draw's
+    verified remaining deposits go to a unique leader; unknown accounting,
+    tied leaders, missing deltas and unsupported endings stay unknown.
     """
     def vector(value):
         return (isinstance(value, list) and len(value) == 4
@@ -155,8 +156,27 @@ def final_scores(report):
         editor = [v-(1000 if i in reached else 0) for i, v in enumerate(log[1])]
         for delta in deltas:
             editor = [a+b for a, b in zip(editor, delta)]
-        if scores != editor or not vector(scores) or sum(scores) != 100000:
+        if scores != editor or not vector(scores):
             return None
+        if sum(scores) != 100000:
+            # End-game settlement is outside the final ryukyoku deltas.
+            # Do not infer a pool from the deficit alone: both logs must agree
+            # on its opening size, and all new deposits/deltas must balance.
+            pool = events[start].get('kyotaku')
+            if (len(ends) != 1 or ends[0]['type'] != 'ryukyoku'
+                    or type(pool) is not int or not 0 <= pool <= 100
+                    or not isinstance(log[0], list) or len(log[0]) != 3
+                    or type(log[0][2]) is not int or log[0][2] != pool
+                    or sum(log[1]) + pool*1000 != 100000
+                    or sum(ends[0]['deltas']) != 0):
+                return None
+            remaining = (pool + len(reached))*1000
+            leaders = [i for i, score in enumerate(scores) if score == max(scores)]
+            if remaining <= 0 or sum(scores) + remaining != 100000 or len(leaders) != 1:
+                return None
+            scores[leaders[0]] += remaining
+            if not vector(scores):
+                return None
         return scores
     except (ValueError, TypeError, KeyError, IndexError, AttributeError):
         return None
