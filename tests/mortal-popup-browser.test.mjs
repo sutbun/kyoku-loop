@@ -380,3 +380,41 @@ test("inline confirmation is visible as waiting, with only the normal stop actio
     await f.close();
   }
 });
+
+test("manual recovery requires a current result and an explicit click bound to its task", async () => {
+  const paused = {
+    ...idle,
+    manualRecoveryAllowed: true,
+    recoveryTask: "0123456789abcdef",
+    batch: {
+      id: "batch",
+      phase: "paused",
+      reason: "manual_submission",
+      index: 0,
+      items: [{ id: "fictional", status: "active" }],
+    },
+  };
+  const f = await fixture([], paused);
+  try {
+    await expect(f.page.locator("#recover-result")).toBeVisible();
+    await expect(f.page.locator("#batch-start")).not.toBeVisible();
+    assert.equal(
+      await f.page.evaluate(() =>
+        window.fixture.calls.some((x) => x.type !== "STATUS"),
+      ),
+      false,
+    );
+    await f.page.locator("#recover-result").click();
+    const command = await f.page.evaluate(() =>
+      window.fixture.calls.find((x) => x.type === "RECOVER_MANUAL_RESULT"),
+    );
+    assert.equal(command.expectedTask, "0123456789abcdef");
+    await update(f.page, { ...paused, recoveryTask: null });
+    await expect(f.page.locator("#recover-result")).not.toBeVisible();
+    await expect(f.page.locator("#batch-notice")).toContainText("結果画面");
+    await update(f.page, { ...paused, manualRecoveryAllowed: false });
+    await expect(f.page.locator("#recover-result")).not.toBeVisible();
+  } finally {
+    await f.close();
+  }
+});

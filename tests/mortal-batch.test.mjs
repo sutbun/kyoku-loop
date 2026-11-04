@@ -399,3 +399,121 @@ test("closing a tab with retained JSON resumes registration without reading the 
   assert.equal(r.calls.register, 2);
   assert.equal(r.payload(), null);
 });
+
+async function manualPaused(r) {
+  await r.runner.start([entry(1).id, entry(2).id], 10, "4.1b");
+  await r.runner.pause("manual_submission");
+}
+const manualResult = {
+  tabId: 8,
+  documentId: "manual-result-doc",
+  url: `https://mjai.ekyu.moe/killerducky/?data=/report/${task(1)}.json`,
+};
+
+test("explicit manual result recovery adopts only the existing result and continues without resubmission", async () => {
+  const r = rig();
+  await manualPaused(r);
+  assert.equal(await r.runner.canRecoverManual(), true);
+  await r.runner.recoverManual(manualResult, 10, task(1));
+  const state = r.data();
+  const job = state.jobs.at(-1);
+  assert.equal(job.manualSubmission, true);
+  assert.equal(job.task, task(1));
+  assert.equal(job.claimed, true);
+  assert.equal(job.phase, "analysing");
+  assert.equal(state.blocks[source(1)], "manual_submission");
+  const grant = await r.helper.tick(
+    { ...manualResult, snapshot: { error: null, resultReady: true } },
+    2000,
+  );
+  assert.equal(grant.action, "download");
+  await r.helper.downloadStarted(job.id, 77);
+  await r.helper.downloadFinished({
+    id: 77,
+    state: "complete",
+    url: grant.url,
+    finalUrl: grant.url,
+    mime: "application/json",
+    fileSize: 100,
+  });
+  await r.runner.drive();
+  assert.equal(r.data().batch.index, 1);
+  assert.equal(r.data().batch.items[0].status, "done");
+  assert.equal(r.calls.open.length, 0);
+  assert.equal(r.calls.read, 1);
+  assert.equal(r.calls.register, 1);
+  await assert.rejects(r.runner.recoverManual(manualResult, 10, task(1)));
+});
+
+test("manual recovery rejects stale or foreign results, active claims and restricted sources without changing state", async () => {
+  for (const change of [
+    "task",
+    "origin",
+    "document",
+    "claimed",
+    "restricted",
+    "known_task",
+    "phase",
+    "pending",
+    "deleted",
+    "restricted_history",
+  ]) {
+    const r = rig();
+    await manualPaused(r);
+    let input = { ...manualResult };
+    if (change === "task") input.url = input.url.replace(task(1), task(2));
+    if (change === "origin")
+      input.url = input.url.replace("mjai.ekyu.moe", "other.invalid");
+    if (change === "document") input.documentId = "";
+    if (change === "claimed")
+      r.data().jobs.push({
+        id: "prior",
+        source: source(1),
+        claimed: true,
+        phase: "stopped",
+      });
+    if (change === "restricted")
+      r.data().blocks[source(1)] = "access_restricted";
+    if (change === "known_task")
+      r.data().jobs.push({
+        id: "prior",
+        source: source(2),
+        claimed: true,
+        phase: "registered",
+        task: task(1),
+      });
+    if (change === "phase") r.data().batch.reason = "submission_uncertain";
+    if (change === "pending")
+      r.host.pending = async () => ({ jobId: "unacknowledged" });
+    if (change === "deleted") r.rows.shift();
+    if (change === "restricted_history")
+      r.data().jobs.push({
+        id: "restricted",
+        source: source(1),
+        reason: "access_restricted",
+        phase: "stopped",
+        claimed: false,
+      });
+    const before = JSON.stringify(r.data());
+    await assert.rejects(r.runner.recoverManual(input, 10, task(1)), change);
+    assert.equal(JSON.stringify(r.data()), before, change);
+    assert.equal(r.calls.open.length, 0);
+    assert.equal(r.calls.read, 0);
+  }
+});
+
+test("manual result association cannot escape before its durable state is saved", async () => {
+  const r = rig();
+  await manualPaused(r);
+  const before = JSON.stringify(r.data());
+  r.helper.io.write = async () => {
+    throw Error("storage unavailable");
+  };
+  await assert.rejects(
+    r.runner.recoverManual(manualResult, 10, task(1)),
+    /storage unavailable/,
+  );
+  assert.equal(JSON.stringify(r.data()), before);
+  assert.equal(r.calls.read, 0);
+  assert.equal(r.calls.open.length, 0);
+});

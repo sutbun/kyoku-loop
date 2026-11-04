@@ -26,7 +26,7 @@ export function diagnosticText(status, version, label = (value) => value) {
     `モデル：${batch?.model || job?.model || "未確認"}`,
     `解析状態：${job?.phase || "未開始"}`,
     `本人確認待ち：${job?.awaitingConfirmation === true ? "はい" : "いいえ"}`,
-    `送信操作済み：${job?.claimed === true ? "はい" : job?.claimed === false ? "いいえ" : "未確認"}`,
+    `送信操作済み：${job?.manualSubmission ? "手動送信（再送しません）" : job?.claimed === true ? "はい" : job?.claimed === false ? "いいえ" : "未確認"}`,
     `結果ID：${job?.task || "未取得"}`,
     `JSON保存：${saved ? "保存済み" : "未確認"}`,
     `保存先：${job?.filename || "未確認"}`,

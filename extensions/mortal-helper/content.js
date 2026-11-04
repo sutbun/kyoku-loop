@@ -1,4 +1,13 @@
 (() => {
+  const previous = globalThis.KyokuMortalContentBridge;
+  if (previous) {
+    try {
+      if (chrome.runtime.onMessage.hasListener(previous.onMessage)) return;
+    } catch {
+      /* A previous extension context may have been invalidated. */
+    }
+    previous.dispose?.();
+  }
   let timer,
     busy = false,
     ownClick = false,
@@ -107,7 +116,7 @@
       void tick();
     }
   };
-  chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  const onMessage = (message, sender, respond) => {
     if (sender.id !== chrome.runtime.id) return;
     if (message.type === "INSPECT") {
       respond(KyokuMortalInspect());
@@ -199,24 +208,34 @@
         .catch((e) => respond({ error: e.message || "report_read_failed" }));
       return true;
     }
-  });
-  document.addEventListener(
-    "submit",
-    (event) => {
-      if (ownClick && fingerprint(KyokuMortalInspect()) !== expectedKey) {
-        event.preventDefault();
-        void chrome.runtime
-          .sendMessage({ type: "STOP", reason: "form_changed" })
-          .catch(() => {});
-        halt();
-      } else if (!ownClick) {
-        void chrome.runtime
-          .sendMessage({ type: "STOP", reason: "manual_submission" })
-          .catch(() => {});
-        halt();
+  };
+  chrome.runtime.onMessage.addListener(onMessage);
+  const onSubmit = (event) => {
+    if (ownClick && fingerprint(KyokuMortalInspect()) !== expectedKey) {
+      event.preventDefault();
+      void chrome.runtime
+        .sendMessage({ type: "STOP", reason: "form_changed" })
+        .catch(() => {});
+      halt();
+    } else if (!ownClick) {
+      void chrome.runtime
+        .sendMessage({ type: "STOP", reason: "manual_submission" })
+        .catch(() => {});
+      halt();
+    }
+  };
+  document.addEventListener("submit", onSubmit, true);
+  globalThis.KyokuMortalContentBridge = {
+    onMessage,
+    dispose() {
+      halt();
+      document.removeEventListener("submit", onSubmit, true);
+      try {
+        chrome.runtime.onMessage.removeListener(onMessage);
+      } catch {
+        /* Invalidated context. */
       }
     },
-    true,
-  );
+  };
   wake();
 })();

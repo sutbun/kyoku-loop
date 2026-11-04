@@ -169,6 +169,89 @@ export class BatchRunner {
       return false;
     }
   }
+  async manualRecoveryContext() {
+    const data = await this.state(),
+      b = data.batch;
+    const item = b?.items?.[b.index];
+    if (
+      b?.phase !== "paused" ||
+      b.reason !== "manual_submission" ||
+      !item ||
+      !sourceOK(item.url) ||
+      item.id !== item.url.split("paipu=")[1] ||
+      data.blocks?.[item.url] !== "manual_submission" ||
+      data.jobs.some(active)
+    )
+      throw Error("manual_submission");
+    if (
+      data.jobs.some(
+        (j) =>
+          j.source === item.url &&
+          (j.claimed ||
+            j.transferAttempted ||
+            j.reason === "access_restricted" ||
+            ["access_restricted", "invalid_report"].includes(j.transferError)),
+      )
+    )
+      throw Error("already_attempted");
+    if (await this.host.pending()) throw Error("pending_registration");
+    return { data, b, item };
+  }
+  async canRecoverManual() {
+    try {
+      await this.manualRecoveryContext();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async recoverManual({ tabId, documentId, url }, appTabId, expectedTask) {
+    const page = route(url);
+    if (
+      page?.kind !== "result" ||
+      page.task !== expectedTask ||
+      !Number.isInteger(tabId) ||
+      !Number.isInteger(appTabId) ||
+      !documentId
+    )
+      throw Error("wrong_result");
+    const { data, b, item } = await this.manualRecoveryContext();
+    if (data.jobs.some((j) => j.claimed && j.task === page.task))
+      throw Error("already_attempted");
+    if (data.jobs.length >= 1000) throw Error("history_full");
+    const current = (await this.host.list(appTabId)).find(
+      (e) => e.id === item.id && e.url === item.url,
+    );
+    if (!current) throw Error("queue_changed");
+    // Explicit user association of a manual submission with this paused item.
+    // This grants only normal result saving/reading, never another form submit.
+    const job = {
+      id: crypto.randomUUID(),
+      tabId,
+      documentId,
+      key: fingerprint(batchSnapshot(item.url, b.model)),
+      source: item.url,
+      model: b.model,
+      player: "",
+      phase: "analysing",
+      claimed: true,
+      manualSubmission: true,
+      task: page.task,
+      created: this.host.now(),
+      expires: this.host.now() + 180000,
+    };
+    data.jobs.push(job);
+    item.jobId = job.id;
+    item.status = "active";
+    item.documentId = documentId;
+    b.phase = "running";
+    b.reason = null;
+    b.stopAfterCurrent = false;
+    b.tabId = tabId;
+    b.appTabId = appTabId;
+    await this.save(data);
+    return job;
+  }
   async resume(appTabId) {
     const { data, b, item, job, cached } = await this.resumeContext();
     // The old tab cannot be reused after closure. Only detach it after all

@@ -23,6 +23,19 @@ test("inline confirmation status exposes only waiting metadata", () => {
   assert.ok(!text.includes("never-copy-token"));
 });
 
+test("an adopted manual result is labelled as manual submission rather than helper submission", () => {
+  const text = diagnosticText(
+    {
+      tabId: 1,
+      jobs: [
+        { tabId: 1, phase: "analysing", claimed: true, manualSubmission: true },
+      ],
+    },
+    "DEV-test",
+  );
+  assert.ok(text.includes("送信操作済み：手動送信（再送しません）"));
+});
+
 test("stopped batch diagnostics identify the job and raw cause using only safe metadata", () => {
   const status = {
     batch: {

@@ -251,6 +251,71 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         active: true,
         currentWindow: true,
       });
+      if (message.type === "RECOVER_MANUAL_RESULT") {
+        if (!(await batch.canRecoverManual())) throw Error("manual_submission");
+        const page = route(tab?.url);
+        if (page?.kind !== "result" || page.task !== message.expectedTask)
+          throw Error("wrong_result");
+        let frame = await chrome.webNavigation.getFrame({
+          tabId: tab.id,
+          frameId: 0,
+        });
+        if (!frame?.documentId || frame.url !== tab.url)
+          throw Error("page_changed");
+        let snapshot;
+        try {
+          snapshot = await chrome.tabs.sendMessage(
+            tab.id,
+            { type: "INSPECT" },
+            { documentId: frame.documentId },
+          );
+        } catch {
+          /* Reloading the extension can leave this existing page without its bridge. */
+        }
+        if (!snapshot) {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id, frameIds: [0] },
+            files: ["inspector.js", "content.js"],
+          });
+          const current = await chrome.webNavigation.getFrame({
+            tabId: tab.id,
+            frameId: 0,
+          });
+          if (
+            current?.documentId !== frame.documentId ||
+            current.url !== tab.url
+          )
+            throw Error("page_changed");
+          snapshot = await chrome.tabs.sendMessage(
+            tab.id,
+            { type: "INSPECT" },
+            { documentId: frame.documentId },
+          );
+        }
+        if (snapshot?.error) {
+          if (snapshot.error === "access_restricted")
+            await batch.pause("access_restricted");
+          throw Error(snapshot.error);
+        }
+        if (!snapshot?.resultReady) throw Error("result_not_ready");
+        await batch.recoverManual(
+          { tabId: tab.id, documentId: frame.documentId, url: tab.url },
+          await findApp(),
+          message.expectedTask,
+        );
+        try {
+          await chrome.tabs.sendMessage(
+            tab.id,
+            { type: "WAKE" },
+            { documentId: frame.documentId },
+          );
+        } catch {
+          await helper.stopTab(tab.id, "page_changed");
+          await batch.pause("page_changed");
+          throw Error("page_changed");
+        }
+        return { ok: true };
+      }
       if (message.type === "STATUS") {
         let snapshot = null;
         if (route(tab?.url)?.kind === "input") {
@@ -271,6 +336,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
           batch: (await helper.state()).batch || null,
           hasPendingPayload: !!(await pendingPayload()),
           resumeAllowed: await batch.canResume(),
+          manualRecoveryAllowed: await batch.canRecoverManual(),
+          recoveryTask:
+            route(tab?.url)?.kind === "result" ? route(tab.url).task : null,
         };
       }
       if (message.type === "START") {

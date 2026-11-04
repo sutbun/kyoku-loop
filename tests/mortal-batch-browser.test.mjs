@@ -27,7 +27,12 @@ async function until(read, check, label) {
 }
 const form = `<!doctype html><meta charset="utf-8"><form action="/review" method="post"><input type="radio" name="input-method" value="log-url" checked><input type="url" name="log-url" required><select name="engine"><option value="mortal">Mortal</option></select><select name="mortal-model-tag"><option>4.1b</option></select><select name="player-id"><option value="">自動</option></select><select name="ui"><option value="killerducky">Killerducky</option></select><input type="number" name="temperature" value="1.5"><input name="kyokus"><input type="checkbox" name="show-rating" checked><button type="submit">送信</button></form><script>document.querySelector('[name="log-url"]').value=new URL(location.href).searchParams.get('url')</script>`;
 
-async function fixture(label, lostACK = false) {
+async function fixture(
+  label,
+  lostACK = false,
+  manual = false,
+  wrongModel = false,
+) {
   const root = resolve(".local/mortal-batch-test/" + Date.now() + "-" + label),
     ext = join(root, "extension"),
     downloads = join(root, "downloads"),
@@ -53,6 +58,7 @@ async function fixture(label, lostACK = false) {
       `import sys,json;sys.path.insert(0,'tests');from test_p8_mortal import mortal_fixture\na=mortal_fixture();b=mortal_fixture(True)\nfor r in [a,b]:r['review']['model_tag']='4.1b'\nprint(json.dumps([a,b]))`,
     ),
   );
+  if (wrongModel) reports[0].review.model_tag = "4.0";
   python(
     `import sys,json,os;sys.path.insert(0,'tests');from test_p0_verify import fixture;from tools.p2_store import Store\ns=Store(os.environ['KYOKULOOP_DB']);p=s.stage(json.dumps(fixture()).encode(),None);s.commit(p['token'],0,0,None);a=s.study_start('practice');s.study_choice(a['id'],'5pr','choose');s.study_choice(a['id'],None,'confirm');s.study_rate(a['id'],s.state()['items'][0]['id'],'再復習','fictional-old-answer');s.study_start('practice')\nfor u in ${JSON.stringify([source(1), source(2)])}:s.analysis_add(u)\ns.close()`,
   );
@@ -147,7 +153,13 @@ async function fixture(label, lostACK = false) {
       }
       if (u.origin === SITE) {
         if (u.pathname === "/ja.html")
-          return route.fulfill({ contentType: "text/html", body: form });
+          return route.fulfill({
+            contentType: "text/html",
+            body:
+              manual && u.searchParams.get("url") === source(1)
+                ? form.replace('type="submit"', 'type="submit" disabled')
+                : form,
+          });
         if (u.pathname === "/review") {
           const body = new URLSearchParams(req.postData()),
             n = [1, 2].find((n) => source(n) === body.get("log-url"));
@@ -263,6 +275,9 @@ async function fixture(label, lostACK = false) {
       calls,
       appPage,
       popup,
+      mortalPage,
+      mortalTabId,
+      worker,
       message,
       state,
       root,
@@ -443,6 +458,138 @@ test(
     }
   },
 );
+
+test(
+  "manual submit is explicitly recovered from its existing result without a second analysis",
+  { timeout: 150000 },
+  async () => {
+    const f = await fixture("manual-recovery", false, true);
+    try {
+      await f.message({
+        type: "BATCH_START",
+        ids: [id(1), id(2)],
+        model: "4.1b",
+      });
+      await until(
+        f.state,
+        (s) => s.jobs.some((j) => j.phase === "waiting" && !j.claimed),
+        "unsubmitted first game",
+      );
+      await f.mortalPage.evaluate(() => {
+        document.querySelector("button").disabled = false;
+        document.querySelector("form").requestSubmit();
+      });
+      await f.mortalPage.waitForURL(resultURL(1));
+      await until(
+        f.state,
+        (s) =>
+          s.batch?.phase === "paused" && s.batch.reason === "manual_submission",
+        "manual submission pause",
+      );
+      assert.deepEqual(f.calls.posts, [1]);
+      assert.deepEqual(f.calls.reads, []);
+      await f.worker.evaluate(
+        (id) => chrome.tabs.update(id, { active: true }),
+        f.mortalTabId,
+      );
+      const before = JSON.stringify(await f.state());
+      const wrong = await f.popup.evaluate(
+        (body) => chrome.runtime.sendMessage(body),
+        { type: "RECOVER_MANUAL_RESULT", expectedTask: task(2) },
+      );
+      assert.equal(wrong.error, "wrong_result");
+      assert.equal(JSON.stringify(await f.state()), before);
+      // Exercise the post-update bridge installation path on an existing result.
+      await f.worker.evaluate(() => {
+        const send = chrome.tabs.sendMessage.bind(chrome.tabs);
+        const execute = chrome.scripting.executeScript.bind(chrome.scripting);
+        let missing = true;
+        globalThis.recoveryBridgeInstalls = 0;
+        chrome.tabs.sendMessage = async (id, message, ...options) => {
+          if (missing && message.type === "INSPECT") {
+            missing = false;
+            throw Error("fixture missing bridge");
+          }
+          return send(id, message, ...options);
+        };
+        chrome.scripting.executeScript = async (options) => {
+          if (options.files?.includes("content.js"))
+            globalThis.recoveryBridgeInstalls++;
+          return execute(options);
+        };
+      });
+      await until(
+        async () => {
+          await f.popup.evaluate(async () =>
+            (await import("./popup.js")).refresh(),
+          );
+          return f.popup.locator("#recover-result").isVisible();
+        },
+        Boolean,
+        "manual result recovery control",
+      );
+      // A native popup does not replace the active tab. This harness uses a tab,
+      // so invoke its actual button handler without activating the harness tab.
+      await f.popup.evaluate(() =>
+        document.getElementById("recover-result").click(),
+      );
+      await until(
+        f.state,
+        (s) =>
+          s.batch.index === 1 ||
+          (s.batch.phase === "paused" &&
+            s.batch.reason !== "manual_submission"),
+        "manual result registration",
+      );
+      const recovered = await f.state();
+      assert.equal(recovered.batch.phase, "running", JSON.stringify(recovered));
+      assert.equal(recovered.batch.items[0].status, "done");
+      assert.equal(
+        recovered.jobs.find((j) => j.id === recovered.batch.items[0].jobId)
+          .manualSubmission,
+        true,
+      );
+      assert.equal(
+        await f.worker.evaluate(() => globalThis.recoveryBridgeInstalls),
+        1,
+      );
+      assert.deepEqual(f.calls.posts, [1]);
+      assert.deepEqual(f.calls.reads, [1]);
+      await f.speedCooldown();
+      const finished = await until(
+        f.state,
+        (s) => s.batch.phase === "done" || s.batch.phase === "paused",
+        "remaining selected game",
+      );
+      assert.equal(finished.batch.phase, "done", JSON.stringify(finished));
+      assert.deepEqual(f.calls.posts, [1, 2]);
+      assert.deepEqual(f.calls.reads, [1, 2]);
+      assert.equal(
+        await f.appPage.locator("#unsaved").inputValue(),
+        "保持する未保存入力",
+      );
+      assert.ok(
+        f
+          .api({ action: "state" })
+          .data.analysis_queue.every((e) => e.reports.length === 1),
+      );
+      await writeFile(
+        join(f.root, "summary.json"),
+        JSON.stringify({
+          manualRecovery: true,
+          posts: f.calls.posts,
+          reads: f.calls.reads,
+          registered: 2,
+          actualSiteRequests: 0,
+          liveDBWrites: 0,
+        }),
+      );
+      console.log("ARTIFACTS " + f.root);
+    } finally {
+      await f.context.close();
+    }
+  },
+);
 test(
   "lost commit ACK plus browser restart retries only retained local registration",
   { timeout: 150000 },
@@ -515,6 +662,77 @@ test(
       assert.deepEqual(f.calls.posts, [1]);
       assert.deepEqual(f.calls.reads, [1]);
       assert.equal(f.calls.api.filter((a) => a === "commit").length, 2);
+      console.log("ARTIFACTS " + f.root);
+    } finally {
+      await f.context.close();
+    }
+  },
+);
+
+test(
+  "manual recovery rejects a mismatched result model without app import or a second fetch",
+  { timeout: 120000 },
+  async () => {
+    const f = await fixture("manual-wrong-model", false, true, true);
+    try {
+      await f.message({ type: "BATCH_START", ids: [id(1)], model: "4.1b" });
+      await until(
+        f.state,
+        (s) => s.jobs.some((j) => j.phase === "waiting" && !j.claimed),
+        "unsubmitted source",
+      );
+      await f.mortalPage.evaluate(() => {
+        document.querySelector("button").disabled = false;
+        document.querySelector("form").requestSubmit();
+      });
+      await f.mortalPage.waitForURL(resultURL(1));
+      await until(
+        f.state,
+        (s) =>
+          s.batch?.phase === "paused" && s.batch.reason === "manual_submission",
+        "manual pause",
+      );
+      await f.worker.evaluate(
+        (id) => chrome.tabs.update(id, { active: true }),
+        f.mortalTabId,
+      );
+      const result = await f.popup.evaluate(
+        (body) => chrome.runtime.sendMessage(body),
+        { type: "RECOVER_MANUAL_RESULT", expectedTask: task(1) },
+      );
+      assert.equal(result.ok, true);
+      const stopped = await until(
+        f.state,
+        (s) =>
+          s.batch?.phase === "paused" && s.batch.reason !== "manual_submission",
+        "reject wrong model",
+      );
+      assert.equal(stopped.batch.reason, "invalid_report");
+      assert.equal(stopped.batch.index, 0);
+      assert.deepEqual(f.calls.posts, [1]);
+      assert.deepEqual(f.calls.reads, [1]);
+      assert.equal(f.calls.api.includes("inspect"), false);
+      assert.equal(f.calls.api.includes("commit"), false);
+      const status = await f.message({ type: "STATUS" });
+      assert.equal(status.manualRecoveryAllowed, false);
+      assert.equal(status.resumeAllowed, false);
+      assert.deepEqual(f.calls.reads, [1]);
+      assert.ok(
+        f
+          .api({ action: "state" })
+          .data.analysis_queue.every((e) => e.reports.length === 0),
+      );
+      await writeFile(
+        join(f.root, "summary.json"),
+        JSON.stringify({
+          rejectedModel: true,
+          posts: f.calls.posts,
+          reads: f.calls.reads,
+          imports: 0,
+          actualSiteRequests: 0,
+          liveDBWrites: 0,
+        }),
+      );
       console.log("ARTIFACTS " + f.root);
     } finally {
       await f.context.close();
