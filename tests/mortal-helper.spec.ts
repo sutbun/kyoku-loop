@@ -14,6 +14,7 @@ test("Mortal helper state machine and isolated browser integration", async () =>
       "tests/mortal-batch-browser.test.mjs",
       "tests/mortal-helper-update.test.mjs",
       "tests/mortal-diagnostics.test.mjs",
+      "tests/mortal-popup-browser.test.mjs",
     ],
     {
       encoding: "utf8",

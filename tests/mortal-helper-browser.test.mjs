@@ -227,6 +227,9 @@ test(
             await popup.locator("#notice").innerText(),
             /ファイルを保存しました/,
           );
+          await popup.locator("#tools > summary").click();
+          await popup.locator("#single > summary").click();
+          await popup.locator("#notice").waitFor({ state: "visible" });
           await popup
             .locator("body")
             .screenshot({ path: join(root, "popup-saved.png") });

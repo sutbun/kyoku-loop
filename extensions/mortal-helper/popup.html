@@ -2,40 +2,65 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <title>KyokuLoop Mortal Helper</title>
+    <title>Mortal解析</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <header>
-      <strong>Mortal解析とKyokuLoop登録</strong><small id="version"></small>
+      <strong>Mortal解析</strong>
+      <small id="version"></small>
+      <details id="tools">
+        <summary aria-label="メニュー">⋯</summary>
+        <div class="menu">
+          <label class="model"
+            >モデル
+            <select id="batch-model">
+              <option>4.1b</option>
+              <option>4.1a</option>
+              <option>4.1c</option>
+              <option>4.0</option>
+              <option>3.0</option>
+            </select></label
+          >
+          <button id="batch-load">一覧を更新</button>
+          <button id="end-batch" hidden>この一覧を終了</button>
+          <details id="single">
+            <summary>開いている1件を保存</summary>
+            <p id="selection"></p>
+            <div class="buttons">
+              <button id="start" disabled>保存を開始</button
+              ><button id="cancel" disabled>停止</button>
+            </div>
+            <p id="notice" role="status"></p>
+          </details>
+          <details>
+            <summary>処理履歴</summary>
+            <div id="history"></div>
+            <button id="export">対応表を保存</button>
+          </details>
+        </div>
+      </details>
     </header>
-    <section aria-label="まとめて解析・登録">
-      <div class="buttons load-row">
-        <button id="batch-load">KyokuLoopから読み込む</button>
-        <label
-          >モデル
-          <select id="batch-model">
-            <option>4.1b</option>
-            <option>4.1a</option>
-            <option>4.1c</option>
-            <option>4.0</option>
-            <option>3.0</option>
-          </select></label
-        >
-      </div>
-      <p class="hint">
-        PCのKyokuLoop（127.0.0.1:1460）を同じブラウザで開いてください。四人半荘を最大20件選べます。
-      </p>
-      <div id="batch-list" aria-label="牌譜一覧">
-        <p>「KyokuLoopから読み込む」で解析待ちを表示します。</p>
-      </div>
-      <div class="buttons">
-        <button id="batch-start" disabled>選択した0件を解析・登録</button
-        ><button id="batch-stop" disabled>停止</button>
-      </div>
+    <main aria-label="解析・登録">
+      <p id="batch-count" role="status" aria-live="polite">読み込み中</p>
+      <progress
+        id="batch-progress"
+        aria-label="登録完了"
+        max="1"
+        value="0"
+        hidden
+      ></progress>
       <p id="batch-notice" role="status" aria-live="polite"></p>
-      <button id="copy-diagnostics" disabled>診断情報をコピー</button>
-      <p id="copy-notice" class="hint" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <button id="batch-start" disabled hidden>解析・登録</button>
+        <button id="batch-stop" hidden>この1件で止める</button>
+        <button id="open-app" hidden>KyokuLoopを開く</button>
+        <button id="retry-load" hidden>もう一度読み込む</button>
+      </div>
+      <button id="copy-diagnostics" class="text-button" hidden>
+        エラー情報をコピー
+      </button>
+      <p id="copy-notice" class="hint" role="status"></p>
       <textarea
         id="diagnostics-text"
         aria-label="コピー用の診断情報"
@@ -43,27 +68,16 @@
         readonly
         hidden
       ></textarea>
-      <p class="hint">
-        1件の保存・登録が完了してから30秒空けて次へ進みます。処理中はMortalタブを残してください。
-      </p>
-    </section>
-    <details id="single">
-      <summary>開いているMortalページを1件だけ保存</summary>
-      <p id="selection">Mortalの入力ページを開いてください。</p>
-      <div class="buttons">
-        <button id="start" disabled>この1件を開始</button
-        ><button id="cancel" disabled>停止</button>
-      </div>
-      <p id="notice" role="status" aria-live="polite"></p>
-      <p class="hint">
-        保存先：既定のダウンロード先 → KyokuLoop-Mortal<br />JSONの内容検証とKyokuLoopへの登録は別の処理です。
-      </p>
-    </details>
-    <details>
-      <summary>最近の処理・元URLとの対応</summary>
-      <div id="history"></div>
-      <button id="export">対応表を保存</button>
-    </details>
+      <details id="targets" hidden>
+        <summary>対象を変更</summary>
+        <div class="buttons selection-actions">
+          <button id="select-default">20件まで選択</button
+          ><button id="select-none">選択を解除</button>
+        </div>
+        <p id="selection-count" class="hint"></p>
+        <div id="batch-list" aria-label="牌譜一覧"></div>
+      </details>
+    </main>
     <script type="module" src="popup.js"></script>
   </body>
 </html>

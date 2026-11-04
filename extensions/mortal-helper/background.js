@@ -237,6 +237,16 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         await batch.end();
         return { ok: true };
       }
+      if (message.type === "OPEN_APP") {
+        const tabs = (await chrome.tabs.query({ url: APP + "/*" })).filter(
+          (t) => isAppURL(t.url),
+        );
+        if (tabs.length) {
+          await chrome.tabs.update(tabs[0].id, { active: true });
+          await chrome.windows.update(tabs[0].windowId, { focused: true });
+        } else await chrome.tabs.create({ url: APP + "/", active: true });
+        return { ok: true };
+      }
       const [tab] = await chrome.tabs.query({
         active: true,
         currentWindow: true,
@@ -260,6 +270,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
           jobs: (await helper.state()).jobs.slice(-20).reverse(),
           batch: (await helper.state()).batch || null,
           hasPendingPayload: !!(await pendingPayload()),
+          resumeAllowed: await batch.canResume(),
         };
       }
       if (message.type === "START") {

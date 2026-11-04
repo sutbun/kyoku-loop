@@ -315,7 +315,7 @@ test(
   async () => {
     const f = await fixture("two");
     try {
-      await f.popup.locator("#batch-load").click();
+      await f.popup.locator("#targets > summary").click();
       await until(
         () => f.popup.locator("#batch-list input").count(),
         (n) => n === 2,
@@ -323,13 +323,13 @@ test(
       );
       assert.equal(
         await f.popup.locator("#batch-list input:checked").count(),
-        0,
+        1,
       );
       for (const input of await f.popup.locator("#batch-list input").all())
         await input.check();
       assert.equal(
         await f.popup.locator("#batch-start").innerText(),
-        "選択した2件を解析・登録",
+        "2件を解析・登録",
       );
       await f.popup
         .locator("body")
@@ -355,6 +355,23 @@ test(
       assert.equal(finished.batch.phase, "done", JSON.stringify(finished));
       assert.deepEqual(f.calls.posts, [1, 2]);
       assert.deepEqual(f.calls.reads, [1, 2]);
+      await until(
+        () => f.popup.locator("#batch-list input").count(),
+        (n) => n === 0,
+        "registered rows removed automatically",
+      );
+      await f.popup.locator("#open-app").click();
+      await until(
+        () =>
+          f.popup.evaluate(
+            async () =>
+              (
+                await chrome.tabs.query({ active: true, currentWindow: true })
+              )[0]?.url,
+          ),
+        (url) => url === APP + "/",
+        "focus existing app without reload",
+      );
       const stored = f.api({ action: "state" });
       assert.ok(stored.ok);
       assert.ok(
