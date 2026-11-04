@@ -2,6 +2,27 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { diagnosticText } from "../extensions/mortal-helper/diagnostics.js";
 
+test("inline confirmation status exposes only waiting metadata", () => {
+  const text = diagnosticText(
+    {
+      tabId: 1,
+      jobs: [
+        {
+          tabId: 1,
+          phase: "waiting",
+          claimed: false,
+          awaitingConfirmation: true,
+          token: "never-copy-token",
+        },
+      ],
+    },
+    "DEV-test",
+  );
+  assert.ok(text.includes("本人確認待ち：はい"));
+  assert.ok(text.includes("送信操作済み：いいえ"));
+  assert.ok(!text.includes("never-copy-token"));
+});
+
 test("stopped batch diagnostics identify the job and raw cause using only safe metadata", () => {
   const status = {
     batch: {

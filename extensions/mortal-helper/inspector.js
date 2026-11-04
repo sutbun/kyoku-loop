@@ -115,5 +115,14 @@ globalThis.KyokuMortalInspect = function inspect(
       submits[0].getAttribute("aria-disabled") !== "true",
     error: null,
   };
+  // Observe only the presence of a visible inline widget in the public page.
+  // Never enter its frame/shadow tree, read a response, or interact with it.
+  snapshot.confirmationPending =
+    !snapshot.ready &&
+    [
+      ...doc.querySelectorAll(
+        '.cf-turnstile, iframe[src^="https://challenges.cloudflare.com/"]',
+      ),
+    ].some(shown);
   return snapshot;
 };

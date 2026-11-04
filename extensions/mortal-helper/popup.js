@@ -200,14 +200,18 @@ function render() {
       const stage =
         batch.nextAt > Date.now() && item?.status === "queued"
           ? `次の開始まで ${Math.ceil((batch.nextAt - Date.now()) / 1000)}秒`
-          : `${Math.min(batch.index + 1, total)}件目を${shortStage[job?.phase] || "準備中"}`;
+          : job?.awaitingConfirmation
+            ? `${Math.min(batch.index + 1, total)}件目：本人確認待ち`
+            : `${Math.min(batch.index + 1, total)}件目を${shortStage[job?.phase] || "準備中"}`;
       notice.textContent =
         stage + (batch.stopAfterCurrent ? "\nこの1件の後に停止します" : "");
     }
     if (skipped) notice.textContent += `\nスキップ ${skipped}件`;
   } else if (singleActive) {
     count.textContent = "1件を保存中";
-    notice.textContent = shortStage[singleActive.phase];
+    notice.textContent = singleActive.awaitingConfirmation
+      ? "本人確認待ち"
+      : shortStage[singleActive.phase];
   } else if (loadError) {
     count.textContent = "読み込めませんでした";
     notice.textContent = ["open_kyokuloop_tab", "local_unavailable"].includes(
@@ -331,7 +335,7 @@ function renderTools(data) {
   $("notice").textContent =
     feedback ||
     (current
-      ? `${label(current.phase)}${current.reason ? `：${label(current.reason)}` : ""}`
+      ? `${current.awaitingConfirmation ? "本人確認待ち" : label(current.phase)}${current.reason ? `：${label(current.reason)}` : ""}`
       : s?.error
         ? label(s.error)
         : "");
