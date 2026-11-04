@@ -66,7 +66,7 @@ function PhoneApp() {
   const [loaded, setLoaded] = useState(false);
   const [pending, setPending] = useState(0);
   const [analysisQueue, setAnalysisQueue] = useState<AnalysisEntry[]>([]);
-  const urlPending = analysisQueue.filter((e) => !e.received).length;
+  const [urlPending, setURLPending] = useState(0);
   const [capacity, setCapacity] = useState("");
   const [persistent, setPersistent] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
@@ -84,10 +84,15 @@ function PhoneApp() {
     setWorkspace(await api<Workspace>({ action: "state" }));
     const state = await readPhone();
     setLocal(state?.schema === 2);
+    setURLPending(
+      state?.analysis_queue?.filter((e) => !e.received).length ?? 0,
+    );
     setResultPending(
       state?.local_imports?.filter((e) => !e.synced_source).length ?? 0,
     );
-    setAnalysisQueue(state?.analysis_queue ?? []);
+    setAnalysisQueue(
+      (state?.analysis_queue ?? []).filter((e) => !e.visibility?.deleted),
+    );
     setPending(state ? pendingEvents(state).length : 0);
     setLastSync(state?.last_sync ?? "");
     setSaved(state?.pack?.exported_at ?? "");
@@ -545,7 +550,14 @@ function PhoneApp() {
             </section>
             <PhoneReplayList
               entries={analysisQueue}
-              disabled={busy || importBusy}
+              disabled={busy || importBusy || syncing}
+              onDelete={(ids) =>
+                void run(async () => {
+                  await api({ action: "analysis_delete", ids });
+                  await refresh();
+                  if (navigator.onLine) void syncRecords();
+                })
+              }
               onProblems={(reports) => {
                 setReportFilter(reports);
                 setFilter("すべて");

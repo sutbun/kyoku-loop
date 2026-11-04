@@ -1,0 +1,35 @@
+import type { AnalysisEntry } from "./analysis-queue";
+import type { MortalBatchItem } from "./mortal-batch";
+import { errors } from "./api";
+
+export function MortalBatchResults({
+  items,
+  entries,
+}: {
+  items: MortalBatchItem[];
+  entries: AnalysisEntry[];
+}) {
+  return (
+    <ul className="inbox-files" aria-label="一括追加の結果" aria-live="polite">
+      {items.map((item, i) => {
+        const linked = entries.some((e) =>
+          e.reports?.includes(item.result?.id ?? ""),
+        )
+          ? true
+          : (item.result?.source_link?.linked ?? item.result?.linked);
+        return (
+          <li key={i}>
+            <span style={{ overflowWrap: "anywhere" }}>{item.file.name}</span>
+            <span>
+              {item.result
+                ? `${item.result.duplicate ? "登録済み（重複）" : "登録しました"} · ${linked === true ? "元牌譜に紐付け済み" : linked === false ? "元牌譜は未紐付け" : "紐付け状態を確認できません"}`
+                : item.error
+                  ? (errors[item.error] ?? item.error)
+                  : "登録待ち"}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

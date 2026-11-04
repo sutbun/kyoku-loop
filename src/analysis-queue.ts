@@ -16,7 +16,27 @@ export type AnalysisEntry = {
   reports?: string[];
   ready?: boolean;
   history?: AnalysisHistory;
+  visibility?: { revision: number; deleted: boolean };
 };
+export const visibleAnalysis = (e: AnalysisEntry) => !e?.visibility?.deleted;
+export function mergeVisibility(
+  a: AnalysisEntry["visibility"],
+  b: AnalysisEntry["visibility"],
+) {
+  if (!b) return a;
+  if (!a) return b;
+  return b.revision > a.revision || (b.revision === a.revision && b.deleted)
+    ? b
+    : a;
+}
+export function setAnalysisVisible(e: AnalysisEntry, visible: boolean) {
+  if (visibleAnalysis(e) === visible) return;
+  e.visibility = {
+    revision: (e.visibility?.revision ?? 0) + 1,
+    deleted: !visible,
+  };
+  delete e.received;
+}
 export const sourceURL = (value: string): string => {
   let url = value.trim();
   if (/^雀魂牌譜[:：]/.test(url))
@@ -35,10 +55,23 @@ export const sourceURL = (value: string): string => {
 export function validateAnalysisQueue(
   value: unknown,
 ): asserts value is AnalysisEntry[] {
-  if (!Array.isArray(value) || value.length > 1000)
+  if (
+    !Array.isArray(value) ||
+    value.length > 10000 ||
+    value.filter(visibleAnalysis).length > 1000
+  )
     throw new Error("invalid_queue");
   const ids = new Set();
   for (const e of value) {
+    if (
+      e?.visibility !== undefined &&
+      (!e.visibility ||
+        !Number.isSafeInteger(e.visibility.revision) ||
+        e.visibility.revision < 1 ||
+        e.visibility.revision > 1000000000 ||
+        typeof e.visibility.deleted !== "boolean")
+    )
+      throw Error("invalid_queue");
     if (
       !e ||
       typeof e.url !== "string" ||

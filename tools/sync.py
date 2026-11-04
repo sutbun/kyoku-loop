@@ -220,8 +220,9 @@ def inspect_phone_backup(store,value):
         except ImportError:from analysis_queue import validate_entry
         if not isinstance(value,dict) or value.get('schema')!=1:raise ValueError()
         queue=value.get('analysis_queue',[])
-        if not isinstance(queue,list) or len(queue)>1000:raise ValueError()
+        if not isinstance(queue,list) or len(queue)>10000:raise ValueError()
         entries=[validate_entry(e) for e in queue]
+        if sum(not e.get('visibility',{}).get('deleted') for e in entries)>1000:raise ValueError()
         if len({e['id'] for e in entries})!=len(entries):raise ValueError()
         source=store.db.execute("SELECT value FROM study_settings WHERE key='device'").fetchone()[0]
         pack=value.get('pack')

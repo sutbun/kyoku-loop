@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ReplaySelection, useReplaySelection } from "./replay-selection";
 import { openMortal, MORTAL_READY, mortalLink } from "./mortal-handoff";
 import {
   analysisStatus,
@@ -135,6 +136,7 @@ export function AnalysisList({
   onResult,
   onRequested,
   onDropResult,
+  onDelete,
 }: {
   entries: AnalysisEntry[];
   portable?: boolean;
@@ -143,12 +145,21 @@ export function AnalysisList({
   onResult?: (entry: AnalysisEntry) => void;
   onRequested?: (entry: AnalysisEntry) => void;
   onDropResult?: (entry: AnalysisEntry, files: File[]) => void;
+  onDelete?: (ids: string[]) => void;
 }) {
   const [limit, setLimit] = useState(10);
   const [dragged, setDragged] = useState<string | null>(null);
   const ordered = [...entries].reverse();
+  const selection = useReplaySelection(entries);
   return (
     <div className="analysis-list">
+      <ReplaySelection
+        entries={entries}
+        selected={selection.selected}
+        disabled={disabled}
+        onSelect={selection.setIds}
+        onDelete={onDelete}
+      />
       {(portable ? ordered : ordered.slice(0, limit)).map((e, i) => (
         <div
           className={`analysis-row${dragged === e.id ? " drop-active" : ""}`}
@@ -179,7 +190,17 @@ export function AnalysisList({
               onDropResult(e, Array.from(event.dataTransfer.files));
           }}
         >
-          <div>
+          {onDelete && (
+            <input
+              className="replay-checkbox"
+              type="checkbox"
+              aria-label={`保存牌譜 ${entries.length - i}を選択`}
+              disabled={disabled}
+              checked={selection.selected.includes(e.id)}
+              onChange={() => selection.toggle(e.id)}
+            />
+          )}
+          <div className="analysis-row-title">
             <strong>
               {e.history
                 ? `${new Date(e.history.at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · ${e.history.rank}位`

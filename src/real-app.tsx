@@ -5,6 +5,13 @@ import { StudyPanel, PracticeCard } from "./study-ui";
 import type { Detail, Scene, Stage, Workspace } from "./real-types";
 import { SourceInput, AnalysisList, AnalysisGuide } from "./analysis-ui";
 import type { AnalysisEntry } from "./analysis-queue";
+import {
+  encodeReport,
+  runMortalBatch,
+  validateMortalFiles,
+  type MortalBatchItem,
+} from "./mortal-batch";
+import { MortalBatchResults } from "./mortal-batch-ui";
 import { mortalLink, MORTAL_PAGE } from "./mortal-handoff";
 import { BulkHistoryInput } from "./bulk-history-ui";
 import {
@@ -31,6 +38,7 @@ export function RealApp() {
   const [url, setUrl] = useState("");
   const [source, setSource] = useState("");
   const [stage, setStage] = useState<Stage | null>(null);
+  const [batch, setBatch] = useState<MortalBatchItem[]>([]);
   const [seat, setSeat] = useState("");
   const [model, setModel] = useState("");
   const [filter, setFilter] = useState("今日");
@@ -139,7 +147,26 @@ export function RealApp() {
       await inspect({ data: btoa(binary) }, entry);
     });
   };
+  const selectFiles = (files: File[]) => {
+    if (!files.length) return;
+    try {
+      validateMortalFiles(files);
+    } catch (e) {
+      setError(errors[(e as Error).message] ?? "ファイルを確認してください。");
+      return;
+    }
+    setBatch([]);
+    if (files.length === 1) upload(files[0]);
+    else {
+      setAnalysis(null);
+      setStage(null);
+      setSource("");
+      setError("");
+      setBatch(files.map((file) => ({ file })));
+    }
+  };
   const resultEntry = (entry: AnalysisEntry) => {
+    setBatch([]);
     setAnalysis(entry);
     setStage(null);
     setUrl("");
@@ -187,6 +214,7 @@ export function RealApp() {
     setAll(value);
   };
   const add = () => {
+    setBatch([]);
     setAnalysis(null);
     setStage(null);
     setUrl("");
@@ -354,6 +382,13 @@ export function RealApp() {
                 <AnalysisList
                   entries={workspace.analysis_queue ?? []}
                   disabled={busy}
+                  onDelete={(ids) =>
+                    void run(async () => {
+                      await api({ action: "analysis_delete", ids });
+                      await refresh();
+                      setNotice(`${ids.length}件の牌譜を一覧から削除しました`);
+                    })
+                  }
                   onDropResult={(entry, files) => {
                     resultEntry(entry);
                     if (files.length !== 1) {
@@ -678,9 +713,7 @@ export function RealApp() {
           onDrop={(e) => {
             e.preventDefault();
             if (!busy) {
-              if (e.dataTransfer.files.length !== 1)
-                setError(errors.multiple_files);
-              else upload(e.dataTransfer.files[0]);
+              selectFiles(Array.from(e.dataTransfer.files));
             }
           }}
         >
@@ -705,7 +738,61 @@ export function RealApp() {
               {entryLabel(analysis)}
             </p>
           )}
-          {!stage ? (
+          {!!batch.length && (
+            <>
+              <MortalBatchResults
+                items={batch}
+                entries={workspace.analysis_queue ?? []}
+              />
+              {batch.some((i) => !i.result) && (
+                <button
+                  className="button primary full"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await runMortalBatch(
+                        batch,
+                        async (file) => {
+                          const stage = await api<Stage>({
+                            action: "inspect",
+                            data: await encodeReport(file),
+                          });
+                          if (
+                            stage.engine !== "Mortal" ||
+                            stage.target_seat === undefined
+                          )
+                            throw Error("inbox_mortal_only");
+                          return api({
+                            action: "commit",
+                            token: stage.token,
+                            seat: stage.target_seat,
+                            model: 0,
+                            source_url: "",
+                          });
+                        },
+                        setBatch,
+                      );
+                      await refresh();
+                    })
+                  }
+                >
+                  {busy
+                    ? "処理中…"
+                    : batch.some((i) => i.error)
+                      ? "失敗したファイルを再試行"
+                      : `選択した${batch.length}件をまとめて登録`}
+                </button>
+              )}
+              <button
+                className="text-button"
+                disabled={busy}
+                onClick={() => setBatch([])}
+              >
+                選び直す
+              </button>
+            </>
+          )}
+          {!stage && !batch.length ? (
             <>
               <label>
                 NAGA / Mortal レポートURL
@@ -727,13 +814,17 @@ export function RealApp() {
                 JSON / JSON.gz ファイル
                 <input
                   type="file"
+                  multiple
                   accept=".json,.gz"
                   disabled={busy}
-                  onChange={(e) => upload(e.target.files?.[0])}
+                  onChange={(e) => {
+                    selectFiles(Array.from(e.target.files ?? []));
+                    e.target.value = "";
+                  }}
                 />
               </label>
             </>
-          ) : (
+          ) : stage ? (
             <>
               <p>{stage.rounds}局を読み込みました。</p>
               <label>
@@ -823,7 +914,7 @@ export function RealApp() {
                 選び直す
               </button>
             </>
-          )}
+          ) : null}
         </div>
       </dialog>
     </>

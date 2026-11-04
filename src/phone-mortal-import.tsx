@@ -7,6 +7,13 @@ import { previewMortal, type LocalMaterial } from "./offline/mortal-compiler";
 import { readPhone } from "./offline/store";
 import type { Stage } from "./real-types";
 import type { AnalysisEntry } from "./analysis-queue";
+import {
+  encodeReport,
+  runMortalBatch,
+  validateMortalFiles,
+  type MortalBatchItem,
+} from "./mortal-batch";
+import { MortalBatchResults } from "./mortal-batch-ui";
 
 type ImportStage = Stage & { source: string };
 async function request<T>(body: object): Promise<T> {
@@ -65,6 +72,7 @@ export function PhoneMortalImport({
   onRegistered: (local?: boolean) => Promise<void>;
 }) {
   const [file, setFile] = useState<File | null>(null);
+  const [batch, setBatch] = useState<MortalBatchItem[]>([]);
   const [material, setMaterial] = useState<LocalMaterial | null>(null);
   const [stage, setStage] = useState<ImportStage | null>(null);
   const [entry, setEntry] = useState("");
@@ -76,8 +84,8 @@ export function PhoneMortalImport({
   } | null>(null);
   const [updateError, setUpdateError] = useState("");
   useEffect(() => {
-    onPendingChange?.(!!stage || busy);
-  }, [stage, busy, onPendingChange]);
+    onPendingChange?.(!!stage || busy || batch.some((i) => !i.result));
+  }, [stage, busy, batch, onPendingChange]);
   useEffect(() => () => onPendingChange?.(false), [onPendingChange]);
   const work = async (operation: () => Promise<void>) => {
     setBusy(true);
@@ -151,19 +159,101 @@ export function PhoneMortalImport({
         Mortal JSON / JSON.gz
         <input
           type="file"
+          multiple
           accept=".json,.gz,application/json,application/gzip"
           disabled={disabled || busy || (!online && !local)}
           onChange={(e) => {
-            const selected = e.target.files?.[0];
+            const selected = Array.from(e.target.files ?? []);
             e.target.value = "";
-            if (selected) {
-              setFile(selected);
-              inspect(selected);
+            if (!selected.length) return;
+            try {
+              validateMortalFiles(selected);
+            } catch (err) {
+              setError(
+                errors[(err as Error).message] ??
+                  "ファイルを確認してください。",
+              );
+              return;
+            }
+            setBatch([]);
+            if (selected.length === 1) {
+              setFile(selected[0]);
+              inspect(selected[0]);
+            } else {
+              setFile(null);
+              setStage(null);
+              setMaterial(null);
+              setNotice(null);
+              setError("");
+              setUpdateError("");
+              setEntry("");
+              setBatch(selected.map((file) => ({ file })));
             }
           }}
         />
       </label>
       {file && <small className="import-file-name">{file.name}</small>}
+      {!!batch.length && (
+        <>
+          <MortalBatchResults items={batch} entries={entries} />
+          {batch.some((i) => !i.result) && (
+            <button
+              className="button primary"
+              disabled={disabled || busy || (!online && !local)}
+              onClick={() =>
+                void work(async () => {
+                  await runMortalBatch(
+                    batch,
+                    async (file) => {
+                      if (local) {
+                        const { material, final_scores } =
+                          await previewMortal(file);
+                        return api({
+                          action: "register_local",
+                          material,
+                          final_scores,
+                          analysis_id: null,
+                        });
+                      }
+                      const state = await readPhone();
+                      const stage = await request<ImportStage>({
+                        action: "inspect",
+                        data: await encodeReport(file),
+                        source: state?.pack?.source ?? null,
+                      });
+                      return request({
+                        action: "register",
+                        token: stage.token,
+                        source: stage.source,
+                        analysis_id: null,
+                      });
+                    },
+                    setBatch,
+                  );
+                  if (local) await onRegistered(true);
+                  else await updatePack();
+                })
+              }
+            >
+              {busy
+                ? "処理中…"
+                : batch.some((i) => i.error)
+                  ? "失敗したファイルを再試行"
+                  : `選択した${batch.length}件をまとめて登録`}
+            </button>
+          )}
+          <button
+            className="text-button"
+            disabled={busy || disabled}
+            onClick={() => {
+              setBatch([]);
+              setError("");
+            }}
+          >
+            閉じる
+          </button>
+        </>
+      )}
       {error && (
         <div className="error" role="alert">
           {error}

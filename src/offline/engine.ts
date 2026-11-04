@@ -16,6 +16,9 @@ import {
   normalizeAnalysisHistory,
   sameAnalysisHistory,
   validateAnalysisQueue,
+  visibleAnalysis,
+  mergeVisibility,
+  setAnalysisVisible,
   type AnalysisEntry,
 } from "../analysis-queue";
 
@@ -910,16 +913,44 @@ export function phoneReduce(
       data = { synced: true };
       break;
     }
+    case "analysis_delete": {
+      if (
+        !Array.isArray(r.ids) ||
+        !r.ids.length ||
+        r.ids.length > 1000 ||
+        new Set(r.ids).size !== r.ids.length ||
+        !r.ids.every(
+          (id: unknown) =>
+            typeof id === "string" &&
+            state.analysis_queue?.some((e) => e.id === id),
+        )
+      )
+        fail("invalid_queue");
+      for (const e of state.analysis_queue ?? [])
+        if (r.ids.includes(e.id)) setAnalysisVisible(e, false);
+      data = { deleted: r.ids.length };
+      break;
+    }
     case "analysis_bulk": {
       const batch = parseAnalysisBatch(r.data);
       state.analysis_queue ??= [];
       const existing = new Map(state.analysis_queue.map((e) => [e.url, e]));
       const added = batch.filter((e) => !existing.has(e.url));
-      if (existing.size + added.length > 1000) fail("queue_full");
+      if (
+        state.analysis_queue.filter(visibleAnalysis).length +
+          batch.filter(
+            (e) =>
+              !existing.has(e.url) || !visibleAnalysis(existing.get(e.url)!),
+          ).length >
+          1000 ||
+        state.analysis_queue.length + added.length > 10000
+      )
+        fail("queue_full");
       let updated = 0;
       for (const entry of batch) {
         const own = existing.get(entry.url);
         if (own) {
+          setAnalysisVisible(own, true);
           if (entry.history) {
             if (
               own.history &&
@@ -956,10 +987,17 @@ export function phoneReduce(
         id = url.split("paipu=")[1];
       state.analysis_queue ??= [];
       const existing = state.analysis_queue.find((e) => e.id === id);
+      if (existing) setAnalysisVisible(existing, true);
       if (!existing) {
-        if (state.analysis_queue.length >= 1000) fail("queue_full");
+        if (
+          state.analysis_queue.filter(visibleAnalysis).length >= 1000 ||
+          state.analysis_queue.length >= 10000
+        )
+          fail("queue_full");
         state.analysis_queue.push({ id, url, created: at });
       }
+      validateAnalysisQueue(state.analysis_queue);
+      reconcileLocalSources(state);
       data = { duplicate: !!existing };
       break;
     }
@@ -1006,7 +1044,21 @@ export function phoneReduce(
           requested: receipt!.requested,
           reports: clone(receipt!.reports),
           ready: receipt!.ready,
+          ...(mergeVisibility(own!.visibility, receipt!.visibility)
+            ? {
+                visibility: mergeVisibility(
+                  own!.visibility,
+                  receipt!.visibility,
+                ),
+              }
+            : {}),
         });
+        if (
+          own!.visibility &&
+          (own!.visibility.revision !== receipt!.visibility?.revision ||
+            own!.visibility.deleted !== receipt!.visibility?.deleted)
+        )
+          delete own!.received;
       }
       data = { synced: true };
       break;
@@ -1048,13 +1100,18 @@ export function phoneReduce(
             id: entry.id,
             url: entry.url,
             created: entry.created,
+            ...(entry.visibility
+              ? { visibility: clone(entry.visibility) }
+              : {}),
             ...(entry.history
               ? { history: normalizeAnalysisHistory(entry.history, entry.url) }
               : {}),
           });
-        else if (entry.history) {
+        else {
           const own = state.analysis_queue.find((e) => e.id === entry.id)!;
-          if (!own.history)
+          const visibility = mergeVisibility(own.visibility, entry.visibility);
+          if (visibility) own.visibility = clone(visibility);
+          if (entry.history && !own.history)
             own.history = normalizeAnalysisHistory(entry.history, entry.url);
         }
       }

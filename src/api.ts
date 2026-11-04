@@ -1,4 +1,5 @@
 export const errors: Record<string, string> = {
+  batch_limit: "解析JSONは一度に50ファイル、合計100MB以下で選択してください。",
   hand_data_missing:
     "手牌を開くデータがありません。Windowsに接続して「今すぐ同期」を押してください。",
   update_in_progress: "アプリを更新中です。記録は保持しています。",

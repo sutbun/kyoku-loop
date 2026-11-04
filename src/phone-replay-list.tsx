@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { analysisStatus, type AnalysisEntry } from "./analysis-queue";
 import { openMortal } from "./mortal-handoff";
+import { ReplaySelection, useReplaySelection } from "./replay-selection";
 
 export function PhoneReplayList({
   entries,
   disabled,
   onProblems,
+  onDelete,
 }: {
   entries: AnalysisEntry[];
   disabled: boolean;
   onProblems: (reports: string[]) => void;
+  onDelete?: (ids: string[]) => void;
 }) {
   const [filter, setFilter] = useState("すべて");
   const [limit, setLimit] = useState(10);
@@ -25,6 +28,7 @@ export function PhoneReplayList({
         ? !e.reports?.length
         : e.ready && !!e.reports?.length),
   );
+  const selection = useReplaySelection(filtered);
   return (
     <section className="panel phone-replays" aria-label="保存牌譜">
       <h2>
@@ -46,6 +50,13 @@ export function PhoneReplayList({
         ))}
       </div>
       <div className="analysis-list">
+        <ReplaySelection
+          entries={filtered}
+          selected={selection.selected}
+          disabled={disabled}
+          onSelect={selection.setIds}
+          onDelete={onDelete}
+        />
         {filtered.slice(0, limit).map((e) => {
           const unsupported =
             !!e.history && ![9, 12, 16].includes(e.history.mode);
@@ -60,6 +71,16 @@ export function PhoneReplayList({
             >
               <div className="phone-replay-info">
                 <div className="phone-replay-summary">
+                  {onDelete && (
+                    <input
+                      className="replay-checkbox"
+                      type="checkbox"
+                      aria-label={`${title}を選択`}
+                      disabled={disabled}
+                      checked={selection.selected.includes(e.id)}
+                      onChange={() => selection.toggle(e.id)}
+                    />
+                  )}
                   <strong>{title}</strong>
                   <span className="badge">{analysisStatus(e)}</span>
                 </div>

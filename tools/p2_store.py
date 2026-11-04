@@ -496,6 +496,7 @@ def main():
         elif action=='phone_mortal_register': result=store.phone_mortal_register(request.get('token'),request.get('source'),request.get('analysis_id'),request.get('created_at'),request.get('item_ids'))
         elif action=='analysis_add': result=store.analysis_add(request.get('url'))
         elif action=='analysis_bulk': result=store.analysis_bulk(request.get('data'))
+        elif action=='analysis_delete': result=store.analysis_delete(request.get('ids'))
         elif action=='analysis_sync': result=store.analysis_receive(request.get('entries'))
         elif action=='analysis_requested': result=store.analysis_requested(request.get('id'),request.get('requested'))
         elif action=='analysis_setup': result=store.analysis_setup(request.get('seen'))
