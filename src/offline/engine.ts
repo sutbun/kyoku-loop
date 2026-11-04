@@ -936,7 +936,16 @@ export function phoneReduce(
       state.analysis_queue ??= [];
       const existing = new Map(state.analysis_queue.map((e) => [e.url, e]));
       const added = batch.filter((e) => !existing.has(e.url));
-      if (existing.size + added.length > 1000) fail("queue_full");
+      if (
+        state.analysis_queue.filter(visibleAnalysis).length +
+          batch.filter(
+            (e) =>
+              !existing.has(e.url) || !visibleAnalysis(existing.get(e.url)!),
+          ).length >
+          1000 ||
+        state.analysis_queue.length + added.length > 10000
+      )
+        fail("queue_full");
       let updated = 0;
       for (const entry of batch) {
         const own = existing.get(entry.url);
@@ -980,9 +989,15 @@ export function phoneReduce(
       const existing = state.analysis_queue.find((e) => e.id === id);
       if (existing) setAnalysisVisible(existing, true);
       if (!existing) {
-        if (state.analysis_queue.length >= 1000) fail("queue_full");
+        if (
+          state.analysis_queue.filter(visibleAnalysis).length >= 1000 ||
+          state.analysis_queue.length >= 10000
+        )
+          fail("queue_full");
         state.analysis_queue.push({ id, url, created: at });
       }
+      validateAnalysisQueue(state.analysis_queue);
+      reconcileLocalSources(state);
       data = { duplicate: !!existing };
       break;
     }
@@ -1038,6 +1053,12 @@ export function phoneReduce(
               }
             : {}),
         });
+        if (
+          own!.visibility &&
+          (own!.visibility.revision !== receipt!.visibility?.revision ||
+            own!.visibility.deleted !== receipt!.visibility?.deleted)
+        )
+          delete own!.received;
       }
       data = { synced: true };
       break;

@@ -67,3 +67,68 @@ test("unknown IDs or malformed delete batches never partially change state", () 
     expect(() => phoneReduce(s, { action: "analysis_delete", ids })).toThrow();
   expect(s).toEqual(before);
 });
+
+test("deletion frees active capacity without discarding retained references", () => {
+  let s = freshPhoneState("capacity-delete");
+  s.analysis_queue = Array.from({ length: 1000 }, (_, i) => ({
+    id: url(i).split("paipu=")[1],
+    url: url(i),
+    created: "2026-11-04T00:00:00Z",
+  }));
+  s = phoneReduce(s, {
+    action: "analysis_delete",
+    ids: [s.analysis_queue[0].id],
+  }).state;
+  s = phoneReduce(s, { action: "analysis_add", url: url(1001) }).state;
+  expect(s.analysis_queue).toHaveLength(1001);
+  expect(s.analysis_queue!.filter((e) => !e.visibility?.deleted)).toHaveLength(
+    1000,
+  );
+  expect(() =>
+    phoneReduce(s, { action: "analysis_add", url: url(0) }),
+  ).toThrow();
+  validatePhoneBackup(s);
+});
+
+import { IDBFactory } from "fake-indexeddb";
+import { phoneTransaction, readPhone } from "../src/offline/store";
+import { synchronizeAnalysis } from "../src/offline/analysis-sync";
+test("deletion is sent in the real sync snapshot, and delayed ACK cannot undo a new explicit restore", async () => {
+  globalThis.indexedDB = new IDBFactory();
+  await phoneTransaction({ action: "analysis_add", url: url(1) });
+  const id = url(1).split("paipu=")[1];
+  await phoneTransaction({ action: "analysis_delete", ids: [id] });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    const request = JSON.parse(String(init?.body));
+    expect(request.entries[0].visibility).toEqual({
+      revision: 1,
+      deleted: true,
+    });
+    await phoneTransaction({ action: "analysis_add", url: url(1) });
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        data: {
+          received_at: "2026-11-04T00:00:00Z",
+          entries: request.entries.map((e: object) => ({
+            ...e,
+            requested: false,
+            reports: [],
+            ready: false,
+          })),
+        },
+      }),
+    );
+  };
+  try {
+    await synchronizeAnalysis();
+    expect((await readPhone())!.analysis_queue![0].received).toBeUndefined();
+    expect((await readPhone())!.analysis_queue![0].visibility).toEqual({
+      revision: 2,
+      deleted: false,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

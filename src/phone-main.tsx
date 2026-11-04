@@ -66,7 +66,7 @@ function PhoneApp() {
   const [loaded, setLoaded] = useState(false);
   const [pending, setPending] = useState(0);
   const [analysisQueue, setAnalysisQueue] = useState<AnalysisEntry[]>([]);
-  const urlPending = analysisQueue.filter((e) => !e.received).length;
+  const [urlPending, setURLPending] = useState(0);
   const [capacity, setCapacity] = useState("");
   const [persistent, setPersistent] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
@@ -84,6 +84,9 @@ function PhoneApp() {
     setWorkspace(await api<Workspace>({ action: "state" }));
     const state = await readPhone();
     setLocal(state?.schema === 2);
+    setURLPending(
+      state?.analysis_queue?.filter((e) => !e.received).length ?? 0,
+    );
     setResultPending(
       state?.local_imports?.filter((e) => !e.synced_source).length ?? 0,
     );

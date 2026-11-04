@@ -18,7 +18,7 @@ export type AnalysisEntry = {
   history?: AnalysisHistory;
   visibility?: { revision: number; deleted: boolean };
 };
-export const visibleAnalysis = (e: AnalysisEntry) => !e.visibility?.deleted;
+export const visibleAnalysis = (e: AnalysisEntry) => !e?.visibility?.deleted;
 export function mergeVisibility(
   a: AnalysisEntry["visibility"],
   b: AnalysisEntry["visibility"],
@@ -35,6 +35,7 @@ export function setAnalysisVisible(e: AnalysisEntry, visible: boolean) {
     revision: (e.visibility?.revision ?? 0) + 1,
     deleted: !visible,
   };
+  delete e.received;
 }
 export const sourceURL = (value: string): string => {
   let url = value.trim();
@@ -54,7 +55,11 @@ export const sourceURL = (value: string): string => {
 export function validateAnalysisQueue(
   value: unknown,
 ): asserts value is AnalysisEntry[] {
-  if (!Array.isArray(value) || value.length > 1000)
+  if (
+    !Array.isArray(value) ||
+    value.length > 10000 ||
+    value.filter(visibleAnalysis).length > 1000
+  )
     throw new Error("invalid_queue");
   const ids = new Set();
   for (const e of value) {

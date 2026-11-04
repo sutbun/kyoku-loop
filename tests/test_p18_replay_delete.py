@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from tools.p2_store import Store
 from tools.study import StudyFailure
+from tools.sync import inspect_phone_backup
 from test_p0_verify import fixture
 
 URL = 'https://game.mahjongsoul.com/?paipu=260101-fictional-delete-one'
@@ -67,6 +68,16 @@ class ReplayDeleteTests(unittest.TestCase):
         for v in ({'revision': True, 'deleted': True}, {'revision': -1, 'deleted': False}, {'revision': 1, 'deleted': 'yes'}, None):
             with self.assertRaises(StudyFailure): self.store.analysis_receive([dict(a, visibility=v)])
         self.assertNotIn('visibility', self.store.analysis_entry(a['id']))
+
+    def test_phone_backup_counts_active_capacity_separately_from_deleted_entries(self):
+        queue = [{'id': '260101-fictional-delete-'+str(i),
+                  'url': 'https://game.mahjongsoul.com/?paipu=260101-fictional-delete-'+str(i),
+                  'created': '2026-11-04T00:00:00Z',
+                  'visibility': {'revision': 1, 'deleted': True}} for i in range(1001)]
+        backup = {'schema': 1, 'device': 'delete-backup', 'pack': None, 'events': [], 'analysis_queue': queue}
+        self.assertEqual(inspect_phone_backup(self.store, backup)[0]['urls'], 1001)
+        for e in queue: e.pop('visibility')
+        with self.assertRaises(StudyFailure): inspect_phone_backup(self.store, backup)
 
     def test_backup_preserves_deletion_and_old_backup_cannot_resurrect_it(self):
         a = self.store.analysis_add(URL)['entries'][0]

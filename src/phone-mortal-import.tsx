@@ -183,7 +183,7 @@ export function PhoneMortalImport({
               setFile(null);
               setStage(null);
               setMaterial(null);
-              setNotice("");
+              setNotice(null);
               setError("");
               setUpdateError("");
               setEntry("");

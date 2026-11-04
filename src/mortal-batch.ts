@@ -1,6 +1,5 @@
-export type BatchRegistration = {
-  id: string;
-  duplicate: boolean;
+import type { MortalRegistrationResult } from "./mortal-registration";
+export type BatchRegistration = MortalRegistrationResult & {
   linked?: boolean;
 };
 export type MortalBatchItem = {

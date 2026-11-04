@@ -125,6 +125,7 @@ class AnalysisQueueMixin:
                 if value['meta']:
                     self._receive_analysis_history({'id':ident, 'history':value['meta']})
             self.reconcile_mortal_sources()
+            if len(self.analysis_entries(True)) > 10000: raise StudyFailure('queue_full')
         return {'added': added, 'existing': supplied-added, 'total': len(existing)+added}
 
     def analysis_entry(self, ident):
@@ -148,7 +149,7 @@ class AnalysisQueueMixin:
         self.db.execute('INSERT OR IGNORE INTO study_settings VALUES(?,?)', (key,json.dumps(entry['history'],ensure_ascii=False)))
 
     def analysis_receive(self, entries):
-        if not isinstance(entries, list) or len(entries) > 1000: raise StudyFailure('invalid_queue')
+        if not isinstance(entries, list) or len(entries) > 10000: raise StudyFailure('invalid_queue')
         valid = [validate_entry(e) for e in entries]
         if len({e['id'] for e in valid}) != len(valid): raise StudyFailure('invalid_queue')
         receipts = []
@@ -163,6 +164,8 @@ class AnalysisQueueMixin:
                 self._put_analysis(saved)
             self.reconcile_mortal_sources()
             receipts = [self.analysis_entry(entry['id']) for entry in valid]
+            if len(self.analysis_entries()) > 1000 or len(self.analysis_entries(True)) > 10000:
+                raise StudyFailure('queue_full')
         # Only a committed transaction supplies a receipt. Original URL stays on phone.
         return {'entries':receipts, 'received_at':self.moment().isoformat()}
 
@@ -174,9 +177,12 @@ class AnalysisQueueMixin:
             row = self.db.execute('SELECT value FROM study_settings WHERE key=?', (PREFIX+ident,)).fetchone()
             if row:
                 entry = self.analysis_entry(ident)
+                if entry.get('visibility', {}).get('deleted') and len(self.analysis_entries()) >= 1000:
+                    raise StudyFailure('queue_full')
                 self._analysis_visible(entry, True)
                 self._put_analysis(entry)
-                return {'entries': [entry], 'received_at': self.moment().isoformat()}
+                self.reconcile_mortal_sources()
+                return {'entries': [self.analysis_entry(ident)], 'received_at': self.moment().isoformat()}
         return self.analysis_receive([{'id':ident, 'url':url, 'created':self.moment().isoformat()}])
 
     def analysis_requested(self, ident, requested):
