@@ -1,3 +1,4 @@
+import { PhoneBulkImport } from "./phone-bulk-import";
 import { VersionUpdate } from "./version-update";
 import { updateLocked } from "./offline/update-lock";
 import { useEffect, useState, useRef } from "react";
@@ -32,6 +33,7 @@ function PhoneApp() {
   const [updateLock, setUpdateLock] = useState(false);
   const [importPending, setImportPending] = useState(false);
   const [sourcePending, setSourcePending] = useState(false);
+  const [bulkPending, setBulkPending] = useState(false);
   const busyRef = useRef(0),
     importBusyRef = useRef(false);
   const [workspace, setWorkspace] = useState<Workspace>({
@@ -397,7 +399,8 @@ function PhoneApp() {
               updateLocked()
             )
               return "処理後に再試行";
-            if (sourcePending || importPending) return "入力を完了";
+            if (sourcePending || importPending || bulkPending)
+              return "入力を完了";
             if (screen !== "home") return "ホームで更新";
             return null;
           }}
@@ -435,6 +438,24 @@ function PhoneApp() {
                         "URLは保存済みです。アプリ本体の保存を確認できないため、通信復帰後に保存を確認してください。",
                       );
                     });
+                    if (navigator.onLine) void syncRecords();
+                  }}
+                />
+                <PhoneBulkImport
+                  disabled={busy || importBusy || !loaded}
+                  onPendingChange={setBulkPending}
+                  onBusy={(value) => {
+                    importBusyRef.current = value;
+                    setImportBusy(value);
+                  }}
+                  onImport={(data) => api({ action: "analysis_bulk", data })}
+                  onSaved={async () => {
+                    await refresh();
+                    void saveShell().catch(() =>
+                      setError(
+                        "URLは保存済みです。アプリ本体を保存できませんでした。通信復帰後に保存を確認してください。",
+                      ),
+                    );
                     if (navigator.onLine) void syncRecords();
                   }}
                 />
