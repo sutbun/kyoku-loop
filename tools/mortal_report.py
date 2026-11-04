@@ -150,6 +150,22 @@ def final_scores(report):
         return None
 
 
+def _same_discard_choice(candidate, actual, hand, drawn):
+    # A tile policy may use the drawn copy as its canonical action even when
+    # the log records discarding an identical held copy (or vice versa).
+    # This is only an index-to-policy comparison: the actual action still has
+    # to equal the next replay event, including its physical discard flag.
+    if (type(candidate.get('tsumogiri')) is not bool
+            or type(actual.get('tsumogiri')) is not bool):
+        return False
+    if candidate == actual:
+        return True
+    return (candidate.get('type') == actual.get('type') == 'dahai'
+            and {k:v for k,v in candidate.items() if k != 'tsumogiri'}
+            == {k:v for k,v in actual.items() if k != 'tsumogiri'}
+            and drawn == actual.get('pai') and hand.count(drawn) >= 2)
+
+
 def project(report):
     report = validate(report)
     seat = report['player_id']
@@ -273,7 +289,9 @@ def project(report):
                     or exact[EXACT_TILES.index(expected['pai'])] != max(exact)
                     or type(entry['actual_index']) is not int
                     or entry['actual_index'] not in range(len(details))
-                    or details[entry['actual_index']]['action'] != actual):
+                    or not _same_discard_choice(details[entry['actual_index']]['action'], actual,
+                                                scene['own_hand'], scene['drawn']
+                                                if stream[ei]['info']['msg']['type'] == 'tsumo' else None)):
                 raise ValueError('reconstruction_failed')
             # Verify the reported policy against Q and the recorded temperature;
             # these are model preferences, not win probabilities or point loss.
