@@ -2,6 +2,7 @@ import { diagnosticText } from "./diagnostics.js";
 
 const $ = (id) => document.getElementById(id);
 const messages = {
+  result_not_ready: "解析結果の表示を待ってから、もう一度押してください",
   selection_limit: "最大20件です",
   waiting: "送信できる状態を待っています",
   submitting: "送信操作を開始・結果は未確認です",
@@ -166,6 +167,8 @@ function render() {
   const running = batch?.phase === "running";
   const paused = batch?.phase === "paused";
   const done = batch?.phase === "done";
+  const canRecover =
+    paused && data.manualRecoveryAllowed && !!data.recoveryTask;
   const singleActive = data.jobs.find((j) =>
     ["waiting", "submitting", "analysing", "saving"].includes(j.phase),
   );
@@ -202,7 +205,9 @@ function render() {
           ? `次の開始まで ${Math.ceil((batch.nextAt - Date.now()) / 1000)}秒`
           : job?.awaitingConfirmation
             ? `${Math.min(batch.index + 1, total)}件目：本人確認待ち`
-            : `${Math.min(batch.index + 1, total)}件目を${shortStage[job?.phase] || "準備中"}`;
+            : job?.manualSubmission && job.phase === "analysing"
+              ? `${Math.min(batch.index + 1, total)}件目：既存の結果を保存準備中`
+              : `${Math.min(batch.index + 1, total)}件目を${shortStage[job?.phase] || "準備中"}`;
       notice.textContent =
         stage + (batch.stopAfterCurrent ? "\nこの1件の後に停止します" : "");
     }
@@ -231,6 +236,16 @@ function render() {
       notice.textContent = "対象を変更して四人半荘を選んでください";
   }
   if (batchFeedback) notice.textContent = label(batchFeedback);
+  else if (
+    paused &&
+    batch.reason === "manual_submission" &&
+    data.manualRecoveryAllowed
+  )
+    notice.textContent = canRecover
+      ? `${batch.index + 1}件目の表示中の結果を登録します`
+      : "Mortalの結果画面で、この拡張を開いてください";
+  $("recover-result").hidden = !canRecover;
+  $("recover-result").disabled = busy || loading;
   const progress = $("batch-progress");
   progress.hidden = !(running || paused);
   progress.max = total || 1;
@@ -389,9 +404,12 @@ async function batchAction(type) {
       type,
       model: $("batch-model").value,
       ids: [...selected],
+      expectedTask: latestStatus?.recoveryTask,
     });
     if (result.error) batchFeedback = result.error;
-    else if (type === "BATCH_START" || type === "BATCH_RESUME") {
+    else if (
+      ["BATCH_START", "BATCH_RESUME", "RECOVER_MANUAL_RESULT"].includes(type)
+    ) {
       $("tools").open = false;
       $("targets").open = false;
     }
@@ -418,6 +436,10 @@ $("batch-start").addEventListener(
     ),
 );
 $("batch-stop").addEventListener("click", () => void batchAction("BATCH_STOP"));
+$("recover-result").addEventListener(
+  "click",
+  () => void batchAction("RECOVER_MANUAL_RESULT"),
+);
 $("end-batch").addEventListener("click", () => void batchAction("BATCH_END"));
 $("open-app").addEventListener("click", async () => {
   try {

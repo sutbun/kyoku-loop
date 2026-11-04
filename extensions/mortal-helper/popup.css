@@ -134,7 +134,8 @@ button {
   width: 100%;
   min-height: 42px;
 }
-#batch-start {
+#batch-start,
+#recover-result {
   color: white;
   background: #175e49;
   border-color: #175e49;
