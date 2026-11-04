@@ -402,6 +402,56 @@ test(
       await until(f.state, (s) => s.batch?.phase === "paused", "lost receipt");
       assert.deepEqual(f.calls.posts, [1]);
       assert.deepEqual(f.calls.reads, [1]);
+      await f.popup.evaluate(() => {
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: async (text) => {
+              window.copiedDiagnostic = {
+                text,
+                active: navigator.userActivation.isActive,
+              };
+            },
+          },
+        });
+      });
+      await f.popup.locator("#copy-diagnostics").click();
+      const copied = await until(
+        () => f.popup.evaluate(() => window.copiedDiagnostic),
+        (v) => !!v,
+        "copied diagnostics",
+      );
+      assert.equal(copied.active, true);
+      for (const text of [
+        "登録 0件 ／ 全1件",
+        "[local_unavailable]",
+        id(1),
+        task(1),
+        "保持JSON：あり",
+      ])
+        assert.ok(copied.text.includes(text), text);
+      await f.popup
+        .locator("body")
+        .screenshot({ path: join(f.root, "popup-diagnostics.png") });
+      await f.popup.evaluate(() => {
+        navigator.clipboard.writeText = async () => {
+          throw Error("fixture denied");
+        };
+      });
+      await f.popup.locator("#copy-diagnostics").click();
+      await f.popup.locator("#diagnostics-text").waitFor({ state: "visible" });
+      assert.equal(
+        await f.popup.locator("#diagnostics-text").inputValue(),
+        copied.text,
+      );
+      assert.equal(
+        await f.popup
+          .locator("#diagnostics-text")
+          .evaluate(
+            (e) => e.selectionEnd - e.selectionStart === e.value.length,
+          ),
+        true,
+      );
       await f.reload();
       const resumed = await f.message({ type: "BATCH_RESUME" });
       assert.equal(resumed.ok, true, JSON.stringify(resumed));

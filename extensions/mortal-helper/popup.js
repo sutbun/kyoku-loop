@@ -1,3 +1,5 @@
+import { diagnosticText } from "./diagnostics.js";
+
 const $ = (id) => document.getElementById(id);
 const messages = {
   waiting: "送信できる状態を待っています",
@@ -59,6 +61,8 @@ const messages = {
     "JSONの一時保存を確認できませんでした。ダウンロード済みJSONを確認してください。",
   size_limit: "JSONが空、または20MiBを超えたため止めました。",
   user_pause: "一時停止しました。",
+  reconstruction_failed:
+    "局面・評価候補の照合で止まりました。保存済みJSONを保持しています。",
 };
 const label = (value) =>
   messages[value] || "操作を完了できませんでした。ページを確認してください。";
@@ -70,6 +74,7 @@ let refreshing = false,
   hasPending = false,
   batchFeedback = "";
 const selected = new Set();
+let latestStatus = null;
 function batchControls() {
   const locked = ["running", "paused"].includes(batch?.phase);
   $("batch-model").disabled = busy || locked;
@@ -179,6 +184,8 @@ export async function refresh() {
       $("notice").textContent = label(data.error);
       return;
     }
+    latestStatus = data;
+    $("copy-diagnostics").disabled = false;
     const running = data.jobs.find((j) =>
       ["waiting", "submitting", "analysing", "saving"].includes(j.phase),
     );
@@ -288,6 +295,29 @@ async function action(type) {
 $("start").addEventListener("click", () => void action("START"));
 $("cancel").addEventListener("click", () => void action("CANCEL"));
 $("export").addEventListener("click", () => void action("EXPORT"));
+$("copy-diagnostics").addEventListener("click", async () => {
+  if (!latestStatus) return;
+  const text = diagnosticText(
+    latestStatus,
+    chrome.runtime.getManifest().version_name,
+    label,
+  );
+  const fallback = $("diagnostics-text");
+  fallback.hidden = true;
+  try {
+    // Call directly from the user's click, without an async fetch or permission.
+    await navigator.clipboard.writeText(text);
+    $("copy-notice").textContent =
+      "診断情報をコピーしました。そのままチャットへ貼り付けられます。";
+  } catch {
+    fallback.value = text;
+    fallback.hidden = false;
+    fallback.focus();
+    fallback.select();
+    $("copy-notice").textContent =
+      "下の診断情報を選択しました。Ctrl+Cでコピーできます。";
+  }
+});
 void refresh().catch(() => {
   $("notice").textContent = label("operation_failed");
 });

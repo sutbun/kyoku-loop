@@ -1,6 +1,6 @@
 # Mortalの順次解析とKyokuLoop登録
 
-KyokuLoop Mortal Helper **DEV-11.04-21**。通常ブラウザ内での初版20の1件保存は本人の「保存できた」で受入済み。21では本人が選んだ最大20件を、送信・結果待ち・JSON保存・検証・登録ACKの順で1件ずつ処理し、30秒空けて次へ進む。実サイトの複数件動作は別の確認とする。
+KyokuLoop Mortal Helper **DEV-11.05-2**。初版21の一括実操作は本人の登録完了表示と正本DBの紐付けで確認済み。通常ブラウザ内での初版20の1件保存は本人の「保存できた」で受入済み。21では本人が選んだ最大20件を、送信・結果待ち・JSON保存・検証・登録ACKの順で1件ずつ処理し、30秒空けて次へ進む。実サイトの複数件動作は別の確認とする。
 
 ## 処理と照合
 
@@ -46,3 +46,10 @@ node --test tests/mortal-helper-update.test.mjs
 - [Chrome messaging](https://developer.chrome.com/docs/extensions/develop/concepts/messaging)：拡張内通信とtabs.sendMessage。
 - [Chrome scripting](https://developer.chrome.com/docs/extensions/reference/api/scripting)：host権限を用いたisolated scriptの追加。
 - [Chrome downloads](https://developer.chrome.com/docs/extensions/reference/api/downloads)：既定保存先、完了イベントとダウンロードID。
+
+## 停止時の診断情報（11.05-2）
+停止メッセージの直下に「診断情報をコピー」を置く。最後に取得したSTATUSから進捗・生の停止コード・牌譜ID・モデル・送信済みか・結果ID・ファイル保存先・登録ACK・保留JSONの有無を明示的な項目だけで組み立てる。利用者のクリック内でClipboard.writeTextを呼び、拒否時はread-only文字欄へ表示・選択しCtrl+Cでコピーできる。クリップボード読取や追加権限、JSON本体・Cookie・学習履歴・認証情報の出力は行わない。
+
+配布にはdiagnostics.jsを含める。更新器のInstalledDirectoryは、HelperRoot内の確認済みの既存extensionパスを明示して同じ場所へ更新するための任意引数。標準20読込先のinstalled.jsonを維持し、既存21読込先を明示する場合はその親のinstalled-extension.jsonへ別記録する。各読込元のZIPとバックアップを保持し、両方とも実ファイルのhashが一致した場合だけ更新する。元のパス・拡張ID・台帳・IndexedDBを維持する。
+
+一次資料: [Chrome Clipboard permissions](https://developer.chrome.com/docs/extensions/reference/permissions-list)、[Chromiumのユーザー操作内のwriteTextの扱い](https://issues.chromium.org/issues/40846300)。自動検査はClipboardの書込先をメモリ上へ置換し、クリックのuserActivationとコピー内容・拒否時の選択文字欄を確認する。本人のOSクリップボードは検査で変更しない。

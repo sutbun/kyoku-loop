@@ -8,13 +8,14 @@ import {
   mkdirSync,
   writeFileSync,
   existsSync,
+  cpSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 function fixture() {
   const root = resolve(".local/helper-update-test/" + crypto.randomUUID());
   const installed = join(root, "DEV-11.04-20/extension"),
-    pack = join(root, "DEV-11.04-21");
+    pack = join(root, "DEV-11.05-2");
   mkdirSync(installed, { recursive: true });
   mkdirSync(join(pack, "extension"), { recursive: true });
   const files = {},
@@ -31,6 +32,7 @@ function fixture() {
     "batch.js",
     "payloads.js",
     "app-content.js",
+    "diagnostics.js",
   ];
   for (const name of names) {
     const bytes = readFileSync("extensions/mortal-helper/" + name);
@@ -58,12 +60,12 @@ function fixture() {
   writeFileSync(
     join(pack, "package-info.json"),
     JSON.stringify({
-      version: "DEV-11.04-21",
+      version: "DEV-11.05-2",
       sourceSha: "a".repeat(40),
       files,
     }),
   );
-  const run = (p) =>
+  const run = (p, installedDirectory) =>
     execFileSync(
       "pwsh",
       [
@@ -74,6 +76,9 @@ function fixture() {
         p || pack,
         "-HelperRoot",
         root,
+        ...(installedDirectory
+          ? ["-InstalledDirectory", installedDirectory]
+          : []),
       ],
       {
         encoding: "utf8",
@@ -119,4 +124,24 @@ test("rejects package tampering, extra installed files and paths outside its roo
   const c = fixture();
   assert.throws(() => c.run(a.pack));
   assert.equal(readdirSync(c.installed).length, 8);
+});
+
+test("updates a second known package path without changing the primary installation record", () => {
+  const f = fixture();
+  const secondary = join(f.root, "DEV-11.04-21/extension");
+  cpSync(f.installed, secondary, { recursive: true });
+  writeFileSync(
+    join(f.root, "DEV-11.04-21/package-info.json"),
+    JSON.stringify({ files: f.oldFiles }),
+  );
+  f.run();
+  const primary = readFileSync(join(f.root, "installed.json"), "utf8");
+  const updated = JSON.parse(f.run(f.pack, secondary));
+  assert.equal(updated.directory, secondary);
+  assert.equal(readFileSync(join(f.root, "installed.json"), "utf8"), primary);
+  assert.ok(existsSync(join(f.root, "DEV-11.04-21/installed-extension.json")));
+  for (const [name, sha] of Object.entries(f.files))
+    assert.equal(hash(readFileSync(join(secondary, name))), sha);
+  assert.equal(JSON.parse(f.run(f.pack, secondary)).directory, secondary);
+  assert.throws(() => f.run(f.pack, join(f.root, "../outside/extension")));
 });

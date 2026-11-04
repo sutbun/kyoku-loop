@@ -13,6 +13,7 @@ test("Mortal helper state machine and isolated browser integration", async () =>
       "tests/mortal-payloads.test.mjs",
       "tests/mortal-batch-browser.test.mjs",
       "tests/mortal-helper-update.test.mjs",
+      "tests/mortal-diagnostics.test.mjs",
     ],
     {
       encoding: "utf8",
