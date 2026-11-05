@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { phoneFixture } from "./phone-fixture";
+import { hashEvent, syncPayload } from "../src/offline/protocol";
 import {
   freshPhoneState,
   phoneReduce,
@@ -128,6 +129,77 @@ for (const counter of [undefined, 0]) {
     const next = call({ action: "study_start", mode: "practice" });
     expect(answered.has(next.item_id)).toBe(false);
     expect(state.session!.queue.every((q) => !answered.has(q.id))).toBe(true);
+  });
+}
+
+for (const mode of ["practice", "scheduled"] as const) {
+  test(`completed five are not repeated behind a large ${mode} backlog`, async () => {
+    const pack = manyQuestions();
+    if (mode === "practice") {
+      for (const item of pack.items.slice(5)) item.review_count = 20;
+    }
+    let at = "2026-11-05T12:00:00+09:00";
+    let state = phoneReduce(
+      freshPhoneState("uneven-history"),
+      { action: "install_pack", pack },
+      at,
+    ).state;
+    const call = (request: object) => {
+      const result = phoneReduce(state, request, at);
+      state = result.state;
+      return result.data as any;
+    };
+    const first: string[] = [];
+    for (let n = 0; n < 5; n++) {
+      const q = call({ action: "study_start", mode });
+      first.push(q.item_id);
+      call({
+        action: "study_choice",
+        session: q.id,
+        choice: "choose",
+        answer: q.scene.own_hand[0],
+      });
+      call({ action: "study_choice", session: q.id, choice: "confirm" });
+      call({
+        action: "study_rate",
+        session: q.id,
+        item: q.item_id,
+        rating: "再復習",
+        event: `uneven-${n}`,
+      });
+    }
+    // A real sync moves local answers into the saved pack without deleting raw events.
+    const snapshot = syncPayload(state);
+    const synced = structuredClone(state.pack!);
+    for (const event of state.events) {
+      const i = synced.items.find((i) => i.id === event.item)!;
+      i.review_count = (i.review_count ?? 0) + 1;
+      synced.histories[event.item].events.push({ ...event, undone: false });
+    }
+    const receipts = await Promise.all(
+      state.events.map(async (e) => ({
+        id: e.id,
+        hash: await hashEvent(e),
+        credited: e.credited,
+        before_state: e.before_state,
+        after_state: e.after_state,
+        reason: "",
+      })),
+    );
+    call({
+      action: "apply_sync",
+      snapshot,
+      reply: {
+        protocol: 1,
+        source: snapshot.source,
+        device: snapshot.device,
+        receipts,
+        pack: synced,
+      },
+    });
+    if (mode === "scheduled") at = "2026-11-06T12:00:00+09:00";
+    call({ action: "study_start", mode });
+    expect(state.session!.queue.every((q) => !first.includes(q.id))).toBe(true);
   });
 }
 
