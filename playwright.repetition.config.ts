@@ -8,6 +8,8 @@ export default defineConfig({
     "offline-engine.spec.ts",
     "p5-client.spec.ts",
     "study-controls.spec.ts",
+    "p3.spec.ts",
+    "unified-ui.spec.ts",
   ],
   outputDir: "D:/dev-data/kyoku-loop/private/study-repetition-20261105/edge",
   use: {

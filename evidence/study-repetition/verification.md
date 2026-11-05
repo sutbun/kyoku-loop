@@ -1,18 +1,20 @@
-# Stored-history practice rotation
+# Practice rotation and overdue selection
 
-Baseline: main `403345fe5b4fbc98c0a7e55852cbba20d6a37d09`. Candidate: DEV-11.05-13.
+Baseline: main `549f605b6ca28c113008c274586d3e9dfb672e1c` (shared UI and Helper updates retained). Candidate: DEV-11.05-13.
 
-The current reducer already rotates through 207 fictional unanswered questions without repetition in both practice and same-day scheduled study. The reported device failure has not been established as that path. A separate reproducible compatibility defect exists: a valid retained pack containing answer history but no `review_count` summary selects previously answered questions again. The pre-fix regression failed with `Expected false / Received true` for membership of the next item in the answered set.
+Two valid-state selection defects reproduce completion followed by the same five questions. In practice, five questions with fewer historical answers remain first after another completed set while the rest of a large library have higher counts. In scheduled study, newer review deadlines precede older unlearned deadlines because status was compared before date. Both scenarios failed before the correction in Python and the mobile reducer. Testing only equally unanswered questions did not detect these cases.
 
-The candidate uses the greater of the saved summary and the saved answer-history count, then adds local answers whose event IDs are absent from the saved history. This changes only the computed selection count. It does not rewrite stored answers, due dates, streaks, sessions or synchronization contracts.
+Practice now selects unanswered questions first, followed by the oldest last-answer instant. Count, status, deadline and ID break ties. Scheduled study selects the oldest eligible deadline first, then retains review/manual/automatic priority for matching dates. UTC-normalized instants are used in both implementations. Older phone packs also derive missing or understated counts from retained answer history; local/saved copies of the same event are not counted twice. Read-only statistics are memoized within one reducer call.
 
-Verification on the candidate:
+No stored answer, due date, streak, active session, backup or synchronization format is rewritten. Due-date eligibility, same-day scheduled credit limits, pause/graduation exclusion and interrupted-session continuation remain intact.
 
-- `npm run check` and `npm run build`: passed.
-- New reducer checks: practice and scheduled study each cover 207 distinct fictional questions before a repeat; missing and stale-zero summary counters both prefer unanswered items. Four passed.
-- New isolated mobile UI check: old answer history, five answers through the compiled UI, completion, then another five distinct unanswered candidates. Passed.
-- Existing isolated Edge regressions: `offline-engine`, `p5-client`, `practice-rotation`, `study-controls`; 16 passed. Includes raw-event deduplication, refusing a newer-answer overwrite, backup recovery, undo, resume, scheduling intervals, automatic stale-item advancement and answer controls.
-- `python -B -m unittest discover -s tests -p test_p4_pack.py`: one passed. Python/backend source is unchanged. The full product `npm test` was not run for this draft; this record is not release approval.
-- `git diff --check`: passed. Focused self-review confirmed that valid summary counts continue to dominate partial histories and that local/saved event IDs are not counted twice.
+Verification:
 
-Tests use fictional data and intercept all browser requests in the UI cases. No real reports, account identifiers, URLs, answers or device backups are included here. The actual reported device behavior, including whether it follows completion or interruption, remains unconfirmed. The candidate is not deployed and must not be described as a confirmed fix for both reported modes.
+- `npm run check`, `npm run build`, Prettier and `git diff --check`: passed after merging current main. Only the version conflicted; retained build 13 while incorporating build 12's shared UI.
+- `npm run test:core`: 168 passed in 443.199 seconds. The subsequently added timezone regression also passed in the focused three-test selection suite; two of those tests are included in the full run.
+- Integrated isolated Edge selection/control suite: 23 passed. Includes 207-question first passes, old/missing counters, uneven answer counts, a next-day backlog, a simulated sync ACK moving answers to saved history while retaining raw events, compiled mobile five-answer completion and the next set, undo/backup/concealment/graduation/deduplication/stale advancement regressions.
+- Windows study and shared-navigation integration checks: six passed, including five-answer concealment/completion/undo/history, a lost-response retry, additive backup recovery and shared navigation. Total integrated configured Edge coverage is 29 passed. Build/core/configured Edge components are executed separately instead of repeating the entire npm-test wrapper.
+
+Focused self-review compared both queue implementations, UTC offset handling, summary versus partial histories, raw-event deduplication, unchanged scheduling credit rules and the integrated diff. Browser cases intercept requests and Python cases use generated private DBs or an in-memory DB. No real reports, account identifiers, source URLs, answers or device backups are included here.
+
+The automated evidence establishes the reproduced selection failures and their correction. It is not acceptance of the user's physical iPad/iPhone experience. Deployment and the minimal real-device check are tracked in the shared task.
