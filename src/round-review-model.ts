@@ -339,6 +339,19 @@ export function isDiscrepancy(s: Scene): boolean {
     top = candidates(s)[0]?.value;
   return actual !== undefined && top !== undefined && top - actual > 1e-8;
 }
+export function discrepancyIndex(
+  m: RoundMaterial,
+  from: number,
+  direction: 1 | -1,
+): number {
+  for (
+    let i = from + direction;
+    i >= 0 && i < m.timeline.length;
+    i += direction
+  )
+    if (isDiscrepancy(m.timeline[i])) return i;
+  return -1;
+}
 export function navigate(
   m: RoundMaterial,
   session: RoundSession,

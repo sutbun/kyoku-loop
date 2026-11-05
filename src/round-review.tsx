@@ -14,7 +14,7 @@ import {
   bookmarkKey,
   candidates,
   changeReview,
-  isDiscrepancy,
+  discrepancyIndex,
   navigate,
   newReviewState,
   newRoundSession,
@@ -32,7 +32,18 @@ export type ReviewTarget =
   { report: string; round?: number; event?: number } | "saved";
 
 type OpenPosition = "start" | "end" | "decision";
-type OpenOptions = { position?: OpenPosition; quiz?: boolean };
+type OpenOptions = {
+  position?: OpenPosition;
+  quiz?: boolean;
+  discrepancy?: { direction: 1 | -1; from: number };
+};
+
+const searchKey = (
+  report: string,
+  round: number,
+  from: number,
+  direction: number,
+) => `${report}:${round}:${from}:${direction}`;
 
 export function RoundReview({
   target,
@@ -46,6 +57,7 @@ export function RoundReview({
   const [catalog, setCatalog] = useState<ReviewCatalog | null>(null);
   const [material, setMaterial] = useState<RoundMaterial | null>(null);
   const [state, setState] = useState<ReviewState>(newReviewState);
+  const [exhausted, setExhausted] = useState<string[]>([]);
   const [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
@@ -153,7 +165,45 @@ export function RoundReview({
       const ri =
         round ?? data.current.last_rounds?.[report] ?? c.rounds[0]?.index;
       if (ri === undefined) throw Error("確認できる局がありません。");
-      const m = await loadReview<RoundMaterial>(report, ri);
+      let m: RoundMaterial;
+      let found = -1;
+      if (options.discrepancy) {
+        const { direction, from } = options.discrepancy;
+        const start = c.rounds.findIndex((r) => r.index === ri);
+        if (start < 0) throw Error("確認できる局がありません。");
+        // Search in chronology, keeping the current scene and its session
+        // unchanged until an actual destination has been loaded successfully.
+        let destination: RoundMaterial | undefined;
+        for (
+          let i = start + direction;
+          i >= 0 && i < c.rounds.length;
+          i += direction
+        ) {
+          const candidate = await loadReview<RoundMaterial>(
+            report,
+            c.rounds[i].index,
+          );
+          if (!alive.current || epoch.current !== generation) return false;
+          found = discrepancyIndex(
+            candidate,
+            direction > 0 ? -1 : candidate.timeline.length,
+            direction,
+          );
+          if (found >= 0) {
+            destination = candidate;
+            break;
+          }
+        }
+        if (!destination) {
+          if (alive.current && epoch.current === generation)
+            setExhausted((keys) => [
+              ...keys,
+              searchKey(report, ri, from, direction),
+            ]);
+          return false;
+        }
+        m = destination;
+      } else m = await loadReview<RoundMaterial>(report, ri);
       if (!alive.current || epoch.current !== generation) return false;
       current.current = m;
       setCatalog(c);
@@ -161,9 +211,11 @@ export function RoundReview({
       const remembered =
         data.current.sessions[roundKey(m)] ?? newRoundSession();
       const explicit =
-        event === undefined
-          ? -1
-          : m.timeline.findIndex((s) => s.event_index === event);
+        found >= 0
+          ? found
+          : event === undefined
+            ? -1
+            : m.timeline.findIndex((s) => s.event_index === event);
       const index =
         explicit >= 0
           ? explicit
@@ -358,15 +410,10 @@ export function RoundReview({
     if (material && index >= 0)
       updateSession({ index: navigate(material, getSession(), index, true) });
   };
-  const previous =
-    material?.timeline.reduce(
-      (last, s, i) => (i < session.index && isDiscrepancy(s) ? i : last),
-      -1,
-    ) ?? -1;
-  const next =
-    material?.timeline.findIndex(
-      (s, i) => i > session.index && isDiscrepancy(s),
-    ) ?? -1;
+  const previous = material
+    ? discrepancyIndex(material, session.index, -1)
+    : -1;
+  const next = material ? discrepancyIndex(material, session.index, 1) : -1;
   const nextDecision =
     material?.timeline.findIndex(
       (s, i) => i > session.index && s.is_decision,
@@ -377,6 +424,26 @@ export function RoundReview({
     roundPosition > 0 ? catalog?.rounds[roundPosition - 1] : undefined;
   const nextRound =
     roundPosition >= 0 ? catalog?.rounds[roundPosition + 1] : undefined;
+  const seekDiscrepancy = (direction: 1 | -1) => {
+    if (!material || opening.current) return;
+    const local = direction < 0 ? previous : next;
+    if (local >= 0) jump(local);
+    else
+      void open(material.report, material.round_index, undefined, {
+        quiz: session.quiz,
+        discrepancy: { direction, from: session.index },
+      });
+  };
+  const searchEnded = (direction: 1 | -1) =>
+    material &&
+    exhausted.includes(
+      searchKey(
+        material.report,
+        material.round_index,
+        session.index,
+        direction,
+      ),
+    );
   const saved =
     material && scene
       ? state.bookmarks.find((b) => b.id === bookmarkKey(material, scene))
@@ -563,15 +630,15 @@ export function RoundReview({
             </button>
             <button
               className="button secondary"
-              disabled={previous < 0}
-              onClick={() => jump(previous)}
+              disabled={previous < 0 && (!previousRound || !!searchEnded(-1))}
+              onClick={() => seekDiscrepancy(-1)}
             >
               前の不一致
             </button>
             <button
               className="button secondary"
-              disabled={next < 0}
-              onClick={() => jump(next)}
+              disabled={next < 0 && (!nextRound || !!searchEnded(1))}
+              onClick={() => seekDiscrepancy(1)}
             >
               次の不一致
             </button>

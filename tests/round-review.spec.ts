@@ -181,7 +181,15 @@ async function writePhone(page: Page, state: PhoneState) {
     state,
   );
 }
-async function setup(page: Page, phone: boolean) {
+async function setup(
+  page: Page,
+  phone: boolean,
+  materials = generated.materials,
+) {
+  const catalog = {
+    ...generated.catalog,
+    rounds: materials.map((m) => ({ index: m.round_index, label: m.label })),
+  };
   let review: ReviewState = newReviewState();
   let reads = 0;
   const requests: string[] = [];
@@ -196,9 +204,9 @@ async function setup(page: Page, phone: boolean) {
           : r.action === "round_review_change"
             ? (review = changeReview(review, r.op))
             : r.action === "round_review_catalog"
-              ? generated.catalog
+              ? catalog
               : r.action === "round_review_material"
-                ? generated.materials[r.round_index]
+                ? materials.find((m) => m.round_index === r.round_index)
                 : {};
     await route.fulfill({ json: { ok: true, data: value } });
   });
@@ -210,8 +218,8 @@ async function setup(page: Page, phone: boolean) {
         ok: true,
         data:
           r.action === "round_review_catalog"
-            ? generated.catalog
-            : generated.materials[r.round_index],
+            ? catalog
+            : materials.find((m) => m.round_index === r.round_index),
       },
     });
   });
@@ -239,6 +247,121 @@ async function setup(page: Page, phone: boolean) {
   await expect(page.getByLabel("現在の手順")).toHaveText("1 / 11");
   return { requests, reads: () => reads };
 }
+
+function withQuietMiddleHand() {
+  const materials = [
+    generated.materials[0],
+    generated.materials[1],
+    generated.materials[1],
+  ].map((material) => structuredClone(material));
+  materials.forEach((m, i) => {
+    m.round_index = i;
+    m.label = `東${i + 1}局 0本場`;
+    m.timeline.forEach((s) => {
+      s.round_index = i;
+    });
+  });
+  materials[1].timeline.forEach((s) => {
+    if (s.is_decision) s.actual = s.suggested;
+  });
+  return materials;
+}
+
+test("match discrepancies skip a quiet hand in both directions and preserve quiz answers and resume", async ({
+  page,
+}, info) => {
+  const materials = withQuietMiddleHand();
+  await setup(page, info.project.name === "phone", materials);
+  const next = page.getByRole("button", { name: "次の不一致", exact: true });
+  const previous = page.getByRole("button", {
+    name: "前の不一致",
+    exact: true,
+  });
+  await page.getByRole("button", { name: "クイズあり", exact: true }).click();
+  await next.click();
+  await page.getByTestId("real-hand").getByRole("button").first().click();
+  for (let i = 0; i < 5; i++) await next.click();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("2");
+  await expect(page.getByLabel("現在の手順")).toHaveText("2 / 11");
+  await expect(
+    page.getByRole("button", { name: "クイズあり", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".review-policy")).toHaveCount(0);
+  await previous.click();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("0");
+  await expect(page.getByLabel("現在の手順")).toHaveText("10 / 11");
+  for (let i = 0; i < 4; i++) await previous.click();
+  await expect(page.getByLabel("現在の手順")).toHaveText("2 / 11");
+  await expect(
+    page.locator(".review-mark").filter({ hasText: "回答" }),
+  ).toHaveCount(1);
+  await expect(previous).toBeDisabled();
+  await page.getByLabel("振り返る局").selectOption("2");
+  for (let i = 0; i < 4; i++) await next.click();
+  await expect(next).toBeDisabled();
+  await page.getByRole("button", { name: "牌譜に戻る", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "牌譜", exact: true }).click();
+  await page
+    .getByTestId("analysis-row")
+    .getByRole("button", { name: "一局レビュー", exact: true })
+    .click();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("2");
+  await expect(page.getByLabel("現在の手順")).toHaveText("10 / 11");
+});
+
+test("match discrepancy search with no destination stops in place without wrapping", async ({
+  page,
+}, info) => {
+  const materials = withQuietMiddleHand();
+  materials[2].timeline.forEach((s) => {
+    if (s.is_decision) s.actual = s.suggested;
+  });
+  await setup(page, info.project.name === "phone", materials);
+  const next = page.getByRole("button", { name: "次の不一致", exact: true });
+  for (let i = 0; i < 5; i++) await next.click();
+  await next.click();
+  await expect(next).toBeDisabled();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("0");
+  await expect(page.getByLabel("現在の手順")).toHaveText("10 / 11");
+  await page.getByLabel("振り返る局").selectOption("1");
+  await page.getByRole("button", { name: "前の不一致", exact: true }).click();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("0");
+  await expect(page.getByLabel("現在の手順")).toHaveText("10 / 11");
+});
+
+test("match discrepancy search never skips an unavailable intermediate hand and retries the original search", async ({
+  page,
+}, info) => {
+  const phone = info.project.name === "phone";
+  await setup(page, phone, withQuietMiddleHand());
+  const next = page.getByRole("button", { name: "次の不一致", exact: true });
+  for (let i = 0; i < 5; i++) await next.click();
+  await page.getByRole("button", { name: "クイズあり", exact: true }).click();
+  let blocked = true;
+  const readRounds: number[] = [];
+  await page.route(phone ? "**/phone/api" : "**/api/local", async (route) => {
+    const r = route.request().postDataJSON();
+    if (r.action === "round_review_material") {
+      readRounds.push(r.round_index);
+      if (blocked && r.round_index === 1)
+        return route.fulfill({ status: 503, body: "" });
+    }
+    return route.fallback();
+  });
+  await next.click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("0");
+  await expect(page.getByLabel("現在の手順")).toHaveText("10 / 11");
+  expect(readRounds).not.toContain(2);
+  blocked = false;
+  await page.getByRole("button", { name: "再試行", exact: true }).click();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("2");
+  await expect(page.getByLabel("現在の手順")).toHaveText("2 / 11");
+  await expect(
+    page.getByRole("button", { name: "クイズあり", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
 
 test("connected hands browse both boundaries, carry quiz modes and retain each hand's answers", async ({
   page,
@@ -460,7 +583,7 @@ test("board tap and inertial scroll advance events, quiz is a stop and notes nev
   await expect(page.getByLabel("現在の手順")).toHaveText(position!);
 });
 
-test("round selection bounds discrepancy jumps, saved list opens context and layouts fit narrow screens", async ({
+test("round selection and cross-hand discrepancy jumps retain saved context and fit narrow screens", async ({
   page,
 }, info) => {
   await setup(page, info.project.name === "phone");
@@ -470,7 +593,7 @@ test("round selection bounds discrepancy jumps, saved list opens context and lay
   await expect(page.getByLabel("現在の手順")).toHaveText("2 / 11");
   await expect(
     page.getByRole("button", { name: "前の不一致", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page.getByRole("button", { name: "☆ 場面を保存", exact: true }).click();
   await page
     .getByRole("dialog")
