@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import collector from "../public/history-collector.js?raw";
 import { VERSION } from "./version";
+import { PaipuyaLink } from "./paipuya-link";
 
 export const HISTORY_BOOKMARKLET = `javascript:${encodeURIComponent(collector.trim().replaceAll("__KYOKULOOP_VERSION__", VERSION))}`;
 
@@ -23,6 +24,7 @@ export function BulkHistoryInput({
   return (
     <details className="bulk-history">
       <summary>牌譜屋から一括追加</summary>
+      <PaipuyaLink />
       <ol className="bookmark-steps">
         <li>
           <a

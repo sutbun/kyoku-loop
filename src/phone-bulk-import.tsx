@@ -2,6 +2,7 @@ import { readAnalysisFile, parseAnalysisBatch } from "./analysis-queue";
 import { openMortal, mortalLink, MORTAL_READY } from "./mortal-handoff";
 import { useEffect, useState } from "react";
 import { errors } from "./api";
+import { PaipuyaLink } from "./paipuya-link";
 export function PhoneBulkImport({
   disabled,
   historyCode,
@@ -76,6 +77,7 @@ export function PhoneBulkImport({
     });
   return (
     <div className="bulk-history">
+      <PaipuyaLink />
       <label>
         雀魂共有URL
         <textarea
