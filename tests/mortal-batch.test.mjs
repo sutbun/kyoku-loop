@@ -172,6 +172,30 @@ test("saves, validates registration ACK and only then finishes a source", async 
   assert.equal(r.data().jobs[0].phase, "registered");
   assert.equal(r.payload(), null);
 });
+test("a new batch after completion preserves the old ledger and rejects registered sources", async () => {
+  const r = rig();
+  await launch(r);
+  await r.runner.drive();
+  const completed = structuredClone(r.data().jobs);
+  const previousBatch = r.data().batch.id;
+  await assert.rejects(
+    r.runner.start([entry(1).id], 10, "4.1b"),
+    /queue_changed/,
+  );
+  await launch(r, 2);
+  await r.runner.drive();
+  assert.equal(r.data().batch.phase, "done");
+  assert.notEqual(r.data().batch.id, previousBatch);
+  assert.deepEqual(r.data().jobs.slice(0, completed.length), completed);
+  assert.equal(r.data().jobs.length, 2);
+  assert.equal(r.calls.read, 2);
+  assert.equal(r.calls.register, 2);
+  assert.deepEqual(
+    r.calls.open.map((url) => new URL(url).searchParams.get("url")),
+    [source(1), source(2)],
+  );
+});
+
 test("lost local ACK resumes only registration from durable bytes", async () => {
   const r = rig();
   await launch(r);
