@@ -1,4 +1,4 @@
-export const DEVELOPMENT_VERSION = "DEV-11.05-11";
+export const DEVELOPMENT_VERSION = "DEV-11.05-13";
 
 export const IS_DAILY = import.meta.env?.VITE_KYOKULOOP_DAILY === "1";
 export const VERSION = IS_DAILY

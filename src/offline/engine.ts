@@ -565,8 +565,13 @@ export function phoneReduce(
     const raw = state.events.find((e) => e.id === id) ?? fail("cannot_undo");
     return { ...raw, ...receiptFor(state, id) };
   };
+  // Older packs can retain answers without an up-to-date summary counter.
   const reviewCount = (i: PhoneItem) =>
-    (i.review_count ?? 0) +
+    Math.max(
+      i.review_count ?? 0,
+      state.pack!.histories[i.id]?.events.filter((e) => e.kind === "answer")
+        .length ?? 0,
+    ) +
     state.events.filter(
       (e) =>
         e.item === i.id &&
