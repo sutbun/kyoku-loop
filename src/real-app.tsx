@@ -352,7 +352,7 @@ export function RealApp() {
               />
               <section className="panel">
                 <div className="section-title">
-                  <h2>解析待ち</h2>
+                  <h2>保存した牌譜</h2>
                   <button
                     className="text-button"
                     onClick={() => setGuide((v) => !v)}

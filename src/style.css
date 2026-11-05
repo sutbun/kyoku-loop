@@ -1278,6 +1278,9 @@ footer > span:first-child {
   color: var(--green);
   font-weight: 700;
 }
+.replay-filters button {
+  white-space: nowrap;
+}
 .library-list {
   border: 1px solid var(--line);
   background: var(--paper);
