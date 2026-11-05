@@ -4,6 +4,7 @@ export default defineConfig({
   ...base,
   testDir: "./tests",
   testMatch: [
+    "replay-counts.spec.ts",
     "mortal-batch.spec.ts",
     "replay-delete.spec.ts",
     "replay-management-ui.spec.ts",
