@@ -52,6 +52,40 @@ function Save-Backup($Release) {
         return $parsed.data
     } finally { $env:PYTHONIOENCODING = $oldEncoding; $env:KYOKULOOP_DB = $oldDatabase }
 }
+function Start-DailyServer($Release) {
+    # WMI creates the short-lived launcher outside the caller's Windows job.
+    # Start-Process alone inherits an agent/terminal job and can die when it closes.
+    $payload = @{
+        node=$Release.Meta.node
+        vite=(Join-Path $Release.Folder 'node_modules\vite\bin\vite.js')
+        folder=$Release.Folder
+        output=(Join-Path $taskDataRoot 'daily-output.log')
+        errors=(Join-Path $taskDataRoot 'daily-errors.log')
+        environment=@{
+            KYOKULOOP_DAILY='1'; KYOKULOOP_SOURCE_SHA=$Release.Meta.sourceSha
+            KYOKULOOP_DB=(Join-Path $taskDataRoot 'kyokuloop.sqlite3')
+            KYOKULOOP_PYTHON=$Release.Meta.python; KYOKULOOP_CONTROL_FILE=$taskControlFile
+        }
+    } | ConvertTo-Json -Depth 4 -Compress
+    $payload64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
+    $bootstrap = @'
+$ErrorActionPreference = 'Stop'
+$launch = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__PAYLOAD__')) | ConvertFrom-Json
+foreach ($entry in $launch.environment.PSObject.Properties) {
+    [Environment]::SetEnvironmentVariable($entry.Name,[string]$entry.Value,'Process')
+}
+$null = Start-Process -FilePath $launch.node -ArgumentList @(('"'+$launch.vite+'"'),'preview') -WorkingDirectory $launch.folder -WindowStyle Hidden -RedirectStandardOutput $launch.output -RedirectStandardError $launch.errors -PassThru
+'@
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap.Replace('__PAYLOAD__',$payload64)))
+    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ShowWindow=[uint16]0}
+    $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+        CommandLine=('"'+$powershell+'" -NoProfile -WindowStyle Hidden -EncodedCommand '+$encoded)
+        CurrentDirectory=$Release.Folder
+        ProcessStartupInformation=$startup
+    }
+    if ($created.ReturnValue -ne 0) { throw '独立した起動処理を開始できませんでした。保存データは保持しています。' }
+}
 $taskMutex = New-Object Threading.Mutex($false,'Local\KyokuLoop-Daily-Launcher')
 $taskLocked = $false
 try {
@@ -90,16 +124,7 @@ try {
     } else {
         if (@(Get-NetTCPConnection -LocalPort 1460 -State Listen -ErrorAction SilentlyContinue | Where-Object LocalAddress -in @('127.0.0.1','0.0.0.0','::')).Count) { throw '起動用の接続先が使用中です。他のアプリは終了していません。' }
         $null = Save-Backup $release
-        $oldValues = @{}
-        foreach ($name in @('KYOKULOOP_DAILY','KYOKULOOP_SOURCE_SHA','KYOKULOOP_PYTHON','KYOKULOOP_CONTROL_FILE','KYOKULOOP_DB')) { $oldValues[$name] = [Environment]::GetEnvironmentVariable($name,'Process') }
-        try {
-            $env:KYOKULOOP_DAILY='1'; $env:KYOKULOOP_SOURCE_SHA=$release.Meta.sourceSha
-            $env:KYOKULOOP_DB = Join-Path $taskDataRoot 'kyokuloop.sqlite3'
-            $env:KYOKULOOP_PYTHON=$release.Meta.python; $env:KYOKULOOP_CONTROL_FILE=$taskControlFile
-            $vite = Join-Path $release.Folder 'node_modules\vite\bin\vite.js'
-            $log = Join-Path $taskDataRoot 'daily-output.log'; $errorLog = Join-Path $taskDataRoot 'daily-errors.log'
-            $null = Start-Process -FilePath $release.Meta.node -ArgumentList @(('"'+$vite+'"'),'preview') -WorkingDirectory $release.Folder -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $errorLog -PassThru
-        } finally { foreach ($name in $oldValues.Keys) { [Environment]::SetEnvironmentVariable($name,$oldValues[$name],'Process') } }
+        Start-DailyServer $release
         $deadline = [DateTime]::UtcNow.AddSeconds(30)
         do { Start-Sleep -Milliseconds 300; $health = Read-Health } while ($null -eq $health -and [DateTime]::UtcNow -lt $deadline)
         if ($null -eq $health -or $health.role -ne 'daily' -or $health.source_sha -ne $release.Meta.sourceSha) { throw '普段使い版を起動できませんでした。保存データと前の版は保持しています。' }
