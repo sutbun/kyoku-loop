@@ -240,6 +240,140 @@ async function setup(page: Page, phone: boolean) {
   return { requests, reads: () => reads };
 }
 
+test("connected hands browse both boundaries, carry quiz modes and retain each hand's answers", async ({
+  page,
+}, info) => {
+  await setup(page, info.project.name === "phone");
+  const next = page.getByRole("button", { name: "次の一手", exact: true });
+  const previous = page.getByRole("button", { name: "前の一手", exact: true });
+  const round = page.getByLabel("振り返る局");
+  await expect(previous).toBeDisabled();
+  for (let i = 0; i < 10; i++) await next.click();
+  await expect(page.getByLabel("現在の手順")).toHaveText("11 / 11");
+  await expect(next).toBeEnabled();
+  // The same empty-board tap continues into the next hand.
+  const board = page.locator(".round-review .table");
+  const box = await board.boundingBox();
+  if (!box) throw Error("board missing");
+  await board.click({ position: { x: box.width / 2, y: box.height - 15 } });
+  await expect(round).toHaveValue("1");
+  await expect(page.getByLabel("現在の手順")).toHaveText("1 / 11");
+  await expect(
+    page.getByRole("button", { name: "クイズなし", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await previous.click();
+  await expect(round).toHaveValue("0");
+  await expect(page.getByLabel("現在の手順")).toHaveText("11 / 11");
+  await page.getByRole("button", { name: "クイズあり", exact: true }).click();
+  await next.click();
+  await expect(round).toHaveValue("1");
+  await expect(page.getByLabel("現在の手順")).toHaveText("1 / 11");
+  await expect(
+    page.getByRole("button", { name: "クイズあり", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await next.click();
+  await expect(next).toBeDisabled();
+  await page.getByTestId("real-hand").getByRole("button").first().click();
+  await round.selectOption("0");
+  await expect(
+    page.getByRole("button", { name: "クイズあり", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await round.selectOption("1");
+  await expect(page.getByLabel("現在の手順")).toHaveText("2 / 11");
+  await expect(
+    page.locator(".review-mark").filter({ hasText: "回答" }),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: "クイズなし", exact: true }).click();
+  await round.selectOption("0");
+  await expect(
+    page.getByRole("button", { name: "クイズなし", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await next.click();
+  for (let i = 0; i < 10; i++) await next.click();
+  await expect(round).toHaveValue("1");
+  await expect(next).toBeDisabled();
+  await expect(page.getByLabel("現在の手順")).toHaveText("11 / 11");
+});
+
+test("connected hands next decision crosses hands and inertia stops at unanswered decisions", async ({
+  page,
+}, info) => {
+  await setup(page, info.project.name === "phone");
+  const next = page.getByRole("button", { name: "次の一手", exact: true });
+  for (let i = 0; i < 9; i++) await next.click();
+  await page.getByRole("button", { name: "クイズあり", exact: true }).click();
+  await page.getByTestId("real-hand").getByRole("button").first().click();
+  await page.getByRole("button", { name: "次の判断へ", exact: true }).click();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("1");
+  await expect(page.getByLabel("現在の手順")).toHaveText("2 / 11");
+  await expect(next).toBeDisabled();
+  await page
+    .locator(".round-review .table")
+    .dispatchEvent("wheel", { deltaY: 800 });
+  await page.waitForTimeout(650);
+  await expect(page.getByLabel("現在の手順")).toHaveText("2 / 11");
+  await expect(page.locator(".review-policy")).toHaveCount(0);
+  await page.getByRole("button", { name: "クイズなし", exact: true }).click();
+  await page.getByRole("button", { name: "前の一手", exact: true }).click();
+  await page
+    .locator(".round-review .table")
+    .dispatchEvent("wheel", { deltaY: -480 });
+  await expect(page.getByLabel("振り返る局")).toHaveValue("0");
+  await expect(page.getByLabel("現在の手順")).toHaveText("11 / 11");
+});
+
+test("connected hands swipe does not turn its synthetic click into an extra step in the new hand", async ({
+  page,
+}, info) => {
+  await setup(page, info.project.name === "phone");
+  for (let i = 0; i < 10; i++)
+    await page.getByRole("button", { name: "次の一手", exact: true }).click();
+  await page.locator(".round-review .table").evaluate((board) => {
+    for (const [type, y] of [
+      ["touchstart", 300],
+      ["touchmove", 220],
+      ["touchend", 220],
+    ] as const) {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "touches", {
+        value: type === "touchend" ? [] : [{ clientX: 100, clientY: y }],
+      });
+      board.dispatchEvent(event);
+    }
+  });
+  await expect(page.getByLabel("振り返る局")).toHaveValue("1");
+  await page.locator(".round-review .table").dispatchEvent("click");
+  await expect(page.getByLabel("現在の手順")).toHaveText("1 / 11");
+});
+
+test("connected hands failed next-hand load retains the old scene and retries with quiz mode", async ({
+  page,
+}, info) => {
+  const phone = info.project.name === "phone";
+  await setup(page, phone);
+  const next = page.getByRole("button", { name: "次の一手", exact: true });
+  for (let i = 0; i < 10; i++) await next.click();
+  await page.getByRole("button", { name: "クイズあり", exact: true }).click();
+  let fail = true;
+  await page.route(phone ? "**/phone/api" : "**/api/local", async (route) => {
+    const r = route.request().postDataJSON();
+    if (fail && r.action === "round_review_material" && r.round_index === 1)
+      return route.fulfill({ status: 503, body: "" });
+    return route.fallback();
+  });
+  await next.click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("0");
+  await expect(page.getByLabel("現在の手順")).toHaveText("11 / 11");
+  fail = false;
+  await page.getByRole("button", { name: "再試行", exact: true }).click();
+  await expect(page.getByLabel("振り返る局")).toHaveValue("1");
+  await expect(page.getByLabel("現在の手順")).toHaveText("1 / 11");
+  await expect(
+    page.getByRole("button", { name: "クイズあり", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
 test("one round quiz reveals up to three hand labels, saves and resumes without the instruction line", async ({
   page,
 }, info) => {
