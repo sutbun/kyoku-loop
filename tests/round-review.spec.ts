@@ -257,8 +257,17 @@ test("one round quiz reveals up to three hand labels, saves and resumes without 
     page.getByRole("button", { name: "次の一手", exact: true }),
   ).toBeDisabled();
   await page.getByTestId("real-hand").getByRole("button").first().click();
-  await page.getByRole("button", { name: "答え合わせ", exact: true }).click();
   await expect(page.locator(".review-policy")).toHaveCount(2);
+  await expect(
+    page.locator(".review-mark").filter({ hasText: "回答" }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "答え合わせ", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "次の判断へ", exact: true }),
+  ).toBeEnabled();
+  await expect(page.getByLabel("現在の手順")).toHaveText("2 / 11");
   await expect(
     page.locator(".review-mark").filter({ hasText: "実打" }),
   ).toHaveCount(1);
