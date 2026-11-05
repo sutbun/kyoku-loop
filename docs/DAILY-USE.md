@@ -16,6 +16,8 @@ iPad・スマホの下部タブは「学習・牌譜・設定」。起動時は�
 
 牌譜屋は「牌譜」→「URLを追加」→「牌譜屋を開く」で別タブに開く。既存のショートカットで取得したURLを元の画面へ貼り付ける。Windowsは「牌譜屋から一括追加」に同じリンクがある。リンク先はGit外の `D:/dev-data/kyoku-loop/private/app/external-links.json` の `paipuya` に設定し、ビルド時に取り込む（任意のファイルは `KYOKULOOP_EXTERNAL_LINKS_FILE` で指定）。未設定なら牌譜屋トップを開く。変更時は再ビルド・再配備が必要。個人のプレイヤーURLはGitへ登録しない。
 
+Windowsホームの保存牌譜は状態別の件数を表示し、押すと絞り込む。集計と全選択の範囲は [Windowsの保存牌譜と件数](WINDOWS-REPLAY-LIST.md) を参照。
+
 ## バックアップ
 
 **KyokuLoop バックアップ**、またはアプリの **学習 → バックアップと復元 → バックアップを作成** を使う。

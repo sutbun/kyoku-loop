@@ -3,6 +3,7 @@ import { ReplaySelection, useReplaySelection } from "./replay-selection";
 import { openMortal, MORTAL_READY, mortalLink } from "./mortal-handoff";
 import {
   analysisStatus,
+  visibleAnalysis,
   sourceURL,
   type AnalysisEntry,
 } from "./analysis-queue";
@@ -148,19 +149,55 @@ export function AnalysisList({
   onDelete?: (ids: string[]) => void;
 }) {
   const [limit, setLimit] = useState(10);
+  const [filter, setFilter] = useState("すべて");
   const [dragged, setDragged] = useState<string | null>(null);
-  const ordered = [...entries].reverse();
-  const selection = useReplaySelection(entries);
+  const visible = entries.filter(visibleAnalysis);
+  const analysed = visible.filter((e) => e.reports?.length).length;
+  const filtered = [...visible]
+    .reverse()
+    .filter(
+      (e) =>
+        portable ||
+        filter === "すべて" ||
+        (filter === "解析済み" ? !!e.reports?.length : !e.reports?.length),
+    );
+  const selection = useReplaySelection(filtered);
   return (
     <div className="analysis-list">
+      {!portable && (
+        <div
+          className="filters replay-filters"
+          role="group"
+          aria-label="牌譜の状態"
+        >
+          {Object.entries({
+            すべて: visible.length,
+            未解析: visible.length - analysed,
+            解析済み: analysed,
+          }).map(([name, count]) => (
+            <button
+              key={name}
+              className={filter === name ? "chosen" : ""}
+              aria-pressed={filter === name}
+              onClick={() => {
+                setFilter(name);
+                setLimit(10);
+                selection.setIds([]);
+              }}
+            >
+              {name} {count}件
+            </button>
+          ))}
+        </div>
+      )}
       <ReplaySelection
-        entries={entries}
+        entries={filtered}
         selected={selection.selected}
         disabled={disabled}
         onSelect={selection.setIds}
         onDelete={onDelete}
       />
-      {(portable ? ordered : ordered.slice(0, limit)).map((e, i) => (
+      {(portable ? filtered : filtered.slice(0, limit)).map((e) => (
         <div
           className={`analysis-row${dragged === e.id ? " drop-active" : ""}`}
           key={e.id}
@@ -194,7 +231,7 @@ export function AnalysisList({
             <input
               className="replay-checkbox"
               type="checkbox"
-              aria-label={`保存牌譜 ${entries.length - i}を選択`}
+              aria-label={`保存牌譜 ${visible.indexOf(e) + 1}を選択`}
               disabled={disabled}
               checked={selection.selected.includes(e.id)}
               onChange={() => selection.toggle(e.id)}
@@ -204,7 +241,7 @@ export function AnalysisList({
             <strong>
               {e.history
                 ? `${new Date(e.history.at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · ${e.history.rank}位`
-                : `保存牌譜 ${entries.length - i}`}
+                : `保存牌譜 ${visible.indexOf(e) + 1}`}
             </strong>
             <small>
               {e.history
@@ -268,9 +305,16 @@ export function AnalysisList({
           )}
         </div>
       ))}
-      {!portable && ordered.length > limit && (
+      {!portable && filtered.length === 0 && (
+        <div className="empty">
+          {visible.length
+            ? "該当する牌譜はありません。"
+            : "保存した牌譜はありません。"}
+        </div>
+      )}
+      {!portable && filtered.length > limit && (
         <button className="text-button" onClick={() => setLimit((n) => n + 10)}>
-          さらに10件表示（残り{ordered.length - limit}件）
+          さらに10件表示（残り{filtered.length - limit}件）
         </button>
       )}
     </div>
