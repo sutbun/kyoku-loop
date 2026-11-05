@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { expect } from "@playwright/test";
 import { test } from "./static-app";
+import { paipuyaURL } from "../tools/external-links";
 
 const privateRoot = resolve("D:/dev-data/kyoku-loop/private");
 let folder: string;
@@ -52,6 +53,37 @@ test.afterEach(() => {
   )
     throw new Error("unexpected test directory");
   rmSync(folder, { recursive: true, force: true });
+});
+
+test("desktop paipuya link retains the bulk import draft", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  await page.getByText("牌譜屋から一括追加", { exact: true }).click();
+  const area = page.locator("details.bulk-history");
+  const input = area.getByRole("textbox", { name: "一括データ" });
+  const draft =
+    "https://game.mahjongsoul.com/?paipu=260101-fictional-desktop-link_a123";
+  await input.fill(draft);
+  const link = area.getByRole("link", { name: "牌譜屋を開く", exact: true });
+  await expect(link).toHaveAttribute("href", paipuyaURL());
+  await expect(link).toHaveAttribute("target", "_blank");
+  await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  await page
+    .context()
+    .route("https://amae-koromo.sapk.ch/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<title>架空の牌譜屋</title>",
+      }),
+    );
+  const popupReady = page.waitForEvent("popup");
+  await link.click();
+  const popup = await popupReady;
+  await expect(popup).toHaveURL(paipuyaURL());
+  await popup.close();
+  await expect(input).toHaveValue(draft);
+  await area.screenshot({ path: testInfo.outputPath("paipuya-desktop.png") });
 });
 
 test("real study five-question flow, durable answer concealment, undo and library history", async ({
