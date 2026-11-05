@@ -1,9 +1,23 @@
+import { PhoneMortalImport } from "./phone-mortal-import";
 import { useEffect, useRef, useState } from "react";
 import { api, errors } from "./api";
-import { RealTable, RealTile, roundLabel, eventLabels } from "./real-board";
-import { StudyPanel, PracticeCard } from "./study-ui";
+import { RealTable, roundLabel, eventLabels } from "./real-board";
+import { StudyPanel, BackupDialog, Compare } from "./study-ui";
 import type { Detail, Scene, Stage, Workspace } from "./real-types";
-import { SourceInput, AnalysisList, AnalysisGuide } from "./analysis-ui";
+import { AnalysisGuide } from "./analysis-ui";
+import { AppHeader, AppNavigation, type AppTab } from "./app-navigation";
+import { PhoneStudyHome } from "./phone-study-home";
+import { PhoneReplayList } from "./phone-replay-list";
+import { PhoneBulkImport } from "./phone-bulk-import";
+import { StudyOptions } from "./study-options";
+import { MortalSourceSelect } from "./mortal-source-select";
+import { MortalRegistrationNotice } from "./mortal-registration-notice";
+import type { MortalRegistrationResult } from "./mortal-registration";
+import { usePhoneStudyLayout } from "./phone-study-layout";
+import historyCode from "../docs/snippets/ipad-history-metadata-shortcut.js?raw";
+import { HistoryCollector } from "./bulk-history-ui";
+import "./phone.css";
+import "./phone-study.css";
 import type { AnalysisEntry } from "./analysis-queue";
 import {
   encodeReport,
@@ -12,8 +26,6 @@ import {
   type MortalBatchItem,
 } from "./mortal-batch";
 import { MortalBatchResults } from "./mortal-batch-ui";
-import { mortalLink, MORTAL_PAGE } from "./mortal-handoff";
-import { BulkHistoryInput } from "./bulk-history-ui";
 import {
   MortalInboxSettings,
   ReportSourceLink,
@@ -27,7 +39,17 @@ export function RealApp() {
     reports: [],
     items: [],
   });
-  const [screen, setScreen] = useState<"home" | "review" | "study">("home");
+  const [screen, setScreen] = useState<AppTab>("study");
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [reportFilter, setReportFilter] = useState<string[] | undefined>();
+  const [backups, setBackups] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [importPending, setImportPending] = useState(false);
+  const [sourceId, setSourceId] = useState("");
+  const [registration, setRegistration] =
+    useState<MortalRegistrationResult | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [index, setIndex] = useState(0);
   const [all, setAll] = useState(false);
@@ -43,6 +65,13 @@ export function RealApp() {
   const [model, setModel] = useState("");
   const [filter, setFilter] = useState("今日");
   const [learning, setLearning] = useState(false);
+  const studying =
+    screen === "study" &&
+    learning &&
+    !!workspace.session?.scene &&
+    !workspace.session.complete &&
+    !workspace.session.stale;
+  const studyRef = usePhoneStudyLayout(studying, workspace.session?.item_id);
   const [analysis, setAnalysis] = useState<AnalysisEntry | null>(null);
   const [guide, setGuide] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -70,7 +99,15 @@ export function RealApp() {
     window.scrollTo(0, 0);
   }, [screen, index, workspace.session?.index]);
   useEffect(() => {
-    if (screen !== "home" || busy || adding) return;
+    if (
+      busy ||
+      adding ||
+      bulkBusy ||
+      screen === "settings" ||
+      (screen === "study" && (learning || libraryOpen)) ||
+      (screen === "replays" && reviewOpen)
+    )
+      return;
     let cancelled = false,
       loading = false;
     const update = async () => {
@@ -92,7 +129,7 @@ export function RealApp() {
       clearInterval(timer);
       window.removeEventListener("focus", update);
     };
-  }, [screen, busy, adding]);
+  }, [screen, busy, adding, bulkBusy, learning, libraryOpen, reviewOpen]);
   useEffect(() => {
     if (adding) {
       focus.current = document.activeElement as HTMLElement;
@@ -102,12 +139,21 @@ export function RealApp() {
       focus.current?.focus();
     }
   }, [adding]);
+  useEffect(() => {
+    const guard = (event: BeforeUnloadEvent) => {
+      if (bulkPending || importPending || bulkBusy || busy || adding)
+        event.preventDefault();
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [bulkPending, importPending, bulkBusy, busy, adding]);
   const open = async (id: string, decision?: string) => {
     const data = await api<Detail>({ action: "detail", id });
     setDetail(data);
     setAll(false);
     setIndex(Math.max(0, decision ? data.important.indexOf(decision) : 0));
-    setScreen("review");
+    setScreen("replays");
+    setReviewOpen(true);
     if (decision && !data.important.includes(decision)) {
       setAll(true);
       const s = data.decisions.find((s) => s.id === decision);
@@ -126,6 +172,7 @@ export function RealApp() {
   const inspect = async (data: object, entry = analysis) => {
     const result = await api<Stage>({ action: "inspect", ...data });
     setStage(result);
+    setSourceId(entry?.id ?? "");
     setSource(entry?.url ?? "");
     setSeat(result.target_seat != null ? String(result.target_seat) : "");
     setModel(
@@ -172,6 +219,7 @@ export function RealApp() {
     setUrl("");
     setSource(entry.url);
     setError("");
+    setSourceId(entry.id);
     setAdding(true);
   };
   const important =
@@ -214,6 +262,7 @@ export function RealApp() {
     setAll(value);
   };
   const add = () => {
+    setSourceId("");
     setBatch([]);
     setAnalysis(null);
     setStage(null);
@@ -237,63 +286,36 @@ export function RealApp() {
       await refresh();
       setNotice(saved ? "学習に保存しました" : "手動保存を取り消しました");
     });
+  const begin = (mode: "scheduled" | "practice") =>
+    void run(async () => {
+      const session = await api<import("./real-types").StudySession>({
+        action: "study_start",
+        mode,
+      });
+      setWorkspace((prev) => ({ ...prev, session }));
+      setLearning(true);
+      setLibraryOpen(true);
+      setScreen("study");
+    });
+  const problems = (ids: string[]) => {
+    setReportFilter(ids);
+    setFilter("すべて");
+    setLibraryOpen(true);
+    setLearning(false);
+    setScreen("study");
+  };
   return (
-    <>
-      <aside className="sidebar">
-        <button
-          className="brand"
-          onClick={() => {
-            setLearning(false);
-            setScreen("home");
-          }}
-          aria-label="KyokuLoop ホーム"
-        >
-          <span className="brand-icon">局</span>
-          <span>KyokuLoop</span>
-        </button>
-        <nav aria-label="メインナビゲーション">
-          {(
-            [
-              ["home", "⌂", "ホーム"],
-              ["review", "▤", "牌譜・分析"],
-              ["study", "◈", "学習"],
-            ] as const
-          ).map(([key, icon, label]) => (
-            <button
-              className={screen === key ? "active" : ""}
-              key={key}
-              onClick={() =>
-                key === "review" && !detail && workspace.reports[0]
-                  ? void run(() => open(workspace.reports[0].id))
-                  : (setLearning(false), setScreen(key))
-              }
-              aria-current={screen === key ? "page" : undefined}
-            >
-              <span aria-hidden="true">{icon}</span>
-              {label}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-foot">
-          <span className="demo-tag">Windows · ローカル保存</span>
-          <a href="/phone/">iPhone用オフライン版</a>
-          <span className="version">{VERSION}</span>
-        </div>
-      </aside>
+    <div
+      ref={studyRef}
+      className={`phone-app desktop-app${studying ? " is-studying" : ""}${screen === "replays" && reviewOpen ? " is-reviewing" : ""}`}
+    >
+      <AppHeader>
+        <span className="phone-connection" aria-live="polite">
+          {busy || bulkBusy ? "処理中…" : ""}
+        </span>
+        <span className="phone-version">{VERSION}</span>
+      </AppHeader>
       <main className="real-main">
-        <header className="topbar">
-          <span>
-            {screen === "home"
-              ? "ホーム"
-              : screen === "review"
-                ? "牌譜・分析"
-                : "学習"}
-          </span>
-          <span className="local-state">
-            {busy ? "処理中…" : "Windows内"}
-            <span className="mobile-version">{VERSION}</span>
-          </span>
-        </header>
         {error && !adding && (
           <div className="error" role="alert">
             {error}{" "}
@@ -307,14 +329,17 @@ export function RealApp() {
           </div>
         )}
         <div className="content">
+          {registration && (
+            <MortalRegistrationNotice
+              result={registration}
+              local={false}
+              entries={workspace.analysis_queue ?? []}
+            />
+          )}
           {notice && (
             <div className="inline-notice" role="status">
               {notice}
-              {notice.startsWith("URLをコピー") && (
-                <a href={MORTAL_PAGE} target="_blank" rel="noopener noreferrer">
-                  Mortalを開く
-                </a>
-              )}
+
               <button
                 className="text-button"
                 aria-label="通知を閉じる"
@@ -324,206 +349,180 @@ export function RealApp() {
               </button>
             </div>
           )}
-          {screen === "home" && (
-            <>
-              <div className="page-heading home-actions">
-                <h1 className="visually-hidden">ホーム</h1>
-                <button
-                  className="button primary"
-                  disabled={busy}
-                  onClick={add}
-                >
-                  ＋ 牌譜を追加
-                </button>
-              </div>
-              <PracticeCard
-                workspace={workspace}
-                disabled={busy}
-                onBegin={(mode) =>
-                  void run(async () => {
-                    const session = await api<
-                      import("./real-types").StudySession
-                    >({ action: "study_start", mode });
-                    setWorkspace((prev) => ({ ...prev, session }));
-                    setLearning(true);
-                    setScreen("study");
-                  })
+          <div hidden={screen !== "replays" || reviewOpen}>
+            <h1 className="phone-tab-title">牌譜</h1>
+            <section className="panel phone-imports" aria-label="牌譜を追加">
+              <details className="phone-source-add">
+                <summary>URLを追加</summary>
+                <PhoneBulkImport
+                  historyCode={historyCode}
+                  place="Windows"
+                  disabled={busy || bulkBusy}
+                  onBusy={setBulkBusy}
+                  onPendingChange={setBulkPending}
+                  onImport={(data) => api({ action: "analysis_bulk", data })}
+                  onSaved={refresh}
+                  tools={<HistoryCollector />}
+                />
+              </details>
+              <PhoneMortalImport
+                desktop
+                disabled={busy || bulkBusy}
+                online
+                local={false}
+                entries={workspace.analysis_queue ?? []}
+                onBusy={setBulkBusy}
+                onPendingChange={setImportPending}
+                onRegistered={async () => {
+                  await refresh();
+                }}
+                tools={
+                  <details className="desktop-result-add">
+                    <summary>レポートURL・NAGA</summary>
+                    <button
+                      className="button secondary"
+                      disabled={busy || bulkBusy}
+                      onClick={add}
+                    >
+                      レポートを追加
+                    </button>
+                  </details>
                 }
               />
-              <section className="panel">
-                <div className="section-title">
-                  <h2>保存した牌譜</h2>
-                  <button
-                    className="text-button"
-                    onClick={() => setGuide((v) => !v)}
-                  >
-                    解析の手順
-                  </button>
+            </section>
+            <PhoneReplayList
+              desktop
+              reports={workspace.reports}
+              entries={workspace.analysis_queue ?? []}
+              disabled={busy || bulkBusy}
+              onProblems={problems}
+              onReview={(id) => void run(() => open(id))}
+              onDelete={(ids) =>
+                void run(async () => {
+                  await api({ action: "analysis_delete", ids });
+                  await refresh();
+                  setNotice(`${ids.length}件の牌譜を一覧から削除しました`);
+                })
+              }
+              onDropResult={(entry, files) => {
+                resultEntry(entry);
+                if (files.length !== 1) {
+                  setError(errors.multiple_files);
+                  return;
+                }
+                upload(files[0], entry);
+              }}
+              onResult={resultEntry}
+              onRequested={(entry) =>
+                void run(async () => {
+                  await api({
+                    action: "analysis_requested",
+                    id: entry.id,
+                    requested: !entry.requested,
+                  });
+                  await refresh();
+                })
+              }
+            />
+            <details className="panel desktop-reports">
+              <summary>解析結果一覧 · {workspace.reports.length}件</summary>
+              <div className="section-title">
+                <h2 className="visually-hidden">取り込んだ牌譜</h2>
+                <span>{workspace.reports.length}件</span>
+              </div>
+              {workspace.reports.length === 0 ? (
+                <div className="empty">
+                  NAGAレポートURLまたはJSONファイルを登録
                 </div>
-                <SourceInput
-                  mortal
-                  disabled={busy}
-                  onSave={async (url) => {
-                    await api({ action: "analysis_add", url });
-                    await refresh();
-                  }}
-                />
-                <BulkHistoryInput
-                  disabled={busy}
-                  onImport={async (value) => {
-                    const result = await api<{
-                      added: number;
-                      existing: number;
-                    }>({ action: "analysis_bulk", data: value });
-                    await refresh();
-                    return result;
-                  }}
-                />
-                <AnalysisList
-                  entries={workspace.analysis_queue ?? []}
-                  disabled={busy}
-                  onDelete={(ids) =>
-                    void run(async () => {
-                      await api({ action: "analysis_delete", ids });
-                      await refresh();
-                      setNotice(`${ids.length}件の牌譜を一覧から削除しました`);
-                    })
-                  }
-                  onDropResult={(entry, files) => {
-                    resultEntry(entry);
-                    if (files.length !== 1) {
-                      setError(errors.multiple_files);
-                      return;
-                    }
-                    upload(files[0], entry);
-                  }}
-                  onOpen={(entry) => {
-                    window.open(
-                      mortalLink(entry.url),
-                      "_blank",
-                      "noopener,noreferrer",
-                    );
-                  }}
-                  onResult={(entry) => {
-                    resultEntry(entry);
-                  }}
-                  onRequested={(entry) =>
-                    void run(async () => {
-                      await api({
-                        action: "analysis_requested",
-                        id: entry.id,
-                        requested: !entry.requested,
-                      });
-                      await refresh();
-                    })
-                  }
-                />
-                <MortalInboxSettings disabled={busy} onChange={refresh} />
-              </section>
-              {guide && (
-                <AnalysisGuide
-                  onClose={() =>
-                    void run(async () => {
-                      await api({ action: "analysis_setup", seen: true });
-                      await refresh();
-                      setGuide(false);
-                    })
-                  }
-                />
-              )}
-              <section className="panel">
-                <div className="section-title">
-                  <h2>取り込んだ牌譜</h2>
-                  <span>{workspace.reports.length}件</span>
-                </div>
-                {workspace.reports.length === 0 ? (
-                  <div className="empty">
-                    NAGAレポートURLまたはJSONファイルを登録
-                  </div>
-                ) : (
-                  <div className="report-list">
-                    {workspace.reports.map((r, i) => (
-                      <div className="queue-row" key={r.id}>
-                        <div>
-                          <strong>
-                            牌譜 {workspace.reports.length - i} · {r.rounds}局
-                          </strong>
-                          <small>
-                            {r.model_name} · 席{r.seat + 1} ·{" "}
-                            {r.source_linked
-                              ? "元対局を手動登録済み"
-                              : "元対局未登録"}
-                          </small>
-                        </div>
-                        <span className="badge">
-                          重要局面 {r.important_count}
-                        </span>
-                        {r.engine === "Mortal" && !r.source_linked && (
-                          <ReportSourceLink
-                            report={r.id}
-                            entries={workspace.analysis_queue ?? []}
-                            disabled={busy}
-                            onLink={(report, analysis_id) =>
-                              void run(async () => {
-                                setWorkspace(
-                                  await api<Workspace>({
-                                    action: "report_link",
-                                    report,
-                                    analysis_id,
-                                  }),
-                                );
-                              })
-                            }
-                          />
-                        )}
-                        <button
-                          className="button secondary"
-                          disabled={busy}
-                          onClick={() => void run(() => open(r.id))}
-                        >
-                          牌譜を確認
-                        </button>
+              ) : (
+                <div className="report-list">
+                  {workspace.reports.map((r, i) => (
+                    <div className="queue-row" key={r.id}>
+                      <div>
+                        <strong>
+                          牌譜 {workspace.reports.length - i} · {r.rounds}局
+                        </strong>
+                        <small>
+                          {r.model_name} · 席{r.seat + 1} ·{" "}
+                          {r.source_linked
+                            ? "元対局に紐付け済み"
+                            : "元対局未登録"}
+                        </small>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-              <section className="section">
-                <div className="section-title">
-                  <h2>学習ライブラリ</h2>
-                  <button
-                    className="text-button"
-                    onClick={() => setScreen("study")}
-                  >
-                    すべて見る →
-                  </button>
-                </div>
-                <div className="status-grid">
-                  {["未学習", "復習中", "習得済み", "保留"].map((s, i) => (
-                    <button
-                      className="status-card"
-                      key={s}
-                      onClick={() => {
-                        setFilter(s);
-                        setScreen("study");
-                      }}
-                    >
-                      <span className={`status-dot dot-${i}`} />
-                      <span>{s}</span>
-                      <strong>
-                        {
-                          workspace.items.filter((item) => item.status === s)
-                            .length
-                        }
-                      </strong>
-                    </button>
+                      <span className="badge">
+                        重要局面 {r.important_count}
+                      </span>
+                      {r.engine === "Mortal" && !r.source_linked && (
+                        <ReportSourceLink
+                          report={r.id}
+                          entries={workspace.analysis_queue ?? []}
+                          disabled={busy}
+                          onLink={(report, analysis_id) =>
+                            void run(async () => {
+                              setWorkspace(
+                                await api<Workspace>({
+                                  action: "report_link",
+                                  report,
+                                  analysis_id,
+                                }),
+                              );
+                            })
+                          }
+                        />
+                      )}
+                      <button
+                        className="button secondary"
+                        disabled={busy}
+                        onClick={() => void run(() => open(r.id))}
+                      >
+                        牌譜を確認
+                      </button>
+                    </div>
                   ))}
                 </div>
-              </section>
-            </>
-          )}
-          {screen === "review" && (
+              )}
+            </details>
+          </div>
+          <div hidden={screen !== "settings"}>
+            <h1 className="phone-tab-title">設定</h1>
+            <section className="panel phone-study-options">
+              <StudyOptions />
+            </section>
+            <section className="panel" aria-label="保存と管理">
+              <button
+                className="button secondary"
+                disabled={busy || bulkBusy}
+                onClick={() => setBackups(true)}
+              >
+                バックアップと復元
+              </button>
+              <MortalInboxSettings
+                disabled={busy || bulkBusy}
+                onChange={refresh}
+              />
+            </section>
+            <details className="panel phone-tools">
+              <summary>このPCの管理</summary>
+              <div className="phone-tools-content">
+                <a href="/phone/">iPad・スマホ用オフライン版</a>
+                <button
+                  className="text-button"
+                  onClick={() => setGuide((v) => !v)}
+                >
+                  解析の手順
+                </button>
+              </div>
+              {guide && <AnalysisGuide onClose={() => setGuide(false)} />}
+            </details>
+          </div>
+          {screen === "replays" && reviewOpen && (
             <>
+              <button
+                className="text-button"
+                onClick={() => setReviewOpen(false)}
+              >
+                牌譜に戻る
+              </button>
               <div className="page-heading compact">
                 <h1>見直したい一打</h1>
                 {detail && (
@@ -598,32 +597,14 @@ export function RealApp() {
                       <aside className="panel analysis-panel">
                         {assessment ? (
                           <>
-                            <h2>打牌の比較</h2>
-                            <div
-                              className="comparison"
-                              data-testid="real-comparison"
-                            >
-                              <div>
-                                <span>対局時の打牌</span>
-                                <RealTile value={assessment.actual!} />
-                              </div>
-                              <div>
-                                <span>
-                                  {detail.engine ?? "NAGA"}推奨 ·{" "}
-                                  {detail.model_name}
-                                </span>
-                                <RealTile value={assessment.suggested!} />
-                              </div>
-                              <p>
-                                候補重み差 <b>{assessment.gap!.toFixed(2)}pt</b>
-                                <small>
-                                  {detail.engine === "Mortal"
-                                    ? "モデルの選択傾向"
-                                    : "分布合計を100に換算"}{" "}
-                                  · 勝率や損失ではありません
-                                </small>
-                              </p>
-                            </div>
+                            <Compare
+                              testId="real-comparison"
+                              scene={{
+                                ...assessment,
+                                engine: detail.engine,
+                                model_name: detail.model_name,
+                              }}
+                            />
                             <button
                               className="button primary full"
                               disabled={busy}
@@ -677,26 +658,69 @@ export function RealApp() {
               )}
             </>
           )}
-          {screen === "study" && (
-            <StudyPanel
-              workspace={workspace}
-              active={learning}
-              filter={filter}
-              onFilter={setFilter}
-              onActive={setLearning}
-              onRefresh={refresh}
-              onSession={(session) =>
-                setWorkspace((prev) => ({ ...prev, session }))
-              }
-              onHome={() => {
-                setLearning(false);
-                setScreen("home");
-              }}
-              onReview={(report, id) => void run(() => open(report, id))}
-            />
-          )}
+          <div hidden={screen !== "study"}>
+            {!learning && !libraryOpen ? (
+              <PhoneStudyHome
+                workspace={workspace}
+                disabled={busy || bulkBusy}
+                onBegin={begin}
+                onLibrary={() => {
+                  setReportFilter(undefined);
+                  setLibraryOpen(true);
+                }}
+                onAdd={() => {
+                  setReviewOpen(false);
+                  setScreen("replays");
+                }}
+              />
+            ) : (
+              <>
+                {!learning && (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setLibraryOpen(false);
+                      setReportFilter(undefined);
+                    }}
+                  >
+                    学習に戻る
+                  </button>
+                )}
+                <StudyPanel
+                  workspace={workspace}
+                  active={learning}
+                  filter={filter}
+                  reportFilter={reportFilter}
+                  onFilter={setFilter}
+                  onActive={setLearning}
+                  onRefresh={refresh}
+                  onSession={(session) =>
+                    setWorkspace((prev) => ({ ...prev, session }))
+                  }
+                  onHome={() => {
+                    setLearning(false);
+                    setLibraryOpen(false);
+                    void run(refresh);
+                  }}
+                  onReview={(report, id) => void run(() => open(report, id))}
+                />
+              </>
+            )}
+          </div>
         </div>
       </main>
+      <AppNavigation
+        screen={screen}
+        disabled={busy || bulkBusy || adding}
+        onChange={(id) => {
+          setScreen(id);
+          if (id === "replays") setReviewOpen(false);
+          void run(refresh);
+        }}
+      />
+      {backups && (
+        <BackupDialog onClose={() => setBackups(false)} onRefresh={refresh} />
+      )}
       <dialog
         ref={dialog}
         onCancel={(e) => {
@@ -863,34 +887,76 @@ export function RealApp() {
                   </select>
                 </label>
               )}
-              <label>
-                {analysis
-                  ? "元の雀魂共有URL（選択済み）"
-                  : "元の雀魂共有URL（任意）"}
-                <input
-                  value={source}
-                  disabled={busy || !!analysis}
-                  autoComplete="off"
-                  onChange={(e) => setSource(e.target.value)}
-                />
-              </label>
+              {stage.engine === "Mortal" && !analysis ? (
+                <>
+                  <MortalSourceSelect
+                    entries={workspace.analysis_queue ?? []}
+                    stage={stage}
+                    local
+                    value={sourceId}
+                    disabled={busy}
+                    onChange={(id) => {
+                      setSourceId(id);
+                      setSource(
+                        workspace.analysis_queue?.find((e) => e.id === id)
+                          ?.url ?? "",
+                      );
+                    }}
+                  />
+                  <details>
+                    <summary>元URLを直接指定</summary>{" "}
+                    <label>
+                      {analysis
+                        ? "元の雀魂共有URL（選択済み）"
+                        : "元の雀魂共有URL（任意）"}
+                      <input
+                        value={source}
+                        disabled={busy || !!analysis}
+                        autoComplete="off"
+                        onChange={(e) => {
+                          setSourceId("");
+                          setSource(e.target.value);
+                        }}
+                      />
+                    </label>
+                  </details>
+                </>
+              ) : (
+                <>
+                  {" "}
+                  <label>
+                    {analysis
+                      ? "元の雀魂共有URL（選択済み）"
+                      : "元の雀魂共有URL（任意）"}
+                    <input
+                      value={source}
+                      disabled={busy || !!analysis}
+                      autoComplete="off"
+                      onChange={(e) => {
+                        setSourceId("");
+                        setSource(e.target.value);
+                      }}
+                    />
+                  </label>
+                </>
+              )}
               <button
                 className="button primary full"
                 disabled={busy || seat === "" || model === ""}
                 onClick={() =>
                   void run(async () => {
-                    const result = await api<{
-                      id: string;
-                      duplicate: boolean;
-                    }>({
+                    const result = await api<MortalRegistrationResult>({
                       action: "commit",
                       token: stage.token,
                       seat: Number(seat),
                       model: Number(model),
                       source_url: source.trim(),
-                      ...(analysis ? { analysis_id: analysis.id } : {}),
+                      ...(analysis || sourceId
+                        ? { analysis_id: analysis?.id ?? sourceId }
+                        : {}),
                     });
                     await refresh();
+                    setRegistration(stage.engine === "Mortal" ? result : null);
                     await open(result.id);
                     setAdding(false);
                     setNotice(
@@ -917,6 +983,6 @@ export function RealApp() {
           ) : null}
         </div>
       </dialog>
-    </>
+    </div>
   );
 }

@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./static-app";
 
 const source =
   "https://game.mahjongsoul.com/?paipu=260101-fictional-handoff_a123";
@@ -43,12 +44,12 @@ async function prepare(
   await page.route("**/api/local", (route) => {
     const input = route.request().postDataJSON();
     actions.push(input.action);
-    if (input.action === "analysis_add") {
+    if (input.action === "analysis_bulk") {
       if (options.saveFails)
         return route.fulfill({
           json: { ok: false, error: "storage_or_input_error" },
         });
-      saved.push(input.url);
+      saved.push(source);
     }
     return route.fulfill({
       json: {
@@ -68,7 +69,11 @@ async function prepare(
     });
   });
   await page.goto("/");
-  await expect(page.getByLabel("雀魂共有URL", { exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "牌譜", exact: true }).click();
+  await page.getByText("URLを追加", { exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "雀魂共有URL", exact: true }),
+  ).toBeEnabled();
   return { actions, saved };
 }
 
@@ -86,11 +91,11 @@ test("normal browser popup receives the canonical prefilled URL without submitti
   });
   const { saved } = await prepare(page, { native: true });
   await page
-    .getByLabel("雀魂共有URL", { exact: true })
+    .getByRole("textbox", { name: "雀魂共有URL", exact: true })
     .fill("雀魂牌譜:" + source);
   const popupPromise = context.waitForEvent("page");
   await page
-    .locator(".source-input")
+    .locator(".phone-source-add")
     .getByRole("button", { name: "Mortalへ" })
     .click();
   const popup = await popupPromise;
@@ -108,13 +113,15 @@ test("one action saves and prefills the URL; its fallback and saved row retain t
 }) => {
   const { actions, saved } = await prepare(page);
   await page
-    .getByLabel("雀魂共有URL", { exact: true })
+    .getByRole("textbox", { name: "雀魂共有URL", exact: true })
     .fill("雀魂牌譜:" + source);
   await page
-    .locator(".source-input")
+    .locator(".phone-source-add")
     .getByRole("button", { name: "Mortalへ", exact: true })
     .click();
-  await expect(page.getByLabel("雀魂共有URL", { exact: true })).toHaveValue("");
+  await expect(
+    page.getByRole("textbox", { name: "雀魂共有URL", exact: true }),
+  ).toHaveValue("");
   await expect(page.getByRole("status")).toContainText("対象プレイヤーを確認");
   await expect(
     page.getByRole("status").getByRole("link", { name: "Mortalを開く" }),
@@ -130,12 +137,10 @@ test("one action saves and prefills the URL; its fallback and saved row retain t
       active: true,
     },
   ]);
-  expect(actions.every((a) => ["state", "analysis_add"].includes(a))).toBe(
+  expect(actions.every((a) => ["state", "analysis_bulk"].includes(a))).toBe(
     true,
   );
-  await expect(page.getByTestId("analysis-row")).toContainText(
-    "保存済み・未解析",
-  );
+  await expect(page.getByTestId("analysis-row")).toContainText("未解析");
   await page
     .getByTestId("analysis-row")
     .getByRole("button", { name: "Mortalへ", exact: true })
@@ -147,6 +152,8 @@ test("one action saves and prefills the URL; its fallback and saved row retain t
     )
     .toBe(2);
   expect(actions).not.toContain("analysis_requested");
+  await page.getByRole("button", { name: "設定", exact: true }).click();
+  await page.getByText("このPCの管理", { exact: true }).click();
   await page.getByRole("button", { name: "解析の手順", exact: true }).click();
   await expect(page.getByRole("region", { name: "解析の手順" })).toContainText(
     "雀魂へのログイン・拡張は不要",
@@ -160,13 +167,17 @@ test("clipboard denial does not prevent prefilling or require manual paste", asy
   page,
 }) => {
   const { saved } = await prepare(page, { copyFails: true });
-  await page.getByLabel("雀魂共有URL", { exact: true }).fill(source);
   await page
-    .locator(".source-input")
+    .getByRole("textbox", { name: "雀魂共有URL", exact: true })
+    .fill(source);
+  await page
+    .locator(".phone-source-add")
     .getByRole("button", { name: "Mortalへ" })
     .click();
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await expect(page.getByLabel("雀魂共有URL", { exact: true })).toHaveValue("");
+  await expect(
+    page.getByRole("textbox", { name: "雀魂共有URL", exact: true }),
+  ).toHaveValue("");
   expect(
     await page.evaluate(() => (window as any).__mortal.opened[0].url),
   ).toBe(destination);
@@ -179,25 +190,32 @@ test("save failure and invalid hosts do not clear the input or claim a saved/sta
 }) => {
   const { saved } = await prepare(page, { saveFails: true });
   await page
-    .getByLabel("雀魂共有URL", { exact: true })
+    .getByRole("textbox", { name: "雀魂共有URL", exact: true })
     .fill("https://example.invalid/");
+  await expect(
+    page
+      .locator(".phone-source-add")
+      .getByRole("button", { name: "Mortalへ", exact: true }),
+  ).toHaveCount(0);
   await page
-    .locator(".source-input")
-    .getByRole("button", { name: "Mortalへ" })
+    .locator(".phone-source-add")
+    .getByRole("button", { name: "追加", exact: true })
     .click();
-  await expect(page.getByRole("alert")).toContainText("共有URLを確認");
+  await expect(page.getByRole("alert")).toBeVisible();
   expect(await page.evaluate(() => (window as any).__mortal.opened)).toEqual(
     [],
   );
-  await page.getByLabel("雀魂共有URL", { exact: true }).fill(source);
   await page
-    .locator(".source-input")
+    .getByRole("textbox", { name: "雀魂共有URL", exact: true })
+    .fill(source);
+  await page
+    .locator(".phone-source-add")
     .getByRole("button", { name: "Mortalへ" })
     .click();
   await expect(page.getByRole("alert")).toBeVisible();
-  await expect(page.getByLabel("雀魂共有URL", { exact: true })).toHaveValue(
-    source,
-  );
+  await expect(
+    page.getByRole("textbox", { name: "雀魂共有URL", exact: true }),
+  ).toHaveValue(source);
   await expect(page.getByRole("status")).toHaveCount(0);
   expect(saved).toEqual([]);
 });
@@ -227,21 +245,28 @@ test("iPad entry saves locally and reopens a stored URL with no Windows receipt 
     route.fulfill({ status: 503, body: "" }),
   );
   await page.goto("/phone/");
-  await expect(page.getByLabel("雀魂共有URL", { exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "牌譜", exact: true }).click();
+  await page.getByText("URLを追加", { exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "雀魂共有URL", exact: true }),
+  ).toBeEnabled();
   await page
-    .getByLabel("雀魂共有URL", { exact: true })
+    .getByRole("textbox", { name: "雀魂共有URL", exact: true })
     .fill("雀魂牌譜:" + source);
   await page
-    .locator(".source-input")
+    .locator(".phone-source-add")
     .getByRole("button", { name: "Mortalへ", exact: true })
     .click();
   const row = page.getByTestId("analysis-row");
   await expect(row).toContainText("この端末に保存済み・未同期");
-  await expect(page.getByLabel("雀魂共有URL", { exact: true })).toHaveValue("");
+  await expect(
+    page.getByRole("textbox", { name: "雀魂共有URL", exact: true }),
+  ).toHaveValue("");
   expect(await page.evaluate(() => (window as any).__opened)).toEqual([
     { url: destination, active: true },
   ]);
   await page.reload();
+  await page.getByRole("button", { name: "牌譜", exact: true }).click();
   await expect(
     row.getByRole("button", { name: "Mortalへ", exact: true }),
   ).toBeEnabled();

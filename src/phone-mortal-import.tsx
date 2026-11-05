@@ -1,7 +1,7 @@
 import { MortalSourceSelect } from "./mortal-source-select";
 import { MortalRegistrationNotice } from "./mortal-registration-notice";
 import type { MortalRegistrationResult } from "./mortal-registration";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import { api, errors } from "./api";
 import { previewMortal, type LocalMaterial } from "./offline/mortal-compiler";
 import { readPhone } from "./offline/store";
@@ -62,7 +62,11 @@ export function PhoneMortalImport({
   onBusy,
   onPendingChange,
   onRegistered,
+  desktop = false,
+  tools,
 }: {
+  desktop?: boolean;
+  tools?: ReactNode;
   disabled: boolean;
   online: boolean;
   local: boolean;
@@ -71,6 +75,27 @@ export function PhoneMortalImport({
   onPendingChange?: (pending: boolean) => void;
   onRegistered: (local?: boolean) => Promise<void>;
 }) {
+  const stages = useRef(new Map<string, Stage>());
+  const remote = async <T,>(body: Record<string, unknown>): Promise<T> => {
+    if (!desktop) return request<T>(body);
+    if (body.action === "inspect") {
+      const value = await api<Stage>({ action: "inspect", data: body.data });
+      if (value.engine !== "Mortal" || value.target_seat === undefined)
+        throw Error("inbox_mortal_only");
+      stages.current.set(value.token, value);
+      return { ...value, source: "windows" } as T;
+    }
+    const value = stages.current.get(String(body.token));
+    if (!value) throw Error("stage_expired");
+    return api<T>({
+      action: "commit",
+      token: value.token,
+      seat: value.target_seat,
+      model: 0,
+      source_url: "",
+      ...(body.analysis_id ? { analysis_id: body.analysis_id } : {}),
+    });
+  };
   const [file, setFile] = useState<File | null>(null);
   const [batch, setBatch] = useState<MortalBatchItem[]>([]);
   const [material, setMaterial] = useState<LocalMaterial | null>(null);
@@ -109,7 +134,11 @@ export function PhoneMortalImport({
     try {
       await onRegistered();
     } catch {
-      setUpdateError("Windows登録済みです。端末の問題を更新できませんでした。");
+      setUpdateError(
+        desktop
+          ? "Windows登録済みです。一覧を更新できませんでした。"
+          : "Windows登録済みです。端末の問題を更新できませんでした。",
+      );
     }
   };
   const inspect = (selected: File) =>
@@ -140,9 +169,9 @@ export function PhoneMortalImport({
       let binary = "";
       for (let i = 0; i < bytes.length; i += 8192)
         binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-      const state = await readPhone();
+      const state = desktop ? null : await readPhone();
       setStage(
-        await request<ImportStage>({
+        await remote<ImportStage>({
           action: "inspect",
           data: btoa(binary),
           source: state?.pack?.source ?? null,
@@ -215,13 +244,13 @@ export function PhoneMortalImport({
                           analysis_id: null,
                         });
                       }
-                      const state = await readPhone();
-                      const stage = await request<ImportStage>({
+                      const state = desktop ? null : await readPhone();
+                      const stage = await remote<ImportStage>({
                         action: "inspect",
                         data: await encodeReport(file),
                         source: state?.pack?.source ?? null,
                       });
-                      return request({
+                      return remote({
                         action: "register",
                         token: stage.token,
                         source: stage.source,
@@ -270,7 +299,7 @@ export function PhoneMortalImport({
           <MortalSourceSelect
             entries={entries}
             stage={stage}
-            local={local}
+            local={local || desktop}
             value={entry}
             disabled={disabled || busy}
             onChange={setEntry}
@@ -293,7 +322,7 @@ export function PhoneMortalImport({
                   await onRegistered(true);
                   return;
                 }
-                const result = await request<
+                const result = await remote<
                   MortalRegistrationResult & {
                     source: string;
                   }
@@ -361,6 +390,7 @@ export function PhoneMortalImport({
           </button>
         </div>
       )}
+      {!stage && !batch.length && tools}
     </details>
   );
 }

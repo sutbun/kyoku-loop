@@ -59,9 +59,10 @@ test("desktop paipuya link retains the bulk import draft", async ({
   page,
 }, testInfo) => {
   await page.goto("/");
-  await page.getByText("牌譜屋から一括追加", { exact: true }).click();
-  const area = page.locator("details.bulk-history");
-  const input = area.getByRole("textbox", { name: "一括データ" });
+  await page.getByRole("button", { name: "牌譜", exact: true }).click();
+  await page.getByText("URLを追加", { exact: true }).click();
+  const area = page.locator(".phone-source-add");
+  const input = area.getByRole("textbox", { name: "雀魂共有URL" });
   const draft =
     "https://game.mahjongsoul.com/?paipu=260101-fictional-desktop-link_a123";
   await input.fill(draft);
@@ -69,14 +70,12 @@ test("desktop paipuya link retains the bulk import draft", async ({
   await expect(link).toHaveAttribute("href", paipuyaURL());
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
-  await page
-    .context()
-    .route("https://amae-koromo.sapk.ch/**", (route) =>
-      route.fulfill({
-        contentType: "text/html",
-        body: "<title>架空の牌譜屋</title>",
-      }),
-    );
+  await page.context().route("https://amae-koromo.sapk.ch/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<title>架空の牌譜屋</title>",
+    }),
+  );
   const popupReady = page.waitForEvent("popup");
   await link.click();
   const popup = await popupReady;
@@ -105,9 +104,9 @@ test("real study five-question flow, durable answer concealment, undo and librar
     if (n === 1) {
       await page.reload();
       await expect(
-        page.getByRole("heading", { name: "ホーム", exact: true }),
+        page.getByRole("heading", { name: "学習", exact: true }),
       ).toBeAttached();
-      await page.getByRole("button", { name: "復習を再開する" }).click();
+      await page.getByRole("button", { name: "続きから再開" }).click();
       await expect(page.getByText("1 / 5 問", { exact: true })).toBeVisible();
       await expect(
         page.getByRole("button", { name: "回答する", exact: true }),
@@ -196,21 +195,18 @@ test("a lost grading response retries the same immutable event without grading t
       0,
     ),
   ).toBe(1);
-  await page.getByRole("button", { name: "中断してホームへ" }).click();
-  await page.getByRole("button", { name: "復習を再開する" }).click();
+  await page.getByRole("button", { name: "中断して学習へ" }).click();
+  await page.getByRole("button", { name: "続きから再開" }).click();
   await expect(page.getByText("2 / 5 問", { exact: true })).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  const brand = page.getByRole("button", {
-    name: "KyokuLoop ホーム",
-    exact: true,
-  });
-  if (await brand.isVisible()) await brand.click();
-  else await page.getByRole("button", { name: "ホーム", exact: true }).click();
-  await page.getByRole("button", { name: "すべて見る" }).click();
+  await page.getByRole("button", { name: "中断して学習へ" }).click();
+  await page
+    .getByRole("button", { name: "問題一覧を見る", exact: false })
+    .click();
   await expect(
     page.getByRole("heading", { name: "学習ライブラリ", exact: true }),
   ).toBeVisible();
@@ -220,7 +216,7 @@ test("backup download, file preview, additive restore and malformed-file rejecti
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "学習", exact: true }).click();
+  await page.getByRole("button", { name: "設定", exact: true }).click();
   await page
     .getByRole("button", { name: "バックアップと復元", exact: true })
     .click();

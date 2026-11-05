@@ -221,17 +221,12 @@ for (const surface of ["desktop", "phone"])
           .getByRole("button", { name: "牌譜", exact: true })
           .click();
         await page.getByText("解析結果を追加", { exact: true }).click();
-      } else
-        await page
-          .getByRole("button", { name: /牌譜を追加/ })
-          .first()
-          .click();
+      } else {
+        await page.getByRole("button", { name: "牌譜", exact: true }).click();
+        await page.getByText("解析結果を追加", { exact: true }).click();
+      }
       await page
-        .locator(
-          surface === "phone"
-            ? ".phone-result-import input[type=file]"
-            : "dialog input[type=file]",
-        )
+        .locator(".phone-result-import input[type=file]")
         .setInputFiles([
           {
             name: "result.json",
