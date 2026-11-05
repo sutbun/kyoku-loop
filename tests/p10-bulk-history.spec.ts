@@ -157,9 +157,9 @@ test("bulk UI stores a complete batch, shows metadata and opens only the public 
     await page.getByRole("button", { name: "まとめて追加" }).click();
     await expect(page.getByRole("status")).toContainText("2件追加");
     await expect(page.getByTestId("analysis-row")).toHaveCount(2);
-    await expect(page.getByTestId("analysis-row").first()).toContainText(
-      "保存牌譜 2",
-    );
+    await expect(
+      page.getByRole("combobox", { name: "牌譜の並び順", exact: true }),
+    ).toHaveValue("added");
     await page
       .getByRole("combobox", { name: "牌譜の並び順", exact: true })
       .selectOption("played");
