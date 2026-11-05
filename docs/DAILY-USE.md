@@ -6,6 +6,7 @@
 
 - スタートメニューの **#My Dev Apps → KyokuLoop** で起動する。普段使い版は `11.02-4` のようにDEV接頭辞だけを外して表示する。開発版は `DEV-11.02-4`。
 - ブラウザを閉じても、Windows側のアプリはiPhoneとの同期用に動作を続ける。**KyokuLoop を終了** で終了する。処理中の場合は終了せず、完了後の再操作を案内する。
+- 11.05-8から、Codexや起動元のターミナルを終了してもサーバーが終了しないよう、Windowsの既存WMI経由で起動処理を独立させる。非表示の短い起動処理からサーバーを起動し、従来どおりhealthの版とSHAを照合する。起動処理が使えない場合はエラーを返す。サービス・タスクスケジューラ・ログオン時の自動起動は追加しない。
 - PCを再起動した後は、スタートメニューから一度起動する。自動起動のサービスやタスクスケジューラは登録しない。Windowsを止めても、iPhoneへ保存済みの問題と未送信記録は端末内に残る。
 - 起動を繰り返してもサーバーを二重に作らない。開発版や他のプログラムが同じ接続先を使っている場合は、それを勝手に停止しない。
 
@@ -32,6 +33,8 @@ iPad・スマホの下部タブは「学習・牌譜・設定」。起動時は�
 版は `E:/Apps/KyokuLoop/releases/<版>-<SHA先頭12桁>/`。必要ファイルのハッシュと実行環境をrelease.jsonへ記録し、ビルド後だけcurrent.jsonを切り替える。旧版と前の参照/ランチャーは保持する。参照の置換はSwitch-KyokuLoopRelease.ps1が明示的なバックアップファイル名を使って行い、Windows PowerShell 5でも更新できるようにする。同じ版のディレクトリを上書きせず、失敗した配備で実データを削除しない。
 
 `scripts/KyokuLoop.ps1` は配備先に置く安定したランチャーとなる。Launch/Stop/Backup/Statusに対応。開始前にコードのハッシュを検査し、ローカル制御のPID/role/SHAとprivate nonceを照合して所有するサーバーだけを正常終了させる。実行中APIとPython子プロセスが残っていれば終了を拒否する。強制終了は行わない。
+
+起動寿命の回帰検証は `python -m unittest discover -s tests -p test_p19_launcher.py`。本物のランチャーを架空release・専用データフォルダー・OS割当のテストポートで起動し、起動元だけのWindows Jobを終了した後も同じサーバーが応答し、専用APIで正常終了できることを確認する。本人の稼働アプリやDBをテストで停止しない。仕組みの一次資料は [Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects) と [Win32_Process.Create](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/create-method-in-class-win32-process)。
 
 元レポート、URL、学習履歴、本人用HTTPS設定、停止用nonce、追加コピー先の設定はrepo外に置く。データ正本は引き続き `D:/dev-data/kyoku-loop/private/app/kyokuloop.sqlite3`。追加コピー設定は同じフォルダーのbackup-settings.jsonのdirectoryで指定し、データやGitフォルダーへの再帰的なコピーとCドライブへの長期保存は拒否する。
 
