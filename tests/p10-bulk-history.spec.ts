@@ -1,8 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./static-app";
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve, sep } from "node:path";
 import { DEVELOPMENT_VERSION } from "../src/version";
+
+test.use({ serviceWorkers: "block" });
 
 const code = readFileSync("public/history-collector.js", "utf8").replaceAll(
   "__KYOKULOOP_VERSION__",
@@ -154,6 +157,12 @@ test("bulk UI stores a complete batch, shows metadata and opens only the public 
     await page.getByRole("button", { name: "まとめて追加" }).click();
     await expect(page.getByRole("status")).toContainText("2件追加");
     await expect(page.getByTestId("analysis-row")).toHaveCount(2);
+    await expect(
+      page.getByRole("combobox", { name: "牌譜の並び順", exact: true }),
+    ).toHaveValue("added");
+    await page
+      .getByRole("combobox", { name: "牌譜の並び順", exact: true })
+      .selectOption("played");
     await expect(page.getByTestId("analysis-row").first()).toContainText("1位");
     await expect(page.getByTestId("analysis-row").first()).toContainText(
       "架空A / 架空C / 架空D",
@@ -162,7 +171,7 @@ test("bulk UI stores a complete batch, shows metadata and opens only the public 
     await page.getByRole("button", { name: "まとめて追加" }).click();
     await expect(page.getByRole("status")).toContainText("0件追加 · 重複2件");
     await page.screenshot({
-      path: `D:/dev-data/kyoku-loop/private/bulk-history-20261102/fixture-history-${test.info().project.name}.png`,
+      path: test.info().outputPath("fixture-history.png"),
       fullPage: true,
     });
     const popupPromise = context.waitForEvent("page");
@@ -181,6 +190,9 @@ test("bulk UI stores a complete batch, shows metadata and opens only the public 
     expect(await popup.evaluate(() => window.opener)).toBeNull();
     await popup.close();
     await page.reload();
+    await expect(
+      page.getByRole("combobox", { name: "牌譜の並び順", exact: true }),
+    ).toHaveValue("added");
     await expect(page.getByTestId("analysis-row")).toHaveCount(2);
     await expect(page.getByTestId("analysis-row").first()).toContainText(
       "保存済み・未解析",

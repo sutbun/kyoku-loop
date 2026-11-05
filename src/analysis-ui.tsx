@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ReplaySelection, useReplaySelection } from "./replay-selection";
+import { ReplaySort, sortReplays, type ReplayOrder } from "./replay-sort";
 import { openMortal, MORTAL_READY, mortalLink } from "./mortal-handoff";
 import {
   analysisStatus,
@@ -150,17 +151,16 @@ export function AnalysisList({
 }) {
   const [limit, setLimit] = useState(10);
   const [filter, setFilter] = useState("すべて");
+  const [order, setOrder] = useState<ReplayOrder>("added");
   const [dragged, setDragged] = useState<string | null>(null);
   const visible = entries.filter(visibleAnalysis);
   const analysed = visible.filter((e) => e.reports?.length).length;
-  const filtered = [...visible]
-    .reverse()
-    .filter(
-      (e) =>
-        portable ||
-        filter === "すべて" ||
-        (filter === "解析済み" ? !!e.reports?.length : !e.reports?.length),
-    );
+  const filtered = sortReplays(visible, order).filter(
+    (e) =>
+      portable ||
+      filter === "すべて" ||
+      (filter === "解析済み" ? !!e.reports?.length : !e.reports?.length),
+  );
   const selection = useReplaySelection(filtered);
   return (
     <div className="analysis-list">
@@ -190,6 +190,13 @@ export function AnalysisList({
           ))}
         </div>
       )}
+      <ReplaySort
+        value={order}
+        onChange={(value) => {
+          setOrder(value);
+          setLimit(10);
+        }}
+      />
       <ReplaySelection
         entries={filtered}
         selected={selection.selected}
