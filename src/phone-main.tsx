@@ -1,3 +1,4 @@
+import { AppHeader, AppNavigation } from "./app-navigation";
 import historyCode from "../docs/snippets/ipad-history-metadata-shortcut.js?raw";
 import { PhoneBulkImport } from "./phone-bulk-import";
 import { VersionUpdate } from "./version-update";
@@ -333,8 +334,7 @@ function PhoneApp() {
       ref={studyRef}
       className={`phone-app${studying ? " is-studying" : ""}`}
     >
-      <header className="phone-header">
-        <b>KyokuLoop</b>
+      <AppHeader>
         <div
           className="phone-connection"
           onKeyDown={(e) => {
@@ -424,7 +424,7 @@ function PhoneApp() {
             return null;
           }}
         />
-      </header>
+      </AppHeader>
       <main inert={updateLock}>
         <div className="content">
           {error && (
@@ -690,28 +690,16 @@ function PhoneApp() {
           </div>
         </div>
       </main>
-      <nav inert={updateLock} className="phone-nav" aria-label="メイン">
-        {(
-          [
-            ["study", "学習"],
-            ["replays", "牌譜"],
-            ["settings", "設定"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            disabled={busy || importBusy}
-            aria-current={screen === id ? "page" : undefined}
-            onClick={() => {
-              setScreen(id);
-              setSyncNoticeOpen(false);
-              void run(refresh);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+      <AppNavigation
+        screen={screen}
+        inert={updateLock}
+        disabled={busy || importBusy}
+        onChange={(id) => {
+          setScreen(id);
+          setSyncNoticeOpen(false);
+          void run(refresh);
+        }}
+      />
     </div>
   );
 }

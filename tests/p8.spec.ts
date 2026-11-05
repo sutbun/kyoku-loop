@@ -57,8 +57,11 @@ test("Mortal result import fixes its analysed player, preserves exact red tile a
       route.fulfill({ json: request(route.request().postDataJSON()) }),
     );
     await page.goto("/");
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
+    await page.getByText("解析結果を追加", { exact: true }).click();
+    await page.getByText("レポートURL・NAGA", { exact: true }).click();
     await page
-      .getByRole("button", { name: "牌譜を追加", exact: false })
+      .getByRole("button", { name: "レポートを追加", exact: true })
       .click();
     await page.getByLabel("JSON / JSON.gz ファイル").setInputFiles({
       name: "fictional-mortal.json",
@@ -72,15 +75,17 @@ test("Mortal result import fixes its analysed player, preserves exact red tile a
     ).toBeVisible();
     await page.getByRole("button", { name: "このプレイヤーで登録" }).click();
     await expect(page.getByTestId("real-comparison")).toContainText(
-      "Mortal推奨",
+      "Mortalfictional-model",
     );
     await expect(page.getByTestId("real-comparison")).not.toContainText("NAGA");
     await expect(page.getByTestId("real-comparison")).toContainText("5.00pt");
     await expect(
       page.getByTestId("real-hand").getByLabel("赤5筒"),
     ).toBeVisible();
-    await page.getByRole("button", { name: "ホーム", exact: true }).click();
-    await page.getByRole("button", { name: "今すぐ学ぶ", exact: true }).click();
+    await page.getByRole("button", { name: "学習", exact: true }).click();
+    await page
+      .getByRole("button", { name: /問練習する$/, exact: false })
+      .click();
     expect(request({ action: "study_current" }).data.scene).not.toHaveProperty(
       "suggested",
     );
@@ -94,6 +99,100 @@ test("Mortal result import fixes its analysed player, preserves exact red tile a
     expect(request({ action: "state" }).data.items[0].review_count).toBe(1);
     await page.reload();
     expect(request({ action: "state" }).data.items[0].review_count).toBe(1);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test("shared JSON form retains a preview across tabs, registers the selected source and keeps orphan results reachable", async ({
+  page,
+}, info) => {
+  test.setTimeout(120000);
+  const folder = mkdtempSync(
+    join(resolve("D:/dev-data/kyoku-loop/private"), "unified-mortal-browser-"),
+  );
+  const env = { ...process.env, KYOKULOOP_DB: join(folder, "test.sqlite3") };
+  const call = (value: object) =>
+    JSON.parse(
+      execFileSync("python", ["tools/p2_store.py"], {
+        input: JSON.stringify(value),
+        encoding: "utf8",
+        env,
+        windowsHide: true,
+        timeout: 60000,
+      }),
+    );
+  const url =
+    "https://game.mahjongsoul.com/?paipu=260101-fictional-shared-mortal_a123";
+  try {
+    expect(call({ action: "analysis_add", url }).ok).toBe(true);
+    await page.route("**/api/local", (route) =>
+      route.fulfill({ json: call(route.request().postDataJSON()) }),
+    );
+    await page.goto("/");
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
+    await page.getByText("解析結果を追加", { exact: true }).click();
+    const localDatabases = await page.evaluate(async () =>
+      (await indexedDB.databases()).map((db) => db.name).sort(),
+    );
+    await page
+      .getByLabel("Mortal JSON / JSON.gz", { exact: true })
+      .setInputFiles({
+        name: "fictional-shared.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(generated.raw)),
+      });
+    await page
+      .getByRole("combobox", { name: "元牌譜（任意）", exact: true })
+      .selectOption(url.split("paipu=")[1]);
+    expect(call({ action: "state" }).data.reports).toHaveLength(0);
+    await page.getByRole("button", { name: "設定", exact: true }).click();
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
+    await expect(
+      page.getByRole("combobox", { name: "元牌譜（任意）", exact: true }),
+    ).toHaveValue(url.split("paipu=")[1]);
+    await page
+      .getByRole("button", { name: "Windowsに登録", exact: true })
+      .click();
+    await expect(
+      page.getByText("元牌譜に紐付け済み", { exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(async () =>
+        (await indexedDB.databases()).map((db) => db.name).sort(),
+      ),
+    ).toEqual(localDatabases);
+    const before = call({ action: "state" }).data;
+    expect(before.reports).toHaveLength(1);
+    expect(before.analysis_queue[0].reports).toEqual([before.reports[0].id]);
+    await page
+      .getByTestId("analysis-row")
+      .getByRole("button", { name: "問題を見る", exact: true })
+      .click();
+    await expect(page.getByTestId("real-library-row")).toHaveCount(1);
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("checkbox", { name: "全選択", exact: true }).check();
+    await page
+      .getByRole("button", { name: "選択した1件を削除", exact: true })
+      .click();
+    await expect(page.getByTestId("analysis-row")).toHaveCount(0);
+    await page.getByText("解析結果一覧 · 1件", { exact: true }).click();
+    await page.getByRole("button", { name: "牌譜を確認", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "収録手順", exact: true }),
+    ).toBeVisible();
+    if (page.viewportSize()!.width >= 1000)
+      expect(
+        (await page.locator(".review-layout .table").boundingBox())!.width,
+      ).toBeGreaterThanOrEqual(500);
+    await page.screenshot({
+      path: info.outputPath("review.png"),
+      fullPage: true,
+    });
+    const after = call({ action: "state" }).data;
+    expect(after.items).toEqual(before.items);
+    expect(after.reports).toEqual(before.reports);
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }

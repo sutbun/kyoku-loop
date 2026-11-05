@@ -48,8 +48,9 @@ async function open(page: Page, entries = fixture()) {
     return route.fulfill({ json: { ok: true, data: workspace } });
   });
   await page.goto("/");
+  await page.getByRole("button", { name: "牌譜", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "保存した牌譜", exact: true }),
+    page.getByRole("heading", { name: /^保存牌譜/, exact: false }),
   ).toBeVisible();
   return { workspace, deletions };
 }
@@ -80,9 +81,7 @@ test("Windows counts all saved games, includes no-question results and counts mu
     .click();
   await expect(page.getByTestId("analysis-row")).toHaveCount(3);
   await expect(
-    page
-      .getByTestId("analysis-row")
-      .filter({ hasText: "検証完了（対象問題なし）" }),
+    page.getByTestId("analysis-row").filter({ hasText: "解析済み・問題なし" }),
   ).toHaveCount(1);
   await expect(
     page.getByRole("checkbox", { name: "保存牌譜 14を選択", exact: true }),
@@ -162,6 +161,7 @@ test("a completed registration updates counts and the active filter without clea
   await filters(page)
     .getByRole("button", { name: "未解析 12件", exact: true })
     .click();
+  await page.getByText("URLを追加", { exact: true }).click();
   const input = page.getByRole("textbox", { name: "雀魂共有URL", exact: true });
   await input.fill(entry(99).url);
   workspace.analysis_queue![0] = {

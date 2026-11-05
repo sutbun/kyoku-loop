@@ -527,3 +527,25 @@
 .phone-source-add .bulk-history-actions + label {
   margin-top: 14px;
 }
+
+.phone-app.is-reviewing {
+  max-width: 1400px;
+}
+.phone-app .desktop-reports > summary {
+  cursor: pointer;
+  color: var(--green);
+  min-height: 44px;
+  align-content: center;
+}
+.phone-app .phone-replay-row .text-button {
+  justify-self: start;
+}
+.phone-app .desktop-result-add .button {
+  margin: 6px 0;
+}
+
+@media (min-width: 700px) {
+  .phone-app.is-reviewing .review-layout .table {
+    width: min(100%, 640px);
+  }
+}

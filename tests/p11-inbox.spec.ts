@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./static-app";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -70,6 +71,7 @@ test("direct drop pins the chosen row through async inspection; cancel and inval
       await route.fulfill({ json: call(input) });
     });
     await page.goto("/");
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
     await expect(page.getByTestId("analysis-row")).toHaveCount(2);
     // Rows are reverse chronological; the second row is the first source.
     await drop(page, 1, [{ name: "fictional.json", text: raw }]);
@@ -138,6 +140,8 @@ test("folder setup drives the Windows watcher without an open app tab; later sou
       route.fulfill({ json: call(route.request().postDataJSON()) }),
     );
     await page.goto("/");
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
+    await page.getByRole("button", { name: "設定", exact: true }).click();
     await page.getByText("Mortal 自動取り込み", { exact: true }).click();
     await page
       .getByLabel("取り込みフォルダ", { exact: true })
@@ -172,17 +176,19 @@ test("folder setup drives the Windows watcher without an open app tab; later sou
       )
       .toBe("duplicate");
     await page.goto("/");
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
+    await page.getByText("解析結果一覧 · 1件", { exact: true }).click();
     await page.getByText("元牌譜を選ぶ", { exact: true }).click();
     await page.getByLabel("紐付け先の対局").selectOption(first.split("=")[1]);
     await page
       .getByRole("button", { name: "この対局へ紐付ける", exact: true })
       .click();
-    await expect(page.getByTestId("analysis-row")).toContainText(
-      "学習準備完了",
-    );
+    await expect(page.getByTestId("analysis-row")).toContainText("学習可");
     await page.reload();
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
+    await page.getByText("解析結果一覧 · 1件", { exact: true }).click();
     await expect(
-      page.getByText("元対局を手動登録済み", { exact: false }),
+      page.getByText("元対局に紐付け済み", { exact: false }),
     ).toBeVisible();
     expect(call({ action: "state" }).data.items).toHaveLength(1);
     call({

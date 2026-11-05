@@ -1,6 +1,6 @@
 import { readAnalysisFile, parseAnalysisBatch } from "./analysis-queue";
 import { openMortal, mortalLink, MORTAL_READY } from "./mortal-handoff";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { errors } from "./api";
 import { PaipuyaLink } from "./paipuya-link";
 export function PhoneBulkImport({
@@ -10,6 +10,8 @@ export function PhoneBulkImport({
   onPendingChange,
   onImport,
   onSaved,
+  place = "この端末",
+  tools,
 }: {
   disabled: boolean;
   historyCode: string;
@@ -19,6 +21,8 @@ export function PhoneBulkImport({
     value: string,
   ) => Promise<{ added: number; existing: number; updated?: number }>;
   onSaved: () => Promise<void>;
+  place?: string;
+  tools?: ReactNode;
 }) {
   const [value, setValue] = useState("");
   const [working, setWorking] = useState(false);
@@ -65,13 +69,13 @@ export function PhoneBulkImport({
       setOpenedURL(analyse ? entries[0].url : "");
       setValue("");
       setNotice(
-        `この端末に${result.added}件追加 · 重複${result.existing}件${result.updated !== undefined ? ` · 情報${result.updated}件補完` : ""}${analyse ? ` · ${MORTAL_READY}` : ""}`,
+        `${place}に${result.added}件追加 · 重複${result.existing}件${result.updated !== undefined ? ` · 情報${result.updated}件補完` : ""}${analyse ? ` · ${MORTAL_READY}` : ""}`,
       );
       try {
         await onSaved();
       } catch {
         setError(
-          "端末への保存は完了しました。画面を更新できませんでした。牌譜タブを開き直してください。",
+          "保存は完了しました。画面を更新できませんでした。牌譜タブを開き直してください。",
         );
       }
     });
@@ -143,6 +147,7 @@ export function PhoneBulkImport({
           }}
         />
       </label>
+      {tools}
       <details>
         <summary>情報付き取得コード</summary>
         <label>

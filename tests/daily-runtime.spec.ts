@@ -256,7 +256,7 @@ test("runtime HTTP rejects remote control and a failed copy keeps the local back
     await route.fulfill({ json: { ok: true, data } });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "学習", exact: true }).click();
+  await page.getByRole("button", { name: "設定", exact: true }).click();
   await page
     .getByRole("button", { name: "バックアップと復元", exact: true })
     .click();
