@@ -1,4 +1,5 @@
 import { AppHeader, AppNavigation } from "./app-navigation";
+import { RoundReview, type ReviewTarget } from "./round-review";
 import historyCode from "../docs/snippets/ipad-history-metadata-shortcut.js?raw";
 import { PhoneBulkImport } from "./phone-bulk-import";
 import { VersionUpdate } from "./version-update";
@@ -46,6 +47,10 @@ function PhoneApp() {
     "study",
   );
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [roundReview, setRoundReview] = useState<ReviewTarget | null>(null);
+  const [roundPending, setRoundPending] = useState(false);
+  const roundPendingRef = useRef(false);
+  const [reviewReports, setReviewReports] = useState<string[]>([]);
   const [reportFilter, setReportFilter] = useState<string[] | undefined>();
   const [active, setActive] = useState(false);
   const studying =
@@ -84,6 +89,12 @@ function PhoneApp() {
   const refresh = async () => {
     setWorkspace(await api<Workspace>({ action: "state" }));
     const state = await readPhone();
+    setReviewReports([
+      ...new Set([
+        ...(state?.local_imports ?? []).map((e) => e.material.id),
+        ...(state?.pack?.items ?? []).map((i) => i.report),
+      ]),
+    ]);
     setLocal(state?.schema === 2);
     setURLPending(
       state?.analysis_queue?.filter((e) => !e.received).length ?? 0,
@@ -332,7 +343,7 @@ function PhoneApp() {
   return (
     <div
       ref={studyRef}
-      className={`phone-app${studying ? " is-studying" : ""}`}
+      className={`phone-app${studying ? " is-studying" : ""}${screen === "replays" && roundReview ? " is-round-reviewing" : ""}`}
     >
       <AppHeader>
         <div
@@ -415,6 +426,7 @@ function PhoneApp() {
               !loaded ||
               busyRef.current ||
               importBusyRef.current ||
+              roundPendingRef.current ||
               syncRunning.current ||
               updateLocked()
             )
@@ -436,6 +448,19 @@ function PhoneApp() {
             </div>
           )}
           <div hidden={screen !== "study"}>
+            {!active && !libraryOpen && (
+              <button
+                className="text-button"
+                disabled={busy || importBusy}
+                onClick={() => {
+                  if (roundPending) return;
+                  setRoundReview("saved");
+                  setScreen("replays");
+                }}
+              >
+                保存した場面
+              </button>
+            )}
             {!active && !libraryOpen ? (
               <>
                 <PhoneStudyHome
@@ -495,7 +520,20 @@ function PhoneApp() {
               </>
             )}
           </div>
-          <div hidden={screen !== "replays"}>
+          {roundReview && (
+            <div hidden={screen !== "replays"}>
+              <RoundReview
+                key={JSON.stringify(roundReview)}
+                target={roundReview}
+                onPending={(value) => {
+                  roundPendingRef.current = value;
+                  setRoundPending(value);
+                }}
+                onClose={() => setRoundReview(null)}
+              />
+            </div>
+          )}
+          <div hidden={!!roundReview || screen !== "replays"}>
             <h1 className="phone-tab-title">牌譜</h1>
             <section className="panel phone-imports" aria-label="牌譜を追加">
               <details className="phone-source-add">
@@ -549,6 +587,9 @@ function PhoneApp() {
               />
             </section>
             <PhoneReplayList
+              onRoundReview={(report) => {
+                if (!roundPending) setRoundReview({ report });
+              }}
               entries={analysisQueue}
               disabled={busy || importBusy || syncing}
               onDelete={(ids) =>
@@ -565,6 +606,22 @@ function PhoneApp() {
                 setScreen("study");
               }}
             />
+            {!!reviewReports.length && (
+              <details className="panel">
+                <summary>解析結果から一局を選ぶ</summary>
+                {reviewReports.map((report, i) => (
+                  <button
+                    key={report}
+                    className="text-button"
+                    onClick={() => {
+                      if (!roundPending) setRoundReview({ report });
+                    }}
+                  >
+                    解析結果 {i + 1} · 一局レビュー
+                  </button>
+                ))}
+              </details>
+            )}
           </div>
           <div hidden={screen !== "settings"}>
             <h1 className="phone-tab-title">設定</h1>
@@ -693,7 +750,7 @@ function PhoneApp() {
       <AppNavigation
         screen={screen}
         inert={updateLock}
-        disabled={busy || importBusy}
+        disabled={busy || importBusy || roundPending}
         onChange={(id) => {
           setScreen(id);
           setSyncNoticeOpen(false);

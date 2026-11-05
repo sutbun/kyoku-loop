@@ -104,9 +104,17 @@ test("direct drop pins the chosen row through async inspection; cancel and inval
     );
     await expect(page.getByLabel("解析対象プレイヤー")).toBeDisabled();
     await page.getByRole("button", { name: "このプレイヤーで登録" }).click();
-    await expect(page.getByTestId("real-comparison")).toContainText(
-      "Mortal推奨",
-    );
+    await expect(page.getByTestId("real-comparison")).toContainText("Mortal");
+    await expect(
+      page
+        .getByTestId("real-comparison")
+        .getByRole("img", { name: "1萬", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByTestId("real-comparison")
+        .getByRole("img", { name: "赤5筒", exact: true }),
+    ).toBeVisible();
     const commit = requests.find((r) => r.action === "commit");
     expect(commit).toMatchObject({
       source_url: second,

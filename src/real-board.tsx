@@ -245,12 +245,19 @@ export function RealTable({
   selected = null,
   onSelect,
   report,
+  annotations,
+  reviewHands,
 }: {
   scene: Scene;
   interactive?: boolean;
   selected?: string | null;
   onSelect?: (value: string) => void;
   report?: string;
+  annotations?: Record<
+    string,
+    { policy?: number; rank?: number; actual?: boolean; answer?: boolean }
+  >;
+  reviewHands?: string[][];
 }) {
   const [chosenIndex, setChosenIndex] = useState<number | null>(null);
   const hand = [...scene.own_hand];
@@ -291,13 +298,15 @@ export function RealTable({
     setLoadingSeat(seat);
     setRevealError("");
     try {
-      const result = await api<{ hands: string[][] }>({
-        action: "open_hands",
-        item: scene.id,
-        report,
-        round_index: scene.round_index,
-        event_index: scene.event_index,
-      });
+      const result = reviewHands
+        ? { hands: reviewHands }
+        : await api<{ hands: string[][] }>({
+            action: "open_hands",
+            item: scene.id,
+            report,
+            round_index: scene.round_index,
+            event_index: scene.event_index,
+          });
       if (generation !== epoch.current) return;
       if (
         !Array.isArray(result.hands) ||
@@ -338,7 +347,9 @@ export function RealTable({
               openTiles={opened ? hands?.[seat] : undefined}
               onToggle={() => void toggle(seat)}
               loading={loadingSeat === seat}
-              disabled={loadingSeat !== null || (!scene.id && !report)}
+              disabled={
+                loadingSeat !== null || (!scene.id && !report && !reviewHands)
+              }
             />
           );
         })}
@@ -379,11 +390,32 @@ export function RealTable({
         data-testid="real-hand"
         aria-label="自分の手牌"
       >
-        {tiles.map((t, i) =>
-          interactive ? (
+        {tiles.map((t, i) => {
+          // Each candidate belongs to one tile kind, not every physical copy.
+          const mark = tiles.indexOf(t) === i ? annotations?.[t] : undefined;
+          const label = mark && (
+            <>
+              {mark.policy !== undefined && (
+                <span
+                  className={`review-policy rank-${mark.rank} label-row-${i % 2}`}
+                  aria-label={`AI推奨度 ${mark.policy.toFixed(1)}%`}
+                >
+                  {mark.policy.toFixed(1)}%
+                </span>
+              )}
+              {(mark.actual || mark.answer) && (
+                <span className="review-mark">
+                  {[mark.actual && "実打", mark.answer && "回答"]
+                    .filter(Boolean)
+                    .join("・")}
+                </span>
+              )}
+            </>
+          );
+          return interactive ? (
             <button
               key={i}
-              className={`tile-choice ${selectedIndex === i ? "selected" : ""} ${scene.drawn && i === tiles.length - 1 ? "drawn" : ""}`}
+              className={`tile-choice ${annotations ? "review-hand-tile" : ""} ${selectedIndex === i ? "selected" : ""} ${scene.drawn && i === tiles.length - 1 ? "drawn" : ""}`}
               aria-label={`${i + 1}枚目 ${tileLabel(uiTile(t))}`}
               aria-pressed={selectedIndex === i}
               onClick={() => {
@@ -392,16 +424,18 @@ export function RealTable({
               }}
             >
               <RealTile value={t} />
+              {label}
             </button>
           ) : (
             <span
               key={i}
-              className={scene.drawn && i === tiles.length - 1 ? "drawn" : ""}
+              className={`${annotations ? "review-hand-tile" : ""} ${scene.drawn && i === tiles.length - 1 ? "drawn" : ""}`}
             >
               <RealTile value={t} />
+              {label}
             </span>
-          ),
-        )}
+          );
+        })}
       </div>
     </div>
   );

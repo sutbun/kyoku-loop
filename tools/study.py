@@ -514,6 +514,10 @@ class StudyMixin:
         except ImportError:from paipu_history import META_PREFIX, validated_meta
         analysis_urls = {r['key'][len(PREFIX):]:stored_entry(json.loads(r['value']))['url'] for r in rows['study_settings'] if r['key'].startswith(PREFIX)}
         for row in rows['study_settings']:
+            if row['key']=='round_review_v1':
+                try:from .round_review import validate_state
+                except ImportError:from round_review import validate_state
+                validate_state(json.loads(row['value']))
             if row['key'].startswith(META_PREFIX):
                 meta = validated_meta(json.loads(row['value']))
                 if analysis_urls.get(row['key'][len(META_PREFIX):]) != meta['url']: raise StudyFailure('invalid_backup')
@@ -530,6 +534,13 @@ class StudyMixin:
         fingerprint,rows=self._read_backup(name)
         conflicts=0
         adopt=[]
+        review=next((r for r in rows['study_settings'] if r['key']=='round_review_v1'),None)
+        if review and self.db.execute("SELECT 1 FROM study_settings WHERE key='round_review_v1'").fetchone():
+            try:
+                try:from .round_review import merge_missing,read_state
+                except ImportError:from round_review import merge_missing,read_state
+                merge_missing(read_state(self),json.loads(review['value']))
+            except ValueError: conflicts+=1
         for e in rows['review_events']:
             current=self.db.execute('SELECT * FROM review_events WHERE id=?',(e['id'],)).fetchone()
             if current and not same_original(dict(current),e): conflicts+=1
@@ -577,6 +588,12 @@ class StudyMixin:
                 if report['source_game_url']:
                     self.db.execute('UPDATE reports SET source_game_url=COALESCE(source_game_url,?) WHERE id=?',(report['source_game_url'],report['id']))
             for row in rows['study_settings']:
+                if row['key']=='round_review_v1':
+                    try:from .round_review import merge_missing,read_state,KEY
+                    except ImportError:from round_review import merge_missing,read_state,KEY
+                    has_review=self.db.execute('SELECT 1 FROM study_settings WHERE key=?',(KEY,)).fetchone()
+                    merged=merge_missing(read_state(self),json.loads(row['value'])) if has_review else json.loads(row['value'])
+                    self.db.execute('INSERT INTO study_settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(KEY,json.dumps(merged,ensure_ascii=False)))
                 if row['key'].startswith(PREFIX):
                     incoming=stored_entry(json.loads(row['value']))
                     current=self.db.execute('SELECT value FROM study_settings WHERE key=?',(row['key'],)).fetchone()

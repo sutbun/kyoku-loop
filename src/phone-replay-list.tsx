@@ -20,6 +20,7 @@ export function PhoneReplayList({
   onResult,
   onRequested,
   onDropResult,
+  onRoundReview,
 }: {
   entries: AnalysisEntry[];
   disabled: boolean;
@@ -31,6 +32,7 @@ export function PhoneReplayList({
   onResult?: (entry: AnalysisEntry) => void;
   onRequested?: (entry: AnalysisEntry) => void;
   onDropResult?: (entry: AnalysisEntry, files: File[]) => void;
+  onRoundReview?: (report: string) => void;
 }) {
   const [filter, setFilter] = useState("すべて");
   const [limit, setLimit] = useState(10);
@@ -161,6 +163,15 @@ export function PhoneReplayList({
                   {unsupported ? "東風は対象外" : "Mortalへ"}
                 </button>
               ) : null}
+              {onRoundReview && e.reports?.length === 1 && (
+                <button
+                  className="button secondary"
+                  disabled={disabled}
+                  onClick={() => onRoundReview(e.reports![0])}
+                >
+                  一局レビュー
+                </button>
+              )}
               <details className="phone-replay-details">
                 <summary>詳細</summary>
                 <div className="phone-replay-detail">
@@ -192,6 +203,21 @@ export function PhoneReplayList({
                         </button>
                       ),
                   )}
+                  {onRoundReview &&
+                    e.reports &&
+                    e.reports.length > 1 &&
+                    e.reports.map((id) => (
+                      <button
+                        key={`round-${id}`}
+                        className="text-button"
+                        disabled={disabled}
+                        onClick={() => onRoundReview(id)}
+                      >
+                        {reports.find((r) => r.id === id)?.model_name ??
+                          "解析結果"}{" "}
+                        · 一局レビュー
+                      </button>
+                    ))}
                   {onResult && (
                     <button
                       className="text-button"

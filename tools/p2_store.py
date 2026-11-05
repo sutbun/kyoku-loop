@@ -502,6 +502,16 @@ def main():
         elif action=='analysis_setup': result=store.analysis_setup(request.get('seen'))
         elif action=='detail':
             result=store.detail(request.get('id'))
+        elif action.startswith('round_review_'):
+            try:from . import round_review
+            except ImportError:import round_review
+            try:
+                if action=='round_review_state': result=round_review.read_state(store)
+                elif action=='round_review_change': result=round_review.change(store,request.get('op',{}))
+                elif action=='round_review_catalog': result=round_review.catalog(store,request.get('report'))
+                elif action=='round_review_material': result=round_review.material(store,request.get('report'),request.get('round_index'))
+                else: raise ValueError('invalid_review')
+            except ValueError: raise ImportFailure('invalid_review') from None
         elif action=='open_hands': result=store.open_hands(request.get('item'),request.get('report'),request.get('round_index'),request.get('event_index'))
         elif action=='save':
             result=store.save(request.get('report'),request.get('id'),request.get('saved'))

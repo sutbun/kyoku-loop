@@ -111,3 +111,13 @@ def preview_upload(encoded, created_at):
     material = compile_upload(encoded, created_at)
     report = json.loads(gzip.decompress(base64.b64decode(material['payload'])))
     return {'material': material, 'final_scores': mortal_report.final_scores(report)}
+
+
+def review_upload(encoded, created_at, round_index=None):
+    try:from .round_review import content_catalog, content_material
+    except ImportError:from round_review import content_catalog, content_material
+    retained = compile_upload(encoded, created_at)
+    report = json.loads(gzip.decompress(base64.b64decode(retained['payload'])))
+    compiled = compile_material(report)
+    if round_index is None: return content_catalog(compiled['content'])
+    return content_material(compiled['content'], compiled['game'], report, round_index)

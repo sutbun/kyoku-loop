@@ -1,4 +1,5 @@
 import { PhoneMortalImport } from "./phone-mortal-import";
+import { RoundReview, type ReviewTarget } from "./round-review";
 import { useEffect, useRef, useState } from "react";
 import { api, errors } from "./api";
 import { RealTable, roundLabel, eventLabels } from "./real-board";
@@ -41,6 +42,8 @@ export function RealApp() {
   });
   const [screen, setScreen] = useState<AppTab>("study");
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [roundReview, setRoundReview] = useState<ReviewTarget | null>(null);
+  const [roundPending, setRoundPending] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [reportFilter, setReportFilter] = useState<string[] | undefined>();
   const [backups, setBackups] = useState(false);
@@ -307,7 +310,7 @@ export function RealApp() {
   return (
     <div
       ref={studyRef}
-      className={`phone-app desktop-app${studying ? " is-studying" : ""}${screen === "replays" && reviewOpen ? " is-reviewing" : ""}`}
+      className={`phone-app desktop-app${studying ? " is-studying" : ""}${screen === "replays" && reviewOpen ? " is-reviewing" : ""}${screen === "replays" && roundReview ? " is-round-reviewing" : ""}`}
     >
       <AppHeader>
         <span className="phone-connection" aria-live="polite">
@@ -349,7 +352,20 @@ export function RealApp() {
               </button>
             </div>
           )}
-          <div hidden={screen !== "replays" || reviewOpen}>
+          {roundReview && (
+            <div hidden={screen !== "replays"}>
+              <RoundReview
+                key={JSON.stringify(roundReview)}
+                target={roundReview}
+                onPending={setRoundPending}
+                onClose={() => {
+                  setRoundReview(null);
+                  setReviewOpen(false);
+                }}
+              />
+            </div>
+          )}
+          <div hidden={!!roundReview || screen !== "replays" || reviewOpen}>
             <h1 className="phone-tab-title">牌譜</h1>
             <section className="panel phone-imports" aria-label="牌譜を追加">
               <details className="phone-source-add">
@@ -397,6 +413,9 @@ export function RealApp() {
               disabled={busy || bulkBusy}
               onProblems={problems}
               onReview={(id) => void run(() => open(id))}
+              onRoundReview={(report) => {
+                if (!roundPending) setRoundReview({ report });
+              }}
               onDelete={(ids) =>
                 void run(async () => {
                   await api({ action: "analysis_delete", ids });
@@ -452,6 +471,15 @@ export function RealApp() {
                       <span className="badge">
                         重要局面 {r.important_count}
                       </span>
+                      <button
+                        className="button secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          if (!roundPending) setRoundReview({ report: r.id });
+                        }}
+                      >
+                        一局レビュー
+                      </button>
                       {r.engine === "Mortal" && !r.source_linked && (
                         <ReportSourceLink
                           report={r.id}
@@ -515,7 +543,7 @@ export function RealApp() {
               {guide && <AnalysisGuide onClose={() => setGuide(false)} />}
             </details>
           </div>
-          {screen === "replays" && reviewOpen && (
+          {!roundReview && screen === "replays" && reviewOpen && (
             <>
               <button
                 className="text-button"
@@ -659,6 +687,19 @@ export function RealApp() {
             </>
           )}
           <div hidden={screen !== "study"}>
+            {!learning && !libraryOpen && (
+              <button
+                className="text-button"
+                disabled={busy || bulkBusy}
+                onClick={() => {
+                  if (roundPending) return;
+                  setRoundReview("saved");
+                  setScreen("replays");
+                }}
+              >
+                保存した場面
+              </button>
+            )}
             {!learning && !libraryOpen ? (
               <PhoneStudyHome
                 workspace={workspace}
@@ -711,7 +752,7 @@ export function RealApp() {
       </main>
       <AppNavigation
         screen={screen}
-        disabled={busy || bulkBusy || adding}
+        disabled={busy || bulkBusy || adding || roundPending}
         onChange={(id) => {
           setScreen(id);
           if (id === "replays") setReviewOpen(false);
