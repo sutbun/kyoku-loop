@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 // Wheel events already contain platform inertia. Queue individual steps instead
 // of locking a whole wheel burst; touch has the same bounded, decaying motion.
@@ -6,13 +6,15 @@ export function useReviewGestures(
   ref: RefObject<HTMLDivElement | null>,
   move: (delta: number) => boolean,
 ) {
+  // A hand transition replaces the board during a swipe. Keep suppressing its
+  // trailing synthetic click even after listeners attach to the new board.
+  const suppressedUntil = useRef(0);
   useEffect(() => {
     const board = ref.current?.querySelector<HTMLElement>(".table");
     if (!board) return;
     let pending = 0,
       frame = 0,
-      lastStep = 0,
-      suppressedUntil = 0;
+      lastStep = 0;
     let touch: {
       x: number;
       y: number;
@@ -107,12 +109,12 @@ export function useReviewGestures(
       touch.lastY = p.clientY;
       touch.at = now;
       touch.swiped = true;
-      suppressedUntil = now + 500;
+      suppressedUntil.current = now + 500;
       start();
     };
     const touchEnd = () => {
       if (touch?.swiped) {
-        suppressedUntil = performance.now() + 500;
+        suppressedUntil.current = performance.now() + 500;
         velocity = performance.now() - touch.at < 100 ? touch.velocity : 0;
         start();
       }
@@ -121,10 +123,10 @@ export function useReviewGestures(
     const touchCancel = () => {
       touch = null;
       velocity = pending = 0;
-      suppressedUntil = performance.now() + 500;
+      suppressedUntil.current = performance.now() + 500;
     };
     const click = (e: MouseEvent) => {
-      if (performance.now() < suppressedUntil) {
+      if (performance.now() < suppressedUntil.current) {
         e.preventDefault();
         e.stopPropagation();
         return;

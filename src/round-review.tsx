@@ -31,6 +31,9 @@ import "./round-review.css";
 export type ReviewTarget =
   { report: string; round?: number; event?: number } | "saved";
 
+type OpenPosition = "start" | "end" | "decision";
+type OpenOptions = { position?: OpenPosition; quiz?: boolean };
+
 export function RoundReview({
   target,
   onClose,
@@ -61,12 +64,14 @@ export function RoundReview({
     queue = useRef<ReviewChange[]>([]),
     draining = useRef<Promise<boolean> | null>(null);
   const alive = useRef(true);
+  const opening = useRef(false);
   const storageEnd = useRef<(() => void) | null>(null);
   const initialized = useRef(false),
     attempted = useRef<{
       report: string;
       round?: number;
       event?: number;
+      options?: OpenOptions;
     } | null>(null);
   const drain = (): Promise<boolean> => {
     if (draining.current) return draining.current;
@@ -123,9 +128,24 @@ export function RoundReview({
       setError(e instanceof Error ? e.message : "保存できませんでした。");
     }
   }, []);
-  const open = async (report: string, round?: number, event?: number) => {
-    attempted.current = { report, round, event };
+  const open = async (
+    report: string,
+    round?: number,
+    event?: number,
+    options: OpenOptions = {},
+  ) => {
+    // Carry the active mode within this report, while keeping each hand's
+    // answers and remembered location independent. Capture it for retries too.
+    const source = current.current;
+    const quiz =
+      options.quiz ??
+      (source?.report === report
+        ? data.current.sessions[roundKey(source)]?.quiz
+        : undefined);
+    options = { ...options, quiz };
+    attempted.current = { report, round, event, options };
     const generation = ++epoch.current;
+    opening.current = true;
     setLoading(true);
     setError("");
     try {
@@ -140,33 +160,42 @@ export function RoundReview({
       setMaterial(m);
       const remembered =
         data.current.sessions[roundKey(m)] ?? newRoundSession();
+      const explicit =
+        event === undefined
+          ? -1
+          : m.timeline.findIndex((s) => s.event_index === event);
+      const index =
+        explicit >= 0
+          ? explicit
+          : options.position === "start"
+            ? 0
+            : options.position === "end"
+              ? m.timeline.length - 1
+              : options.position === "decision"
+                ? Math.max(
+                    0,
+                    m.timeline.findIndex((s) => s.is_decision),
+                  )
+                : Math.min(remembered.index, m.timeline.length - 1);
       change({
         kind: "session",
         key: roundKey(m),
         value: {
           ...remembered,
-          index: Math.min(remembered.index, m.timeline.length - 1),
+          quiz: quiz ?? remembered.quiz,
+          index,
         },
       });
-      if (event !== undefined) {
-        const index = m.timeline.findIndex((s) => s.event_index === event);
-        if (index >= 0)
-          change({
-            kind: "session",
-            key: roundKey(m),
-            value: {
-              ...(data.current.sessions[roundKey(m)] ?? newRoundSession()),
-              index,
-            },
-          });
-      }
       return true;
     } catch (e) {
       if (alive.current && epoch.current === generation)
         setError(e instanceof Error ? e.message : "局を開けませんでした。");
       return false;
     } finally {
-      if (alive.current && epoch.current === generation) setLoading(false);
+      if (alive.current && epoch.current === generation) {
+        opening.current = false;
+        setLoading(false);
+      }
     }
   };
   useEffect(() => {
@@ -220,14 +249,32 @@ export function RoundReview({
   const move = useCallback(
     (delta: number) => {
       const m = current.current;
-      if (!m) return false;
+      if (!m || opening.current) return false;
       const s = data.current.sessions[roundKey(m)] ?? newRoundSession();
       const index = navigate(m, s, s.index + delta);
-      if (index === s.index) return false;
+      if (index === s.index) {
+        const scene = m.timeline[s.index];
+        const unanswered =
+          s.quiz && scene.is_decision && !s.answers[String(scene.event_index)];
+        const atBoundary =
+          delta < 0 ? s.index === 0 : s.index === m.timeline.length - 1;
+        const ri =
+          catalog?.rounds.findIndex((r) => r.index === m.round_index) ?? -1;
+        const adjacent =
+          ri < 0 ? undefined : catalog?.rounds[ri + Math.sign(delta)];
+        if (atBoundary && !(delta > 0 && unanswered) && adjacent)
+          void open(m.report, adjacent.index, undefined, {
+            position: delta < 0 ? "end" : "start",
+            quiz: s.quiz,
+          });
+        // Stop the old table's inertia at a hand transition. The synchronous
+        // opening ref also prevents duplicate requests before React rerenders.
+        return false;
+      }
       change({ kind: "session", key: roundKey(m), value: { ...s, index } });
       return true;
     },
-    [change],
+    [change, catalog],
   );
   // Changing the loaded round installs gestures on its own table only.
   const gestureMove = useCallback(
@@ -324,6 +371,12 @@ export function RoundReview({
     material?.timeline.findIndex(
       (s, i) => i > session.index && s.is_decision,
     ) ?? -1;
+  const roundPosition =
+    catalog?.rounds.findIndex((r) => r.index === material?.round_index) ?? -1;
+  const previousRound =
+    roundPosition > 0 ? catalog?.rounds[roundPosition - 1] : undefined;
+  const nextRound =
+    roundPosition >= 0 ? catalog?.rounds[roundPosition + 1] : undefined;
   const saved =
     material && scene
       ? state.bookmarks.find((b) => b.id === bookmarkKey(material, scene))
@@ -379,7 +432,13 @@ export function RoundReview({
       (target === "saved"
         ? null
         : { report: target.report, round: target.round, event: target.event });
-    if (next) await open(next.report, next.round, next.event);
+    if (next)
+      await open(
+        next.report,
+        next.round,
+        next.event,
+        "options" in next ? next.options : undefined,
+      );
   };
   return (
     <section className="round-review" ref={root} aria-label="一局レビュー">
@@ -466,8 +525,16 @@ export function RoundReview({
             {!hidden && session.quiz && scene.is_decision && (
               <button
                 className="button secondary"
-                disabled={nextDecision < 0}
-                onClick={() => jump(nextDecision)}
+                disabled={nextDecision < 0 && !nextRound}
+                onClick={() =>
+                  nextDecision >= 0
+                    ? jump(nextDecision)
+                    : nextRound &&
+                      void open(material.report, nextRound.index, undefined, {
+                        position: "decision",
+                        quiz: session.quiz,
+                      })
+                }
               >
                 次の判断へ
               </button>
@@ -476,17 +543,20 @@ export function RoundReview({
               {session.index + 1} / {material.timeline.length}
             </span>
           </div>
-          <nav className="round-review-controls" aria-label="局内の移動">
+          <nav className="round-review-controls" aria-label="牌譜の移動">
             <button
               className="button secondary"
-              disabled={session.index <= 0}
+              disabled={session.index <= 0 && !previousRound}
               onClick={() => move(-1)}
             >
               前の一手
             </button>
             <button
               className="button secondary"
-              disabled={session.index >= material.timeline.length - 1 || hidden}
+              disabled={
+                (session.index >= material.timeline.length - 1 && !nextRound) ||
+                hidden
+              }
               onClick={() => move(1)}
             >
               次の一手
