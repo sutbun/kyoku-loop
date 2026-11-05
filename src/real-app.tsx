@@ -715,7 +715,7 @@ export function RealApp() {
         onChange={(id) => {
           setScreen(id);
           if (id === "replays") setReviewOpen(false);
-          void run(refresh);
+          // Navigation reuses loaded state; mutations, focus and polling refresh it.
         }}
       />
       {backups && (

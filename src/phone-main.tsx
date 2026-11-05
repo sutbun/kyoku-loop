@@ -697,7 +697,7 @@ function PhoneApp() {
         onChange={(id) => {
           setScreen(id);
           setSyncNoticeOpen(false);
-          void run(refresh);
+          // Keep storage/runtime verification out of display-only navigation.
         }}
       />
     </div>
