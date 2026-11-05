@@ -2,6 +2,7 @@ import { useState } from "react";
 import { analysisStatus, type AnalysisEntry } from "./analysis-queue";
 import { openMortal } from "./mortal-handoff";
 import { ReplaySelection, useReplaySelection } from "./replay-selection";
+import { ReplaySort, sortReplays, type ReplayOrder } from "./replay-sort";
 
 export function PhoneReplayList({
   entries,
@@ -16,11 +17,8 @@ export function PhoneReplayList({
 }) {
   const [filter, setFilter] = useState("すべて");
   const [limit, setLimit] = useState(10);
-  const ordered = [...entries].sort(
-    (a, b) =>
-      Date.parse(b.history?.at ?? b.created) -
-      Date.parse(a.history?.at ?? a.created),
-  );
+  const [order, setOrder] = useState<ReplayOrder>("added");
+  const ordered = sortReplays(entries, order);
   const filtered = ordered.filter(
     (e) =>
       filter === "すべて" ||
@@ -49,6 +47,13 @@ export function PhoneReplayList({
           </button>
         ))}
       </div>
+      <ReplaySort
+        value={order}
+        onChange={(value) => {
+          setOrder(value);
+          setLimit(10);
+        }}
+      />
       <div className="analysis-list">
         <ReplaySelection
           entries={filtered}

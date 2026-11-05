@@ -1281,6 +1281,18 @@ footer > span:first-child {
 .replay-filters button {
   white-space: nowrap;
 }
+.replay-sort {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.replay-sort select {
+  width: auto;
+  max-width: 100%;
+  padding: 8px 12px;
+}
 .library-list {
   border: 1px solid var(--line);
   background: var(--paper);
