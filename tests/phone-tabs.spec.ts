@@ -97,7 +97,7 @@ const tab = (page: Page, name: string) =>
 
 test("paipuya opens the private player page in another tab and retains the URL draft", async ({
   page,
-}) => {
+}, testInfo) => {
   await openPhone(page);
   await tab(page, "牌譜");
   await page.getByText("URLを追加", { exact: true }).click();
@@ -109,14 +109,12 @@ test("paipuya opens the private player page in another tab and retains the URL d
   await expect(link).toHaveAttribute("href", paipuyaURL());
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
   // Fulfill locally; never contact the real site during automated verification.
-  await page
-    .context()
-    .route("https://amae-koromo.sapk.ch/**", (route) =>
-      route.fulfill({
-        contentType: "text/html",
-        body: "<title>架空の牌譜屋</title>",
-      }),
-    );
+  await page.context().route("https://amae-koromo.sapk.ch/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<title>架空の牌譜屋</title>",
+    }),
+  );
   const popupReady = page.waitForEvent("popup");
   await link.click();
   const popup = await popupReady;
@@ -129,6 +127,9 @@ test("paipuya opens the private player page in another tab and retains the URL d
   await tab(page, "学習");
   await tab(page, "牌譜");
   await expect(input).toHaveValue(draft);
+  await page
+    .locator(".phone-source-add")
+    .screenshot({ path: testInfo.outputPath("paipuya-phone.png") });
 });
 
 for (const [width, height] of [
