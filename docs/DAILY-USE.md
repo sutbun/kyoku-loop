@@ -14,6 +14,8 @@ iPadは初回の「端末だけで使う準備」後、取得済みMortal JSON�
 
 iPad・スマホの下部タブは「学習・牌譜・設定」。起動時は学習を開く。URL/解析結果の登録は「牌譜」、保存/同期/学習の設定/記録の保存と復旧は「設定」へ進む。詳細は [PHONE-NAVIGATION.md](PHONE-NAVIGATION.md)。
 
+牌譜屋は「牌譜」→「URLを追加」→「牌譜屋を開く」で別タブに開く。既存のショートカットで取得したURLを元の画面へ貼り付ける。Windowsは「牌譜屋から一括追加」に同じリンクがある。リンク先はGit外の `D:/dev-data/kyoku-loop/private/app/external-links.json` の `paipuya` に設定し、ビルド時に取り込む（任意のファイルは `KYOKULOOP_EXTERNAL_LINKS_FILE` で指定）。未設定なら牌譜屋トップを開く。変更時は再ビルド・再配備が必要。個人のプレイヤーURLはGitへ登録しない。
+
 ## バックアップ
 
 **KyokuLoop バックアップ**、またはアプリの **学習 → バックアップと復元 → バックアップを作成** を使う。

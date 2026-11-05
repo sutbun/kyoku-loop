@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve, extname, sep } from "node:path";
 import { phoneFixture } from "./phone-fixture";
 import { freshPhoneState, phoneReduce } from "../src/offline/engine";
+import { paipuyaURL } from "../tools/external-links";
 
 test.use({ serviceWorkers: "block" });
 const pack = phoneFixture();
@@ -93,6 +94,42 @@ const tab = (page: Page, name: string) =>
     .getByRole("navigation", { name: "メイン" })
     .getByRole("button", { name, exact: true })
     .click();
+
+test("paipuya opens the private player page in another tab and retains the URL draft", async ({
+  page,
+}) => {
+  await openPhone(page);
+  await tab(page, "牌譜");
+  await page.getByText("URLを追加", { exact: true }).click();
+  const draft =
+    "https://game.mahjongsoul.com/?paipu=260101-fictional-link_a123";
+  const input = page.getByRole("textbox", { name: "雀魂共有URL" });
+  await input.fill(draft);
+  const link = page.getByRole("link", { name: "牌譜屋を開く", exact: true });
+  await expect(link).toHaveAttribute("href", paipuyaURL());
+  await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  // Fulfill locally; never contact the real site during automated verification.
+  await page
+    .context()
+    .route("https://amae-koromo.sapk.ch/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<title>架空の牌譜屋</title>",
+      }),
+    );
+  const popupReady = page.waitForEvent("popup");
+  await link.click();
+  const popup = await popupReady;
+  await expect(popup).toHaveURL(paipuyaURL());
+  await expect
+    .poll(() => popup.evaluate(() => window.opener === null))
+    .toBe(true);
+  await popup.close();
+  await expect(input).toHaveValue(draft);
+  await tab(page, "学習");
+  await tab(page, "牌譜");
+  await expect(input).toHaveValue(draft);
+});
 
 for (const [width, height] of [
   [390, 844],
@@ -356,11 +393,9 @@ for (const [width, count] of [
         mimeType: "application/json",
         buffer: Buffer.from("{}"),
       });
-    const preview = page
-      .getByRole("status")
-      .filter({
-        hasText: count === 1 ? "紐付け先（自動選択）" : "自動紐付けの候補",
-      });
+    const preview = page.getByRole("status").filter({
+      hasText: count === 1 ? "紐付け先（自動選択）" : "自動紐付けの候補",
+    });
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("2026/11/3 09:00");
     await expect(preview).toContainText("1位 · 25,000点");
