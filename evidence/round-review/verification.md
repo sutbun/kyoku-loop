@@ -2,6 +2,8 @@
 
 実装版: DEV-11.06-1。現行仕様は [ROUND-REVIEW.md](../../docs/ROUND-REVIEW.md)。配備SHAと実機確認の状態は共有Task `round-review.md` を参照する。
 
+11.06-2の追加変更: クイズの手牌タップで選択と回答を同時に保存し、その場でAI候補/実打/回答を開く。確認ボタンを除き、次の判断へは自動移動しない。修正前はタップ後の候補が0件のままになる失敗を再現。修正後のcheck/build・一局レビューEdge16件・通常復習の回答方式3件が成功。再起動後の回答/タグ/メモ保持と、通常復習の設定を維持する。変更のないbackendとWorkerは下記の検証を再利用する。
+
 - `npm run check` / `npm run build` 成功。
 - `npm run test:core`: Python全174件成功。局別の全手順/評価、既存LocalMaterialの出力保持、独立した保存/途中位置、バックアップの追加復元と新しい記録の保持を含む。
 - `playwright.round-review.config.ts`: 新規20件成功。Windows/phoneの共通画面、最大3候補と赤牌/同率評価、未回答判断での停止、前後一手/不一致、慣性/合成click抑止、タグ統合、保存失敗と再試行、局の再開、オフラインの実Worker、閉じたphone読み取りAPIを確認。

@@ -452,6 +452,7 @@ export function RoundReview({
               onSelect={(t) =>
                 updateSession({
                   selected: { ...getSession().selected, [event]: t },
+                  answers: { ...getSession().answers, [event]: t },
                 })
               }
             />
@@ -462,30 +463,14 @@ export function RoundReview({
                 ? "自分の打牌前"
                 : `${scene.actor === null || scene.actor === undefined ? "" : ["自分", "下家", "対面", "上家"][(scene.actor - scene.seat + 4) % 4] + " · "}${eventLabels[scene.event_type ?? ""] ?? scene.event_type ?? ""}`}
             </span>
-            {hidden ? (
+            {!hidden && session.quiz && scene.is_decision && (
               <button
-                className="button primary"
-                disabled={!chosen}
-                onClick={() =>
-                  chosen &&
-                  updateSession({
-                    answers: { ...getSession().answers, [event]: chosen },
-                  })
-                }
+                className="button secondary"
+                disabled={nextDecision < 0}
+                onClick={() => jump(nextDecision)}
               >
-                答え合わせ
+                次の判断へ
               </button>
-            ) : (
-              session.quiz &&
-              scene.is_decision && (
-                <button
-                  className="button secondary"
-                  disabled={nextDecision < 0}
-                  onClick={() => jump(nextDecision)}
-                >
-                  次の判断へ
-                </button>
-              )
             )}
             <span className="review-event-count" aria-label="現在の手順">
               {session.index + 1} / {material.timeline.length}
