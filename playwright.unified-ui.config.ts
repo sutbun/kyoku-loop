@@ -1,0 +1,30 @@
+import { defineConfig } from "@playwright/test";
+import base from "./playwright.config";
+export default defineConfig({
+  ...base,
+  testMatch: [
+    "unified-ui.spec.ts",
+    "p2.spec.ts",
+    "p3.spec.ts",
+    "p10-bulk-history.spec.ts",
+    "p11-inbox.spec.ts",
+    "p9-handoff.spec.ts",
+    "share-source.spec.ts",
+    "phone-history-metadata.spec.ts",
+    "replay-management-ui.spec.ts",
+    "p8.spec.ts",
+    "phone-tabs.spec.ts",
+    "replay-counts.spec.ts",
+    "replay-sort.spec.ts",
+    "replay-delete.spec.ts",
+    "mortal-source-picker.spec.ts",
+    "mortal-auto-link.spec.ts",
+    "mortal-link-feedback.spec.ts",
+    "mortal-batch.spec.ts",
+    "responsive-study.spec.ts",
+    "study-controls.spec.ts",
+  ],
+  webServer: undefined,
+  workers: 1,
+  outputDir: process.env.KYOKULOOP_TEST_OUTPUT ?? "./test-results/unified-ui",
+});

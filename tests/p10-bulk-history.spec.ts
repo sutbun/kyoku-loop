@@ -131,7 +131,9 @@ test("bulk UI stores a complete batch, shows metadata and opens only the public 
       }),
     );
     await page.goto("/");
-    await page.getByText("牌譜屋から一括追加", { exact: true }).click();
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
+    await page.getByText("URLを追加", { exact: true }).click();
+    await page.getByText("PCで牌譜URLを取得", { exact: true }).click();
     await expect(
       page.getByRole("link", { name: "牌譜URLを一括取得" }),
     ).toHaveAttribute("href", bookmarklet);
@@ -153,8 +155,10 @@ test("bulk UI stores a complete batch, shows metadata and opens only the public 
         { url: second },
       ],
     });
-    await page.getByLabel("一括データ", { exact: true }).fill(payload);
-    await page.getByRole("button", { name: "まとめて追加" }).click();
+    await page
+      .getByRole("textbox", { name: "雀魂共有URL", exact: true })
+      .fill(payload);
+    await page.getByRole("button", { name: "追加", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("2件追加");
     await expect(page.getByTestId("analysis-row")).toHaveCount(2);
     await expect(
@@ -167,8 +171,10 @@ test("bulk UI stores a complete batch, shows metadata and opens only the public 
     await expect(page.getByTestId("analysis-row").first()).toContainText(
       "架空A / 架空C / 架空D",
     );
-    await page.getByLabel("一括データ", { exact: true }).fill(payload);
-    await page.getByRole("button", { name: "まとめて追加" }).click();
+    await page
+      .getByRole("textbox", { name: "雀魂共有URL", exact: true })
+      .fill(payload);
+    await page.getByRole("button", { name: "追加", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("0件追加 · 重複2件");
     await page.screenshot({
       path: test.info().outputPath("fixture-history.png"),
@@ -190,12 +196,13 @@ test("bulk UI stores a complete batch, shows metadata and opens only the public 
     expect(await popup.evaluate(() => window.opener)).toBeNull();
     await popup.close();
     await page.reload();
+    await page.getByRole("button", { name: "牌譜", exact: true }).click();
     await expect(
       page.getByRole("combobox", { name: "牌譜の並び順", exact: true }),
     ).toHaveValue("added");
     await expect(page.getByTestId("analysis-row")).toHaveCount(2);
     await expect(page.getByTestId("analysis-row").first()).toContainText(
-      "保存済み・未解析",
+      "未解析",
     );
   } finally {
     if (

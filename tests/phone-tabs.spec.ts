@@ -215,7 +215,7 @@ test("replays filter, paginate and open only the matching report's problems", as
   await openPhone(page);
   await tab(page, "牌譜");
   await expect(page.getByTestId("analysis-row")).toHaveCount(10);
-  await page.getByRole("button", { name: "学習準備完了", exact: true }).click();
+  await page.getByRole("button", { name: "解析済み 1件", exact: true }).click();
   await expect(page.getByTestId("analysis-row")).toHaveCount(1);
   await expect(
     page.getByText("Windows受信済み", { exact: true }),
@@ -228,7 +228,7 @@ test("replays filter, paginate and open only the matching report's problems", as
     pack.items.filter((i) => i.report === pack.items[0].report).length,
   );
   await tab(page, "牌譜");
-  await page.getByRole("button", { name: "未解析", exact: true }).click();
+  await page.getByRole("button", { name: "未解析 24件", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "問題を見る", exact: true }),
   ).toHaveCount(0);

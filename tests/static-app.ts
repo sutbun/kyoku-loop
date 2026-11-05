@@ -20,3 +20,6 @@ export const test = base.extend({
     await use(page);
   },
 });
+
+// A static fixture must never install a worker that could fetch from the daily app.
+test.use({ serviceWorkers: "block" });

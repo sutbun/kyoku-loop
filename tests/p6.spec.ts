@@ -186,27 +186,34 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
       await route.fulfill({ json: backend(route.request().postDataJSON()) });
     });
     await win.goto("http://127.0.0.1:1460/");
+    await win.getByRole("button", { name: "牌譜", exact: true }).click();
     const row = win.getByTestId("analysis-row");
-    await expect(row).toContainText("保存済み・未解析");
+    await expect(row).toContainText("未解析");
     // Copy/open is preparation only; it does not mark an analysis as requested.
     await win.evaluate(() => {
       window.open = () => null;
     });
     await row.getByRole("button", { name: "Mortalへ", exact: true }).click();
+    await win.getByRole("button", { name: "設定", exact: true }).click();
+    await win.getByText("このPCの管理", { exact: true }).click();
     await win.getByRole("button", { name: "解析の手順", exact: true }).click();
     await expect(win.getByRole("region", { name: "解析の手順" })).toBeVisible();
     await win
       .getByRole("button", { name: "確認しました", exact: true })
       .click();
+    await win.getByRole("button", { name: "牌譜", exact: true }).click();
+    await row.getByText("詳細", { exact: true }).click();
     await row
       .getByRole("button", { name: "解析を依頼した", exact: true })
       .click();
     await expect(row).toContainText("本人申告");
     await win.reload();
+    await win.getByRole("button", { name: "牌譜", exact: true }).click();
     await row.getByRole("button", { name: "Mortalへ", exact: true }).click();
     await expect(win.getByRole("region", { name: "解析の手順" })).toHaveCount(
       0,
     );
+    await row.getByText("詳細", { exact: true }).click();
     await row.getByRole("button", { name: "結果を登録", exact: true }).click();
     const raw = execFileSync(
       "python",
@@ -234,13 +241,12 @@ test("phone URL survives offline process restart, lost receipt and retry; Window
     const result = backend({ action: "state" }).data;
     expect(result.analysis_queue[0].reports).toHaveLength(1);
     expect(result.items).toHaveLength(1);
-    await win.getByRole("button", { name: "ホーム", exact: true }).click();
-    await expect(row).toContainText("学習準備完了");
+    await win.getByRole("button", { name: "牌譜", exact: true }).click();
+    await expect(row).toContainText("学習可");
     await page.getByRole("button", { name: "今すぐ同期", exact: true }).click();
-    await expect(page.getByTestId("analysis-row")).toContainText(
-      "学習準備完了",
-      { timeout: 30000 },
-    );
+    await expect(page.getByTestId("analysis-row")).toContainText("学習可", {
+      timeout: 30000,
+    });
     await expect(page.getByTestId("offline-status")).toHaveText(
       "オフライン利用可能 · 1問",
       { timeout: 30000 },

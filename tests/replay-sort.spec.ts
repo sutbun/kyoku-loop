@@ -42,7 +42,10 @@ async function open(page: Page, phone: boolean, entries: AnalysisEntry[]) {
       },
     });
   });
-  if (!phone) return page.goto("/");
+  if (!phone) {
+    await page.goto("/");
+    return page.getByRole("button", { name: "牌譜", exact: true }).click();
+  }
   await page.addInitScript(() =>
     Object.defineProperty(navigator, "onLine", { get: () => false }),
   );
@@ -114,9 +117,7 @@ test("replays default to addition time, switch to game time, keep unknown dates 
   await expect(
     page.getByTestId("analysis-row").last().getByRole("checkbox"),
   ).toBeChecked();
-  await page
-    .getByRole("button", { name: phone ? "未解析" : "未解析 4件", exact: true })
-    .click();
+  await page.getByRole("button", { name: "未解析 4件", exact: true }).click();
   await expect(order).toHaveValue("played");
   await expect(titles(page).first()).toHaveText(/1\/12/);
   await order.selectOption("added");

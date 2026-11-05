@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { test, expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { test } from "./static-app";
 import type { Detail, Workspace } from "../src/real-types";
 
 // Build fictional API responses with the actual normalizer/private SQLite code.
@@ -27,6 +28,24 @@ with tempfile.TemporaryDirectory(dir='D:/dev-data/kyoku-loop/private') as temp:
   ),
 ) as { raw: object; detail: Detail; workspace: Workspace };
 
+async function addReport(page: Page) {
+  await page.getByRole("button", { name: "牌譜", exact: true }).click();
+  const importer = page.locator(".phone-result-import");
+  if (
+    !(await importer
+      .getByText("レポートURL・NAGA", { exact: true })
+      .isVisible())
+  )
+    await importer.locator(":scope > summary").click();
+  const section = page.locator(".desktop-result-add");
+  const button = section.getByRole("button", {
+    name: "レポートを追加",
+    exact: true,
+  });
+  if (!(await button.isVisible())) await section.locator("summary").click();
+  await button.click();
+}
+
 test("real import confirms player, opens top scene, persists registration and avoids duplicates", async ({
   page,
 }) => {
@@ -53,7 +72,7 @@ test("real import confirms player, opens top scene, persists registration and av
     await route.fulfill({ json: { ok: true, data } });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "牌譜を追加", exact: false }).click();
+  await addReport(page);
   await page.getByLabel("JSON / JSON.gz ファイル").setInputFiles({
     name: "generated.json",
     mimeType: "application/json",
@@ -69,9 +88,7 @@ test("real import confirms player, opens top scene, persists registration and av
   ).toBeVisible();
   await expect(page.getByTestId("real-hand").getByLabel("赤5筒")).toBeVisible();
   await expect(page.getByTestId("real-comparison")).toContainText("40.04pt");
-  await expect(page.locator(".player-2 .player-label")).toContainText(
-    "東",
-  );
+  await expect(page.locator(".player-2 .player-label")).toContainText("東");
   await page.getByRole("button", { name: "収録手順", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "収録手順 2 / 3" }),
@@ -81,14 +98,20 @@ test("real import confirms player, opens top scene, persists registration and av
     page.getByRole("heading", { name: "収録手順 3 / 3" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "学習", exact: true }).click();
+  await page
+    .getByRole("button", { name: "問題一覧を見る", exact: false })
+    .click();
   await page.getByRole("button", { name: "すべて", exact: true }).click();
   await expect(page.getByTestId("real-library-row")).toHaveCount(1);
   await page.reload();
   await page.getByRole("button", { name: "学習", exact: true }).click();
+  await page
+    .getByRole("button", { name: "問題一覧を見る", exact: false })
+    .click();
   await page.getByRole("button", { name: "すべて", exact: true }).click();
   await expect(page.getByTestId("real-library-row")).toHaveCount(1);
-  await page.getByRole("button", { name: "ホーム", exact: true }).click();
-  await page.getByRole("button", { name: "牌譜を追加", exact: false }).click();
+  await page.getByRole("button", { name: "牌譜", exact: true }).click();
+  await addReport(page);
   await page.getByLabel("NAGA / Mortal レポートURL").fill("generated-input");
   await page.getByRole("button", { name: "レポートを読み込む" }).click();
   await page.getByLabel("あなたのプレイヤー").selectOption("0");
@@ -132,14 +155,12 @@ test("preference selects the remembered type but player and commit remain explic
     await route.fulfill({ json: { ok: true, data } });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "牌譜を追加", exact: false }).click();
-  await page
-    .getByLabel("JSON / JSON.gz ファイル")
-    .setInputFiles({
-      name: "generated.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(generated.raw)),
-    });
+  await addReport(page);
+  await page.getByLabel("JSON / JSON.gz ファイル").setInputFiles({
+    name: "generated.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(generated.raw)),
+  });
   await expect(page.getByLabel("基準NAGAタイプ")).toHaveValue("1");
   await expect(page.getByLabel("あなたのプレイヤー")).toHaveValue("");
   await expect(
@@ -187,16 +208,12 @@ test("preference missing or ambiguous never picks a different or nonexistent typ
       });
     });
     await page.goto("/");
-    await page
-      .getByRole("button", { name: "牌譜を追加", exact: false })
-      .click();
-    await page
-      .getByLabel("JSON / JSON.gz ファイル")
-      .setInputFiles({
-        name: "generated.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(generated.raw)),
-      });
+    await addReport(page);
+    await page.getByLabel("JSON / JSON.gz ファイル").setInputFiles({
+      name: "generated.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(generated.raw)),
+    });
     await page.getByLabel("あなたのプレイヤー").selectOption("0");
     await expect(page.getByLabel("基準NAGAタイプ")).toHaveValue("");
     await expect(
@@ -236,16 +253,12 @@ test("preference changes in a cancelled dialog do not submit or replace the next
   });
   await page.goto("/");
   for (let attempt = 0; attempt < 2; attempt++) {
-    await page
-      .getByRole("button", { name: "牌譜を追加", exact: false })
-      .click();
-    await page
-      .getByLabel("JSON / JSON.gz ファイル")
-      .setInputFiles({
-        name: "generated.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(generated.raw)),
-      });
+    await addReport(page);
+    await page.getByLabel("JSON / JSON.gz ファイル").setInputFiles({
+      name: "generated.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(generated.raw)),
+    });
     await expect(page.getByLabel("基準NAGAタイプ")).toHaveValue("1");
     await page.getByLabel("基準NAGAタイプ").selectOption("0");
     await page.getByRole("button", { name: "閉じる", exact: true }).click();
@@ -266,7 +279,7 @@ test("access restriction and local save failure remain visible without false suc
     });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "牌譜を追加", exact: false }).click();
+  await addReport(page);
   await page.getByLabel("NAGA / Mortal レポートURL").fill("generated-input");
   await page.getByRole("button", { name: "レポートを読み込む" }).click();
   await expect(page.getByRole("alert")).toContainText(
@@ -276,5 +289,7 @@ test("access restriction and local save failure remain visible without false suc
     page.getByRole("button", { name: "このプレイヤーで登録" }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "閉じる", exact: true }).click();
-  await expect(page.getByText("取り込んだ牌譜", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("解析結果一覧 · 0件", { exact: true }),
+  ).toBeVisible();
 });

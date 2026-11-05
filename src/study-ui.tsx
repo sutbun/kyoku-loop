@@ -1,61 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "./api";
-import { StudyOptions, useAnswerMode } from "./study-options";
+import { useAnswerMode } from "./study-options";
 import { RealTable, RealTile, roundLabel, uiTile } from "./real-board";
 import { tileLabel } from "./demo";
 import type { ItemHistory, Scene, StudySession, Workspace } from "./real-types";
 
-export function PracticeCard({
-  workspace,
-  disabled,
-  onBegin,
-}: {
-  workspace: Workspace;
-  disabled: boolean;
-  onBegin: (mode: "scheduled" | "practice") => void;
-}) {
-  const resume = workspace.session && !workspace.session.complete;
-  return (
-    <section className="review-hero study-hero">
-      <div>
-        <h2>今日の復習</h2>
-        <p>
-          <strong>
-            {resume
-              ? workspace.session!.total - workspace.session!.index
-              : (workspace.due_count ?? 0)}
-          </strong>
-          問
-        </p>
-        <button
-          className="button light"
-          disabled={disabled || (!resume && !workspace.due_count)}
-          onClick={() =>
-            onBegin(resume ? workspace.session!.mode : "scheduled")
-          }
-        >
-          {resume ? "復習を再開する" : "今日の復習を始める"} →
-        </button>
-      </div>
-      <button
-        className="button light"
-        disabled={
-          disabled ||
-          !!resume ||
-          !(
-            workspace.practice_count ??
-            workspace.items.filter(
-              (i) => !["保留", "習得済み"].includes(i.status),
-            ).length
-          )
-        }
-        onClick={() => onBegin("practice")}
-      >
-        今すぐ学ぶ
-      </button>
-    </section>
-  );
-}
 function Modal({
   title,
   busy,
@@ -131,19 +80,21 @@ function PolicyTile({ scene, value }: { scene: Scene; value: string }) {
     </div>
   );
 }
-function Compare({
+export function Compare({
   scene,
   answer,
   onRechoose,
   busy,
+  testId = "study-comparison",
 }: {
   scene: Scene;
   answer?: string | null;
+  testId?: string;
   onRechoose?: () => void;
   busy?: boolean;
 }) {
   return (
-    <div className="comparison" data-testid="study-comparison">
+    <div className="comparison" data-testid={testId}>
       {answer && (
         <div>
           <span>今回</span>
@@ -208,7 +159,7 @@ const jstTime = (at: string) =>
     timeZone: "Asia/Tokyo",
     hour12: false,
   });
-function BackupDialog({
+export function BackupDialog({
   onClose,
   onRefresh,
 }: {
@@ -497,7 +448,6 @@ export function StudyPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<ItemHistory | null>(null);
-  const [backups, setBackups] = useState(false);
   const [undoControl, setUndoControl] = useState<string | null>(null);
   const pending = useRef<{ key: string; id: string } | null>(null);
   const session = workspace.session;
@@ -526,11 +476,6 @@ export function StudyPanel({
     pending.current = null;
     return result;
   };
-  const begin = (mode: "scheduled" | "practice") =>
-    void run(async () => {
-      onSession(await api<StudySession>({ action: "study_start", mode }));
-      onActive(true);
-    });
   useEffect(() => {
     if (!active || !session?.stale || busy) return;
     const key = `${session.id}:${session.index}`;
@@ -639,7 +584,7 @@ export function StudyPanel({
                 {session.index + 1} / {session.total} 問
               </span>
             )}
-            {portable && !session.complete && session.can_undo && (
+            {!session.complete && session.can_undo && (
               <button
                 className="text-button study-undo"
                 aria-label="直前の評価を取り消す"
@@ -652,7 +597,7 @@ export function StudyPanel({
             )}
             <button
               className="text-button"
-              aria-label={portable ? "中断して学習へ" : "中断してホームへ"}
+              aria-label="中断して学習へ"
               disabled={busy}
               onClick={onHome}
             >
@@ -745,15 +690,6 @@ export function StudyPanel({
                         </button>
                       </>
                     )}
-                    {!portable && session.can_undo && (
-                      <button
-                        className="text-button undo"
-                        disabled={busy}
-                        onClick={undo}
-                      >
-                        直前の評価を取り消す
-                      </button>
-                    )}
                   </aside>
                 </div>
               )}
@@ -789,7 +725,7 @@ export function StudyPanel({
                   ライブラリへ
                 </button>
                 <button className="button secondary" onClick={onHome}>
-                  {portable ? "学習へ" : "ホームへ"}
+                  学習へ
                 </button>
                 {session.can_undo && (
                   <button
@@ -808,26 +744,7 @@ export function StudyPanel({
         <>
           <div className="page-heading">
             <h1>{reportFilter ? "牌譜の問題" : "学習ライブラリ"}</h1>
-            {!portable && (
-              <button
-                className="button secondary"
-                disabled={busy}
-                onClick={() => setBackups(true)}
-              >
-                バックアップと復元
-              </button>
-            )}
           </div>
-          {!portable && (
-            <>
-              <PracticeCard
-                workspace={workspace}
-                disabled={busy}
-                onBegin={begin}
-              />
-              <StudyOptions />
-            </>
-          )}
           <div className="filters" aria-label="学習状態">
             {["今日", "未学習", "復習中", "習得済み", "保留", "すべて"].map(
               (s) => (
@@ -994,9 +911,6 @@ export function StudyPanel({
               )}
           </div>
         </Modal>
-      )}
-      {backups && (
-        <BackupDialog onClose={() => setBackups(false)} onRefresh={onRefresh} />
       )}
     </>
   );
