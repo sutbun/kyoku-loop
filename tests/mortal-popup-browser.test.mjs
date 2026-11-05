@@ -4,7 +4,7 @@ import { readFile, mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
 
 const base = "https://popup-fixture.invalid";
-const evidence = "D:/dev-data/kyoku-loop/private/mortal-simple-ui-20261105";
+const evidence = "D:/dev-data/kyoku-loop/private/mortal-next-batch-20261105";
 const row = (n, mode = 12) => ({
   id: `fictional-replay-${n}`,
   available: true,
@@ -23,6 +23,9 @@ const idle = {
   resumeAllowed: false,
 };
 async function fixture(entries, status = idle) {
+  const manifest = JSON.parse(
+    await readFile("extensions/mortal-helper/manifest.json", "utf8"),
+  );
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   const page = await browser.newPage({ viewport: { width: 420, height: 700 } });
   await page.route("**/*", async (route) => {
@@ -40,11 +43,11 @@ async function fixture(entries, status = idle) {
     });
   });
   await page.addInitScript(
-    ({ entries, status }) => {
+    ({ entries, status, manifest }) => {
       window.fixture = { entries, status, calls: [] };
       window.chrome = {
         runtime: {
-          getManifest: () => ({ version_name: "DEV-11.05-4" }),
+          getManifest: () => manifest,
           sendMessage: async (message) => {
             window.fixture.calls.push(message);
             const f = window.fixture;
@@ -77,7 +80,7 @@ async function fixture(entries, status = idle) {
         },
       };
     },
-    { entries, status },
+    { entries, status, manifest },
   );
   try {
     await page.goto(`${base}/popup.html`);
@@ -253,6 +256,128 @@ test("reopening shows ACK progress and cooldown; stop and completion keep the li
       "OPEN_APP",
     );
     await page.locator("body").screenshot({ path: `${evidence}/done.png` });
+  } finally {
+    await f.close();
+  }
+});
+
+test("completion can reload newly added games and explicitly start the next twenty", async () => {
+  const done = {
+    ...idle,
+    batch: {
+      id: "completed-batch",
+      phase: "done",
+      model: "4.1b",
+      index: 20,
+      items: Array.from({ length: 20 }, (_, i) => ({
+        id: `completed-${i}`,
+        status: "done",
+      })),
+    },
+  };
+  const f = await fixture([], done);
+  try {
+    const { page } = f;
+    await expect(page.locator("#batch-count")).toHaveText("20件を登録しました");
+    await expect(
+      page.getByRole("button", { name: "次の牌譜を読み込む" }),
+    ).toBeVisible();
+    await mkdir(evidence, { recursive: true });
+    await page
+      .locator("body")
+      .screenshot({ path: `${evidence}/done-reload.png` });
+    await page.evaluate(() => {
+      window.fixture.entries = [];
+    });
+    await page.getByRole("button", { name: "次の牌譜を読み込む" }).click();
+    await expect(page.locator("#retry-load")).toBeEnabled();
+    await expect(page.locator("#batch-start")).not.toBeVisible();
+    await page.evaluate(
+      (entries) => {
+        window.fixture.entries = entries;
+      },
+      Array.from({ length: 25 }, (_, i) => row(25 - i)),
+    );
+    await page.getByRole("button", { name: "次の牌譜を読み込む" }).click();
+    await expect(page.locator("#batch-start")).toHaveText(
+      "次の20件を解析・登録",
+    );
+    await expect(page.locator("#batch-start")).toBeEnabled();
+    assert.deepEqual(
+      await page.evaluate(() => window.fixture.status.batch),
+      done.batch,
+    );
+    assert.equal(
+      await page.evaluate(() =>
+        window.fixture.calls.some((x) => x.type === "BATCH_START"),
+      ),
+      false,
+    );
+    await mkdir(evidence, { recursive: true });
+    await page
+      .locator("body")
+      .screenshot({ path: `${evidence}/next-ready.png` });
+    await page.locator("#batch-start").click();
+    const starts = await page.evaluate(() =>
+      window.fixture.calls.filter((x) => x.type === "BATCH_START"),
+    );
+    assert.equal(starts.length, 1);
+    assert.deepEqual(
+      starts[0].ids,
+      Array.from({ length: 20 }, (_, i) => row(i + 1).id),
+    );
+    assert.ok(
+      starts[0].ids.every((id) => !done.batch.items.some((x) => x.id === id)),
+    );
+    await expect(page.locator("#batch-count")).toHaveText("登録完了 0 / 20件");
+  } finally {
+    await f.close();
+  }
+});
+
+test("completion immediately offers remaining games and recovers from a failed refresh", async () => {
+  const done = {
+    ...idle,
+    batch: {
+      id: "completed-batch",
+      phase: "done",
+      model: "4.1b",
+      index: 20,
+      items: Array.from({ length: 20 }, () => ({ status: "done" })),
+    },
+  };
+  const f = await fixture(
+    Array.from({ length: 5 }, (_, i) => row(i + 1)),
+    done,
+  );
+  try {
+    const { page } = f;
+    await expect(page.locator("#batch-start")).toHaveText(
+      "次の5件を解析・登録",
+    );
+    await expect(page.locator("#batch-start")).toBeEnabled();
+    await page.evaluate(() => {
+      window.fixture.loadError = "local_unavailable";
+    });
+    await page.locator("#tools > summary").click();
+    await page.locator("#batch-load").click();
+    await page.locator("#tools > summary").click();
+    await expect(page.locator("#retry-load")).toHaveText("もう一度読み込む");
+    await expect(page.locator("#batch-start")).not.toBeVisible();
+    await page.evaluate(() => {
+      window.fixture.loadError = null;
+    });
+    await page.locator("#retry-load").click();
+    await expect(page.locator("#batch-start")).toBeEnabled();
+    await page.locator("#batch-start").click();
+    const starts = await page.evaluate(() =>
+      window.fixture.calls.filter((x) => x.type === "BATCH_START"),
+    );
+    assert.equal(starts.length, 1);
+    assert.deepEqual(
+      starts[0].ids,
+      Array.from({ length: 5 }, (_, i) => row(i + 1).id),
+    );
   } finally {
     await f.close();
   }

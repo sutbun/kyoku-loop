@@ -276,7 +276,13 @@ function render() {
     (!locked() && loadedKey !== null && !loading && !entries.length) ||
     (paused && batch.reason === "local_unavailable")
   );
-  $("retry-load").hidden = !loadError || locked();
+  // A completed batch can outlive its last queue read. Keep an explicit way
+  // to discover games added afterwards without clearing the processing ledger.
+  $("retry-load").hidden =
+    locked() || !!singleActive || (!loadError && !(done && !entries.length));
+  $("retry-load").textContent = loadError
+    ? "もう一度読み込む"
+    : "次の牌譜を読み込む";
   $("retry-load").disabled = busy || loading;
   $("batch-model").disabled = busy || loading || locked() || !!singleActive;
   $("batch-load").disabled = busy || loading || locked() || !!singleActive;
