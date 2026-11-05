@@ -565,14 +565,31 @@ export function phoneReduce(
     const raw = state.events.find((e) => e.id === id) ?? fail("cannot_undo");
     return { ...raw, ...receiptFor(state, id) };
   };
-  const reviewCount = (i: PhoneItem) =>
-    (i.review_count ?? 0) +
-    state.events.filter(
-      (e) =>
-        e.item === i.id &&
-        e.kind === "answer" &&
-        !state.pack!.histories[i.id]?.events.some((h) => h.id === e.id),
-    ).length;
+  const reviews = new Map<string, { count: number; last: number }>();
+  const reviewInfo = (i: PhoneItem) => {
+    const cached = reviews.get(i.id);
+    if (cached) return cached;
+    const saved = state.pack!.histories[i.id]?.events ?? [];
+    const savedIds = new Set(saved.map((e) => e.id));
+    const local = state.events.filter(
+      (e) => e.item === i.id && !savedIds.has(e.id),
+    );
+    const answers = [...saved, ...local].filter((e) => e.kind === "answer");
+    // Older packs can retain answers without an up-to-date summary counter.
+    const count =
+      Math.max(
+        i.review_count ?? 0,
+        saved.filter((e) => e.kind === "answer").length,
+      ) + local.filter((e) => e.kind === "answer").length;
+    const last = answers.reduce((latest, e) => {
+      const at = Date.parse(e.at);
+      return Number.isFinite(at) ? Math.max(latest, at) : latest;
+    }, 0);
+    const result = { count, last };
+    reviews.set(i.id, result);
+    return result;
+  };
+  const reviewCount = (i: PhoneItem) => reviewInfo(i).count;
   const queue = (mode: string) =>
     [...(state.pack?.items ?? [])]
       .filter(
@@ -583,7 +600,11 @@ export function phoneReduce(
       )
       .sort(
         (a, b) =>
-          (mode === "practice" ? reviewCount(a) - reviewCount(b) : 0) ||
+          (mode === "practice"
+            ? Number(reviewCount(a) > 0) - Number(reviewCount(b) > 0) ||
+              reviewInfo(a).last - reviewInfo(b).last ||
+              reviewCount(a) - reviewCount(b)
+            : a.due.localeCompare(b.due)) ||
           (a.status === "復習中" ? 0 : a.manual ? 1 : 2) -
             (b.status === "復習中" ? 0 : b.manual ? 1 : 2) ||
           a.due.localeCompare(b.due) ||
