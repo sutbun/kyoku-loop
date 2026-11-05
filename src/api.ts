@@ -1,4 +1,5 @@
 export const errors: Record<string, string> = {
+  invalid_review: "一局レビューの保存内容を確認できません。現在の記録は保持しています。",
   batch_limit: "解析JSONは一度に50ファイル、合計100MB以下で選択してください。",
   hand_data_missing:
     "手牌を開くデータがありません。Windowsに接続して「今すぐ同期」を押してください。",

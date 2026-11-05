@@ -260,6 +260,22 @@ export function phoneSite(): Plugin {
           return;
         }
         if (
+          ["round_review_catalog", "round_review_material"].includes(
+            String(body?.action),
+          ) &&
+          typeof body.report === "string" &&
+          /^[a-f0-9]{64}$/.test(body.report) &&
+          (body.action === "round_review_catalog"
+            ? Object.keys(body).length === 2
+            : Object.keys(body).length === 3 &&
+              Number.isInteger(body.round_index) &&
+              Number(body.round_index) >= 0 &&
+              Number(body.round_index) < 256)
+        ) {
+          callPhone(res, body);
+          return;
+        }
+        if (
           body?.action === "analysis_sync" &&
           Object.keys(body).length === 2 &&
           Array.isArray(body.entries)

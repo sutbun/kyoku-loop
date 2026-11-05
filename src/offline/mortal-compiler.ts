@@ -56,6 +56,8 @@ async function execute<T = LocalMaterial>(
   data: string | null,
   created: string,
   preview = false,
+  review = false,
+  round_index?: number,
 ): Promise<T> {
   const worker = new Worker(
     new URL("./mortal-compiler.worker.ts", import.meta.url),
@@ -79,8 +81,11 @@ async function execute<T = LocalMaterial>(
       if (event.data.ok) resolve(event.data.data);
       else reject(Error(event.data.error));
     };
-    worker.postMessage({ id: 1, data, created, preview });
+    worker.postMessage({ id: 1, data, created, preview, review, round_index });
   });
+}
+export function retainedReview<T>(material: LocalMaterial, round?: number) {
+  return execute<T>(material.payload, material.created, false, true, round);
 }
 export async function compileMortal(
   file: File | Blob,

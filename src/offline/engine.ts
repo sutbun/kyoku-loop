@@ -1,4 +1,13 @@
 import type { LocalMaterial } from "./mortal-compiler";
+import {
+  changeReview,
+  newReviewState,
+  mergeReview,
+  validateReviewState,
+  validateRoundMaterial,
+  roundKey,
+  type ReviewCache,
+} from "../round-review-model";
 import { validFinalScores } from "../mortal-source-match";
 import { reconcileLocalSources } from "./source-links";
 import { storedSourceReceipt } from "../mortal-registration";
@@ -75,6 +84,7 @@ export type LocalImport = {
   synced_source?: string;
 };
 export type PhoneState = {
+  review?: ReviewCache;
   schema: 1 | 2;
   local_imports?: LocalImport[];
   local_source?: string;
@@ -368,6 +378,34 @@ export function validatePhoneBackup(
 ): asserts value is PhoneState {
   const s = value as PhoneState;
   try {
+    if (s?.review !== undefined) {
+      if (!s.review) fail("invalid_phone_backup");
+      validateReviewState(s.review.state);
+      if (
+        !Array.isArray(s.review.materials) ||
+        !Array.isArray(s.review.catalogs)
+      )
+        fail("invalid_phone_backup");
+      s.review.materials.forEach(validateRoundMaterial);
+      if (
+        new Set(s.review.materials.map(roundKey)).size !==
+          s.review.materials.length ||
+        new Set(s.review.catalogs.map((c) => c.report)).size !==
+          s.review.catalogs.length
+      )
+        fail("invalid_phone_backup");
+      for (const c of s.review.catalogs) {
+        if (
+          !/^[a-f0-9]{64}$/.test(c.report) ||
+          typeof c.model !== "string" ||
+          !Array.isArray(c.rounds) ||
+          c.rounds.some(
+            (r) => !int(r.index, 0, 1999) || typeof r.label !== "string",
+          )
+        )
+          fail("invalid_phone_backup");
+      }
+    }
     if (
       !s ||
       ![1, 2].includes(s.schema) ||
@@ -711,6 +749,35 @@ export function phoneReduce(
     }
   }
   switch (r.action) {
+    case "round_review_state":
+      data = state.review?.state ?? newReviewState();
+      break;
+    case "round_review_change":
+      state.review ??= { state: newReviewState(), catalogs: [], materials: [] };
+      state.review.state = changeReview(state.review.state, r.op);
+      data = state.review.state;
+      break;
+    case "round_review_cache": {
+      state.review ??= { state: newReviewState(), catalogs: [], materials: [] };
+      if (r.material) {
+        validateRoundMaterial(r.material);
+        state.review.materials = [
+          ...state.review.materials.filter(
+            (m) => roundKey(m) !== roundKey(r.material),
+          ),
+          clone(r.material),
+        ];
+      }
+      if (r.catalog) {
+        state.review.catalogs = [
+          ...state.review.catalogs.filter((c) => c.report !== r.catalog.report),
+          clone(r.catalog),
+        ];
+      }
+      validatePhoneBackup(state);
+      data = { saved: true };
+      break;
+    }
     case "enable_local": {
       state.schema = 2;
       state.local_imports ??= [];
@@ -1101,6 +1168,20 @@ export function phoneReduce(
       )
         fail("different_source");
       state.schema = r.backup.schema;
+      if (r.backup.review) {
+        if (!state.review) state.review = clone(r.backup.review);
+        else
+          state.review.state = mergeReview(
+            state.review.state,
+            r.backup.review.state,
+          );
+        for (const m of r.backup.review.materials)
+          if (!state.review.materials.some((x) => roundKey(x) === roundKey(m)))
+            state.review.materials.push(clone(m));
+        for (const c of r.backup.review.catalogs)
+          if (!state.review.catalogs.some((x) => x.report === c.report))
+            state.review.catalogs.push(clone(c));
+      }
       if (r.backup.schema === 2) {
         state.local_imports = clone(r.backup.local_imports);
         if (r.backup.local_source) state.local_source = r.backup.local_source;
@@ -1340,7 +1421,11 @@ export function phoneReduce(
       source_link: storedSourceReceipt(own.analysis_id, source?.history),
     };
   }
-  if (!["state", "study_current", "item_history"].includes(r.action))
+  if (
+    !["state", "study_current", "item_history", "round_review_state"].includes(
+      r.action,
+    )
+  )
     state.sequence++;
   return { state, data };
 }
